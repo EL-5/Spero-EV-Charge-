@@ -1,8 +1,8 @@
-export type UserRole = 'super_admin' | 'manager' | 'accountant' | 'attendant';
+export type UserRole = 'super_admin' | 'manager' | 'accountant' | 'finance' | 'attendant';
 
 export type SessionStatus = 'active' | 'pending_payment' | 'completed' | 'cancelled';
 export type ChargingMode = 'prepaid' | 'postpaid';
-export type UnitType = 'kwh' | 'minutes';
+export type UnitType = 'kwh' | 'minutes' | 'hours';
 export type PaymentMethod = 'cash' | 'hubtel' | 'paystack' | 'wallet';
 export type DriverType = 'individual' | 'corporate';
 
@@ -118,6 +118,7 @@ export interface Shift {
 export interface PricingConfig {
   id: string;
   unitType: UnitType;
+  unitQuantity: number;
   pricePerUnit: number;
   currency: string;
   effectiveFrom: string;
@@ -150,6 +151,8 @@ export interface DashboardStats {
   hubtelRevenue: number;
   paystackRevenue: number;
   activeShifts: number;
+  totalDrivers: number;
+  totalVehicles: number;
 }
 
 export interface CorporateAccount {

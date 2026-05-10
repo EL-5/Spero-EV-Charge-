@@ -1,14 +1,51 @@
 'use client';
 import { useState } from 'react';
 import { TopBar } from '@/components/layout/TopBar';
-import { mockDrivers } from '@/lib/mock-data';
-import { formatCurrency, formatDate } from '@/lib/utils';
+import { formatCurrency } from '@/lib/utils';
 import { AlertTriangle, Phone, CheckCircle } from 'lucide-react';
+import { useDrivers } from '@/hooks/use-database';
+import type { Driver } from '@/lib/types';
+import { recordDebtPayment } from '@/app/actions/debts';
+import { useAuthStore } from '@/store/auth';
 
 export default function DebtsPage() {
+  const { data: drivers, isLoading } = useDrivers();
+  const { user } = useAuthStore();
   const [showMarkPaid, setShowMarkPaid] = useState(false);
-  const debtors = mockDrivers.filter(d => d.debtBalance > 0);
-  const totalDebt = debtors.reduce((sum, d) => sum + d.debtBalance, 0);
+  const [showSuccess, setShowSuccess] = useState(false);
+  const [selectedDriver, setSelectedDriver] = useState<Driver | null>(null);
+  const [payAmount, setPayAmount] = useState(0);
+  const [payMethod, setPayMethod] = useState('Cash');
+  const [loading, setLoading] = useState(false);
+
+  const allDrivers = drivers || [];
+  const debtors = allDrivers.filter((d: Driver) => d.debtBalance > 0);
+  const totalDebt = debtors.reduce((sum: number, d: Driver) => sum + d.debtBalance, 0);
+
+  const handleMarkPaid = async () => {
+    if (!selectedDriver || !payAmount || !user) return;
+    setLoading(true);
+    try {
+      const res = await recordDebtPayment({
+        driverId: selectedDriver.id,
+        amount: payAmount,
+        method: payMethod,
+        createdBy: user.id
+      });
+      
+      if (res.success) {
+        setShowMarkPaid(false);
+        setShowSuccess(true);
+        setSelectedDriver(null);
+        setPayAmount(0);
+      } else {
+        alert('Error: ' + res.error);
+      }
+    } catch (err: any) {
+      alert('Error recording payment: ' + err.message);
+    }
+    setLoading(false);
+  };
 
   return (
     <div>
@@ -40,8 +77,8 @@ export default function DebtsPage() {
             <div>
               <div className="font-semibold text-red-700">Outstanding debts detected</div>
               <div className="text-sm text-red-600 mt-0.5">
-                {debtors.length} driver(s) have outstanding debts totaling {formatCurrency(totalDebt)}.
-                Postpaid charging is blocked for these drivers until debts are cleared.
+                {debtors.length} driver(s) owe {formatCurrency(totalDebt)}.
+                Postpaid charging is blocked until debts are cleared.
               </div>
             </div>
           </div>
@@ -51,6 +88,7 @@ export default function DebtsPage() {
         <div className="stat-card overflow-hidden">
           <div className="flex items-center justify-between p-4 border-b" style={{ borderColor: 'var(--border)' }}>
             <h3 className="font-semibold" style={{ color: 'var(--foreground)' }}>Debtors List</h3>
+            {isLoading && <span className="text-xs" style={{ color: 'var(--muted-foreground)' }}>Loading...</span>}
           </div>
           {debtors.length === 0 ? (
             <div className="text-center py-16">
@@ -67,13 +105,13 @@ export default function DebtsPage() {
                     <th>Phone</th>
                     <th>Debt Amount</th>
                     <th>Wallet Balance</th>
-                    <th>Total Sessions</th>
-                    <th>Risk Level</th>
+                    <th>Sessions</th>
+                    <th>Risk</th>
                     <th>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {debtors.map(d => {
+                  {debtors.map((d: Driver) => {
                     const risk = d.debtBalance > 200 ? 'high' : d.debtBalance > 100 ? 'medium' : 'low';
                     return (
                       <tr key={d.id}>
@@ -89,20 +127,33 @@ export default function DebtsPage() {
                           </div>
                         </td>
                         <td style={{ color: 'var(--muted-foreground)' }}>{d.phone}</td>
-                        <td>
-                          <span className="font-bold text-red-600">{formatCurrency(d.debtBalance)}</span>
-                        </td>
+                        <td><span className="font-bold text-red-600">{formatCurrency(d.debtBalance)}</span></td>
                         <td style={{ color: 'var(--muted-foreground)' }}>{formatCurrency(d.walletBalance)}</td>
                         <td>{d.totalSessions}</td>
                         <td>
-                          <span className={`badge ${risk === 'high' ? 'bg-red-100 text-red-700' : risk === 'medium' ? 'bg-yellow-100 text-yellow-700' : 'bg-green-100 text-green-700'}`}>
+                          <span className={`badge ${
+                            risk === 'high' ? 'bg-red-100 text-red-700' :
+                            risk === 'medium' ? 'bg-yellow-100 text-yellow-700' :
+                            'bg-green-100 text-green-700'
+                          }`}>
                             {risk}
                           </span>
                         </td>
                         <td>
                           <div className="flex gap-1">
-                            <button onClick={() => setShowMarkPaid(true)} className="btn btn-primary btn-sm">Mark Paid</button>
-                            <button className="btn btn-secondary btn-sm gap-1"><Phone size={12} />Contact</button>
+                            <button
+                              onClick={() => {
+                                setSelectedDriver(d);
+                                setPayAmount(d.debtBalance);
+                                setShowMarkPaid(true);
+                              }}
+                              className="btn btn-primary btn-sm"
+                            >
+                              Mark Paid
+                            </button>
+                            <a href={`tel:${d.phone}`} className="btn btn-secondary btn-sm gap-1">
+                              <Phone size={12} /> Call
+                            </a>
                           </div>
                         </td>
                       </tr>
@@ -116,7 +167,7 @@ export default function DebtsPage() {
 
         {/* Debt rules */}
         <div className="stat-card">
-          <h3 className="font-semibold mb-3" style={{ color: 'var(--foreground)' }}>Debt Rules Configuration</h3>
+          <h3 className="font-semibold mb-3" style={{ color: 'var(--foreground)' }}>Debt Rules</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {[
               { label: 'Block postpaid if debt exists', value: 'Enabled', color: '#16a34a' },
@@ -132,35 +183,83 @@ export default function DebtsPage() {
           </div>
         </div>
 
-        {showMarkPaid && (
+        {/* Mark Paid modal */}
+        {showMarkPaid && selectedDriver && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.4)' }}>
             <div className="stat-card max-w-md w-full">
               <div className="flex items-center justify-between mb-4">
-                <h2 className="font-semibold text-lg" style={{ color: 'var(--foreground)' }}>Record Debt Payment</h2>
-                <button onClick={() => setShowMarkPaid(false)} className="text-gray-400 hover:text-gray-600 text-xl">&times;</button>
+                <h2 className="font-semibold text-lg" style={{ color: 'var(--foreground)' }}>
+                  Record Payment — {selectedDriver.name}
+                </h2>
+                <button onClick={() => setShowMarkPaid(false)} className="text-gray-400 hover:text-gray-600 text-xl">
+                  &times;
+                </button>
               </div>
               <div className="space-y-4">
                 <div>
+                  <label className="form-label">Outstanding Debt</label>
+                  <div className="font-bold text-red-600 text-lg">{formatCurrency(selectedDriver.debtBalance)}</div>
+                </div>
+                <div>
                   <label className="form-label">Amount Paid (GHS)</label>
-                  <input type="number" className="form-input" placeholder="0.00" />
+                  <input
+                    type="number"
+                    className="form-input"
+                    value={payAmount}
+                    onChange={e => setPayAmount(Number(e.target.value))}
+                    max={selectedDriver.debtBalance}
+                  />
                 </div>
                 <div>
                   <label className="form-label">Payment Method</label>
-                  <select className="form-select">
-                    <option>Cash</option>
-                    <option>Hubtel MoMo</option>
-                    <option>Paystack</option>
+                  <select 
+                    className="form-select"
+                    value={payMethod}
+                    onChange={e => setPayMethod(e.target.value)}
+                  >
+                    <option value="Cash">Cash</option>
+                    <option value="Hubtel MoMo">Hubtel MoMo</option>
+                    <option value="Paystack">Paystack</option>
                   </select>
                 </div>
-                <div>
-                  <label className="form-label">Notes</label>
-                  <input className="form-input" placeholder="Payment notes..." />
-                </div>
                 <div className="flex gap-3">
-                  <button onClick={() => setShowMarkPaid(false)} className="btn btn-secondary flex-1">Cancel</button>
-                  <button onClick={() => setShowMarkPaid(false)} className="btn btn-primary flex-1">Record Payment</button>
+                  <button
+                    onClick={() => setShowMarkPaid(false)}
+                    className="btn btn-secondary flex-1"
+                    disabled={loading}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleMarkPaid}
+                    className="btn btn-primary flex-1"
+                    disabled={loading || !payAmount}
+                  >
+                    {loading ? 'Recording...' : 'Record Payment'}
+                  </button>
                 </div>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* Success Modal */}
+        {showSuccess && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+            <div className="stat-card max-w-sm w-full text-center py-8 animate-in zoom-in duration-200">
+              <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <CheckCircle className="text-green-600" size={32} />
+              </div>
+              <h2 className="text-xl font-bold text-slate-900 mb-2">Repayment Successful</h2>
+              <p className="text-slate-500 text-sm mb-6">
+                The driver's debt balance has been updated and the payment has been logged in the ledger.
+              </p>
+              <button 
+                onClick={() => setShowSuccess(false)}
+                className="btn btn-primary w-full py-3"
+              >
+                Continue
+              </button>
             </div>
           </div>
         )}

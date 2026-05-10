@@ -1,9 +1,9 @@
 'use client';
 import { useState } from 'react';
 import { TopBar } from '@/components/layout/TopBar';
-import { mockPayments } from '@/lib/mock-data';
 import { formatCurrency, formatDateTime, getStatusColor, getStatusLabel } from '@/lib/utils';
-import { Search, CreditCard, DollarSign, Smartphone, Wallet } from 'lucide-react';
+import { Search, CreditCard, DollarSign, Smartphone, Wallet, Activity } from 'lucide-react';
+import { usePayments, useDrivers } from '@/hooks/use-database';
 
 const methodIcons: Record<string, React.ReactNode> = {
   cash: <DollarSign size={14} />,
@@ -20,21 +20,27 @@ const methodColors: Record<string, string> = {
 };
 
 export default function PaymentsPage() {
+  const { data: payments, isLoading } = usePayments();
+  const { data: drivers } = useDrivers();
+  const [selectedPayment, setSelectedPayment] = useState<any>(null);
   const [search, setSearch] = useState('');
   const [methodFilter, setMethodFilter] = useState('all');
 
-  const filtered = mockPayments.filter(p => {
-    const matchSearch = p.driverName.toLowerCase().includes(search.toLowerCase()) ||
-      p.receiptNumber.toLowerCase().includes(search.toLowerCase()) ||
-      (p.reference || '').toLowerCase().includes(search.toLowerCase());
+  const allPayments = payments || [];
+
+  const filtered = allPayments.filter((p: any) => {
+    const matchSearch =
+      (p.receiptNumber || '').toLowerCase().includes(search.toLowerCase()) ||
+      (p.reference || '').toLowerCase().includes(search.toLowerCase()) ||
+      (p.driverName || '').toLowerCase().includes(search.toLowerCase());
     const matchMethod = methodFilter === 'all' || p.method === methodFilter;
     return matchSearch && matchMethod;
   });
 
-  const total = mockPayments.reduce((sum, p) => sum + p.amount, 0);
-  const byCash = mockPayments.filter(p => p.method === 'cash').reduce((sum, p) => sum + p.amount, 0);
-  const byHubtel = mockPayments.filter(p => p.method === 'hubtel').reduce((sum, p) => sum + p.amount, 0);
-  const byPaystack = mockPayments.filter(p => p.method === 'paystack').reduce((sum, p) => sum + p.amount, 0);
+  const total = allPayments.reduce((sum: number, p: any) => sum + (p.amount || 0), 0);
+  const byCash = allPayments.filter((p: any) => p.method === 'cash').reduce((sum: number, p: any) => sum + (p.amount || 0), 0);
+  const byMoMo = allPayments.filter((p: any) => ['mtn', 'telecel', 'airteltigo', 'hubtel'].includes(p.method)).reduce((sum: number, p: any) => sum + (p.amount || 0), 0);
+  const byWallet = allPayments.filter((p: any) => p.method === 'wallet').reduce((sum: number, p: any) => sum + (p.amount || 0), 0);
 
   return (
     <div>
@@ -45,31 +51,31 @@ export default function PaymentsPage() {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div className="stat-card">
             <div className="flex items-center gap-2 mb-1">
-              <CreditCard size={16} style={{ color: '#1d4ed8' }} />
-              <div className="text-xl font-bold" style={{ color: '#1d4ed8' }}>{formatCurrency(total)}</div>
+              <CreditCard size={16} className="text-blue-600" />
+              <div className="text-xl font-bold text-blue-600">{formatCurrency(total)}</div>
             </div>
-            <div className="text-sm" style={{ color: 'var(--muted-foreground)' }}>Total Revenue</div>
+            <div className="text-sm text-slate-500">Total Revenue</div>
           </div>
           <div className="stat-card">
             <div className="flex items-center gap-2 mb-1">
-              <DollarSign size={16} style={{ color: '#16a34a' }} />
-              <div className="text-xl font-bold" style={{ color: '#16a34a' }}>{formatCurrency(byCash)}</div>
+              <DollarSign size={16} className="text-emerald-600" />
+              <div className="text-xl font-bold text-emerald-600">{formatCurrency(byCash)}</div>
             </div>
-            <div className="text-sm" style={{ color: 'var(--muted-foreground)' }}>Cash</div>
+            <div className="text-sm text-slate-500">Cash Collections</div>
           </div>
           <div className="stat-card">
             <div className="flex items-center gap-2 mb-1">
-              <Smartphone size={16} style={{ color: '#0891b2' }} />
-              <div className="text-xl font-bold" style={{ color: '#0891b2' }}>{formatCurrency(byHubtel)}</div>
+              <Smartphone size={16} className="text-orange-500" />
+              <div className="text-xl font-bold text-orange-500">{formatCurrency(byMoMo)}</div>
             </div>
-            <div className="text-sm" style={{ color: 'var(--muted-foreground)' }}>Hubtel MoMo</div>
+            <div className="text-sm text-slate-500">Mobile Money</div>
           </div>
           <div className="stat-card">
             <div className="flex items-center gap-2 mb-1">
-              <CreditCard size={16} style={{ color: '#7c3aed' }} />
-              <div className="text-xl font-bold" style={{ color: '#7c3aed' }}>{formatCurrency(byPaystack)}</div>
+              <Activity size={16} className="text-purple-600" />
+              <div className="text-xl font-bold text-purple-600">{formatCurrency(byWallet)}</div>
             </div>
-            <div className="text-sm" style={{ color: 'var(--muted-foreground)' }}>Paystack</div>
+            <div className="text-sm text-slate-500">Digital / Wallet</div>
           </div>
         </div>
 
@@ -77,22 +83,22 @@ export default function PaymentsPage() {
         <div className="stat-card">
           <div className="flex flex-col sm:flex-row gap-3">
             <div className="relative flex-1">
-              <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: 'var(--muted-foreground)' }} />
+              <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
               <input
                 type="text"
                 placeholder="Search by driver, receipt, or reference..."
                 value={search}
                 onChange={e => setSearch(e.target.value)}
-                className="form-input"
-                style={{ paddingLeft: '36px' }}
+                className="form-input pl-10"
               />
             </div>
-            <select value={methodFilter} onChange={e => setMethodFilter(e.target.value)} className="form-select" style={{ width: 'auto' }}>
+            <select value={methodFilter} onChange={e => setMethodFilter(e.target.value)} className="form-select w-full sm:w-auto">
               <option value="all">All Methods</option>
               <option value="cash">Cash</option>
-              <option value="hubtel">Hubtel</option>
-              <option value="paystack">Paystack</option>
-              <option value="wallet">Wallet</option>
+              <option value="mtn">MTN MoMo</option>
+              <option value="telecel">Telecel</option>
+              <option value="airteltigo">AirtelTigo</option>
+              <option value="wallet">Wallet Credit</option>
             </select>
           </div>
         </div>
@@ -115,64 +121,132 @@ export default function PaymentsPage() {
                 </tr>
               </thead>
               <tbody>
-                {filtered.map(p => (
+                {filtered.map((p: any) => (
                   <tr key={p.id}>
-                    <td className="font-mono text-xs font-semibold">{p.receiptNumber}</td>
-                    <td className="font-medium">{p.driverName}</td>
-                    <td className="font-bold">{formatCurrency(p.amount)}</td>
+                    <td className="font-mono text-xs font-bold text-blue-600">{p.receiptNumber}</td>
+                    <td className="font-medium text-slate-700">{p.driverName || '—'}</td>
+                    <td className="font-black text-slate-900">{formatCurrency(p.amount)}</td>
                     <td>
-                      <span className={`badge gap-1 ${methodColors[p.method]}`}>
-                        {methodIcons[p.method]}
-                        {p.method.charAt(0).toUpperCase() + p.method.slice(1)}
+                      <span className="badge bg-slate-100 text-slate-700 capitalize font-medium">
+                        {p.method}
                       </span>
                     </td>
-                    <td className="font-mono text-xs" style={{ color: 'var(--muted-foreground)' }}>
+                    <td className="font-mono text-[10px] text-slate-400">
                       {p.reference || '—'}
                     </td>
-                    <td style={{ color: 'var(--muted-foreground)' }}>{p.attendantName}</td>
+                    <td className="text-sm text-slate-500">{p.attendantName || '—'}</td>
                     <td>
                       <span className={`badge ${getStatusColor(p.status)}`}>{getStatusLabel(p.status)}</span>
                     </td>
-                    <td style={{ color: 'var(--muted-foreground)' }} className="text-xs">{formatDateTime(p.createdAt)}</td>
+                    <td className="text-[10px] text-slate-400 font-medium">{formatDateTime(p.createdAt)}</td>
                     <td>
-                      <button className="btn btn-secondary btn-sm">Receipt</button>
+                      <button 
+                        onClick={() => setSelectedPayment(p)}
+                        className="text-blue-600 font-bold text-xs hover:underline"
+                      >
+                        VIEW
+                      </button>
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-          {filtered.length === 0 && (
-            <div className="text-center py-12" style={{ color: 'var(--muted-foreground)' }}>
-              <CreditCard className="mx-auto mb-2 opacity-30" size={32} />
-              <p>No payments found</p>
+          {filtered.length === 0 && !isLoading && (
+            <div className="text-center py-20">
+              <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4">
+                <CreditCard className="text-slate-300" size={32} />
+              </div>
+              <h3 className="text-lg font-bold text-slate-800">No transactions found</h3>
+              <p className="text-sm text-slate-500 max-w-[200px] mx-auto">Wait for payments or try a different filter.</p>
+            </div>
+          )}
+          {isLoading && (
+            <div className="text-center py-20">
+              <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+              <p className="text-sm text-slate-500">Loading payment records...</p>
             </div>
           )}
         </div>
 
-        {/* Receipt modal placeholder */}
-        <div className="stat-card">
-          <h3 className="font-semibold mb-3" style={{ color: 'var(--foreground)' }}>Sample Receipt Preview</h3>
-          <div className="max-w-sm mx-auto border rounded-xl p-6 text-center text-sm" style={{ borderColor: 'var(--border)' }}>
-            <div className="font-bold text-lg mb-1">SPERO ENERGY RESOURCES LTD</div>
-            <div className="text-xs mb-4" style={{ color: 'var(--muted-foreground)' }}>EV Charging Station Receipt</div>
-            <div className="border-t border-dashed pt-3 mb-3 text-left space-y-1" style={{ borderColor: 'var(--border)' }}>
-              <div className="flex justify-between"><span style={{ color: 'var(--muted-foreground)' }}>Receipt #</span><span className="font-mono">RCP-0001</span></div>
-              <div className="flex justify-between"><span style={{ color: 'var(--muted-foreground)' }}>Driver</span><span>Ernest Osei</span></div>
-              <div className="flex justify-between"><span style={{ color: 'var(--muted-foreground)' }}>Vehicle</span><span>GR-1234-24</span></div>
-              <div className="flex justify-between"><span style={{ color: 'var(--muted-foreground)' }}>Units</span><span>20.5 kWh</span></div>
-              <div className="flex justify-between"><span style={{ color: 'var(--muted-foreground)' }}>Rate</span><span>GHS 5.50/kWh</span></div>
-              <div className="flex justify-between font-bold border-t pt-2 mt-2" style={{ borderColor: 'var(--border)' }}><span>Total</span><span>GHS 112.75</span></div>
-              <div className="flex justify-between"><span style={{ color: 'var(--muted-foreground)' }}>Method</span><span>Cash</span></div>
+        {/* Receipt Modal */}
+        {selectedPayment && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-hidden" style={{ background: 'rgba(0,0,0,0.5)' }}>
+            <div className="stat-card w-full print-visible" style={{ maxWidth: '420px', maxHeight: '92vh', overflowY: 'auto' }}>
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="font-bold text-lg">Transaction Receipt</h2>
+                <button onClick={() => setSelectedPayment(null)} className="text-slate-400 hover:text-slate-600 text-xl">&times;</button>
+              </div>
+
+              <div className="border rounded-xl p-6 text-center text-sm mb-6" style={{ borderColor: 'var(--border)' }}>
+                <div className="font-bold text-lg mb-1">SPERO ENERGY RESOURCES LTD</div>
+                <div className="text-[10px] uppercase font-bold text-slate-400 mb-4 tracking-widest">EV Charging Station Receipt</div>
+                
+                <div className="border-t border-dashed pt-4 mb-4 text-left space-y-3" style={{ borderColor: 'var(--border)' }}>
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">Receipt Number</span>
+                    <span className="font-mono font-bold text-blue-600">{selectedPayment.receiptNumber}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">Date</span>
+                    <span className="font-medium">{formatDateTime(selectedPayment.createdAt)}</span>
+                  </div>
+                  <hr style={{ borderStyle: 'dashed', borderColor: 'var(--border)' }} />
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">Driver</span>
+                    <span className="font-bold text-slate-800">{selectedPayment.driverName}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">Payment Method</span>
+                    <span className="font-bold capitalize text-slate-800">{selectedPayment.method}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">Reference</span>
+                    <span className="font-mono text-[10px] text-slate-400 truncate max-w-[150px]">{selectedPayment.reference}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">Attendant</span>
+                    <span className="font-medium text-slate-600">{selectedPayment.attendantName}</span>
+                  </div>
+                  
+                  <div className="border-t border-slate-200 pt-4 mt-4">
+                    <div className="flex justify-between items-center">
+                      <span className="font-bold text-slate-800 text-base">Total Amount Paid</span>
+                      <span className="font-black text-xl text-blue-600">{formatCurrency(selectedPayment.amount)}</span>
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="text-[10px] text-slate-400 italic">Powered by SCMS — Spero Fleet Management</div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <button 
+                  onClick={() => window.print()}
+                  className="btn btn-secondary py-3 flex items-center justify-center gap-2"
+                >
+                  Print
+                </button>
+                <button 
+                  onClick={() => {
+                    if (navigator.share) {
+                      navigator.share({
+                        title: `Spero Receipt ${selectedPayment.receiptNumber}`,
+                        text: `Charging Receipt for ${selectedPayment.driverName} - ${formatCurrency(selectedPayment.amount)}`,
+                        url: window.location.href,
+                      }).catch(console.error);
+                    } else {
+                      alert('Sharing is not supported on this browser/device.');
+                    }
+                  }}
+                  className="btn btn-primary py-3 flex items-center justify-center gap-2"
+                >
+                  Share
+                </button>
+              </div>
             </div>
-            <div className="text-xs" style={{ color: 'var(--muted-foreground)' }}>Powered by SCMS — Spero EV</div>
           </div>
-          <div className="flex justify-center gap-3 mt-4">
-            <button className="btn btn-secondary btn-sm">Print</button>
-            <button className="btn btn-secondary btn-sm">Download PDF</button>
-            <button className="btn btn-secondary btn-sm">WhatsApp</button>
-          </div>
-        </div>
+        )}
 
       </div>
     </div>

@@ -67,6 +67,7 @@ export function getRoleLabel(role: string): string {
     super_admin: 'Super Admin',
     manager: 'Manager',
     accountant: 'Accountant',
+    finance: 'Finance',
     attendant: 'Attendant',
   };
   return map[role] || role;
@@ -77,6 +78,7 @@ export function getRoleColor(role: string): string {
     super_admin: 'bg-purple-100 text-purple-700',
     manager: 'bg-blue-100 text-blue-700',
     accountant: 'bg-green-100 text-green-700',
+    finance: 'bg-teal-100 text-teal-700',
     attendant: 'bg-orange-100 text-orange-700',
   };
   return map[role] || 'bg-gray-100 text-gray-700';

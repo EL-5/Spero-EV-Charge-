@@ -6,8 +6,8 @@ import { useAuthStore } from '@/store/auth';
 import { Zap, Eye, EyeOff, Loader2 } from 'lucide-react';
 
 export default function LoginPage() {
-  const [email, setEmail] = useState('kwame@spero.com');
-  const [password, setPassword] = useState('admin123');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -92,6 +92,7 @@ export default function LoginPage() {
                 className="form-input"
                 placeholder="you@spero.com"
                 required
+                autoComplete="email"
               />
             </div>
             <div>
@@ -105,6 +106,7 @@ export default function LoginPage() {
                   style={{ paddingRight: '40px' }}
                   placeholder="••••••••"
                   required
+                  autoComplete="current-password"
                 />
                 <button
                   type="button"
@@ -133,11 +135,6 @@ export default function LoginPage() {
             </button>
           </form>
 
-          <div className="mt-8 p-4 rounded-xl text-sm" style={{ background: 'var(--muted)', color: 'var(--muted-foreground)' }}>
-            <div className="font-medium mb-2" style={{ color: 'var(--foreground)' }}>Demo Credentials</div>
-            <div>Email: <span className="font-mono">kwame@spero.com</span></div>
-            <div>Password: <span className="font-mono">admin123</span></div>
-          </div>
         </div>
       </div>
     </div>

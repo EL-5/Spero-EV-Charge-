@@ -1,16 +1,49 @@
 'use client';
 import { useState } from 'react';
 import { TopBar } from '@/components/layout/TopBar';
-import { mockShifts } from '@/lib/mock-data';
 import { formatCurrency, formatDateTime, formatTime, getStatusColor, getStatusLabel, calcDuration } from '@/lib/utils';
 import { Clock, Play, Square, DollarSign, CreditCard, Smartphone, Wallet } from 'lucide-react';
+import { useShifts, useProfiles } from '@/hooks/use-database';
+import { startShift, closeShift } from '@/app/actions/shifts';
 
 export default function ShiftsPage() {
+  const { data: shifts, refetch } = useShifts();
+  const { data: profiles } = useProfiles();
   const [showStart, setShowStart] = useState(false);
   const [showClose, setShowClose] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [selectedAttendant, setSelectedAttendant] = useState('');
+  const [closingCash, setClosingCash] = useState(0);
 
-  const activeShift = mockShifts.find(s => s.status === 'active');
-  const closedShifts = mockShifts.filter(s => s.status === 'closed');
+  const allShifts = shifts || [];
+  const attendants = (profiles || []).filter((p: any) => p.role === 'attendant');
+  const activeShift = allShifts.find((s: any) => s.status === 'active');
+
+  const handleStartShift = async () => {
+    if (!selectedAttendant) return;
+    setLoading(true);
+    const res = await startShift(selectedAttendant);
+    setLoading(false);
+    if (res.success) { 
+      setShowStart(false); 
+      setSelectedAttendant(''); 
+      await refetch();
+    }
+    else alert('Error: ' + res.error);
+  };
+
+  const handleCloseShift = async () => {
+    if (!activeShift) return;
+    setLoading(true);
+    const res = await closeShift(activeShift.id, closingCash);
+    setLoading(false);
+    if (res.success) { 
+      setShowClose(false); 
+      setClosingCash(0); 
+      await refetch();
+    }
+    else alert('Error: ' + res.error);
+  };
 
   return (
     <div>
@@ -92,22 +125,22 @@ export default function ShiftsPage() {
                 </tr>
               </thead>
               <tbody>
-                {mockShifts.map(shift => {
-                  const total = shift.cashCollected + shift.hubtelCollected + shift.paystackCollected + shift.walletDeductions;
+                {allShifts.map((shift: any) => {
+                  const total = (shift.cashCollected || 0) + (shift.hubtelCollected || 0) + (shift.paystackCollected || 0) + (shift.walletDeductions || 0);
                   return (
                     <tr key={shift.id}>
-                      <td className="font-medium">{shift.attendantName}</td>
-                      <td className="text-sm" style={{ color: 'var(--muted-foreground)' }}>{formatDateTime(shift.startTime)}</td>
-                      <td className="text-sm" style={{ color: 'var(--muted-foreground)' }}>
+                      <td className="font-medium whitespace-nowrap">{shift.attendantName || '—'}</td>
+                      <td className="text-[11px] whitespace-nowrap" style={{ color: 'var(--muted-foreground)' }}>{formatDateTime(shift.startTime)}</td>
+                      <td className="text-[11px] whitespace-nowrap" style={{ color: 'var(--muted-foreground)' }}>
                         {shift.endTime ? formatDateTime(shift.endTime) : '—'}
                       </td>
-                      <td style={{ color: 'var(--muted-foreground)' }}>{calcDuration(shift.startTime, shift.endTime)}</td>
-                      <td className="text-center">{shift.totalSessions}</td>
-                      <td>{formatCurrency(shift.cashCollected)}</td>
-                      <td>{formatCurrency(shift.hubtelCollected)}</td>
-                      <td>{formatCurrency(shift.paystackCollected)}</td>
-                      <td>{formatCurrency(shift.walletDeductions)}</td>
-                      <td className="font-bold">{formatCurrency(total)}</td>
+                      <td className="text-[11px] whitespace-nowrap" style={{ color: 'var(--muted-foreground)' }}>{calcDuration(shift.startTime, shift.endTime)}</td>
+                      <td className="text-center">{shift.totalSessions || 0}</td>
+                      <td className="whitespace-nowrap">{formatCurrency(shift.cashCollected || 0)}</td>
+                      <td className="whitespace-nowrap">{formatCurrency(shift.hubtelCollected || 0)}</td>
+                      <td className="whitespace-nowrap">{formatCurrency(shift.paystackCollected || 0)}</td>
+                      <td className="whitespace-nowrap">{formatCurrency(shift.walletDeductions || 0)}</td>
+                      <td className="font-bold whitespace-nowrap">{formatCurrency(total)}</td>
                       <td>
                         <span className={`badge ${getStatusColor(shift.status)}`}>{getStatusLabel(shift.status)}</span>
                       </td>
@@ -129,12 +162,16 @@ export default function ShiftsPage() {
               </div>
               <div className="space-y-4">
                 <div>
-                  <label className="form-label">Attendant</label>
-                  <select className="form-select">
-                    <option>Ama Owusu</option>
-                    <option>Yaw Darko</option>
-                  </select>
-                </div>
+                <label className="form-label">Attendant</label>
+                <select 
+                  className="form-select"
+                  value={selectedAttendant}
+                  onChange={e => setSelectedAttendant(e.target.value)}
+                >
+                  <option value="">Select attendant...</option>
+                  {attendants.map((a: any) => <option key={a.id} value={a.id}>{a.name}</option>)}
+                </select>
+              </div>
                 <div>
                   <label className="form-label">Opening Cash Balance (GHS)</label>
                   <input type="number" className="form-input" placeholder="0.00" />
@@ -144,9 +181,11 @@ export default function ShiftsPage() {
                   <input className="form-input" placeholder="Optional shift notes..." />
                 </div>
                 <div className="flex gap-3">
-                  <button onClick={() => setShowStart(false)} className="btn btn-secondary flex-1">Cancel</button>
-                  <button onClick={() => setShowStart(false)} className="btn btn-primary flex-1">Start Shift</button>
-                </div>
+                <button onClick={() => setShowStart(false)} className="btn btn-secondary flex-1" disabled={loading}>Cancel</button>
+                <button onClick={handleStartShift} className="btn btn-primary flex-1" disabled={loading || !selectedAttendant}>
+                  {loading ? 'Starting...' : 'Start Shift'}
+                </button>
+              </div>
               </div>
             </div>
           </div>
@@ -180,17 +219,24 @@ export default function ShiftsPage() {
               </div>
               <div className="space-y-4">
                 <div>
-                  <label className="form-label">Physical Cash Count (GHS)</label>
-                  <input type="number" className="form-input" defaultValue={activeShift.cashCollected} />
-                </div>
+                <label className="form-label">Physical Cash Count (GHS)</label>
+                <input 
+                  type="number" 
+                  className="form-input" 
+                  value={closingCash}
+                  onChange={e => setClosingCash(Number(e.target.value))}
+                />
+              </div>
                 <div>
                   <label className="form-label">Closing Notes</label>
                   <input className="form-input" placeholder="Any notes for this shift..." />
                 </div>
                 <div className="flex gap-3">
-                  <button onClick={() => setShowClose(false)} className="btn btn-secondary flex-1">Cancel</button>
-                  <button onClick={() => setShowClose(false)} className="btn btn-danger flex-1">Close Shift</button>
-                </div>
+                <button onClick={() => setShowClose(false)} className="btn btn-secondary flex-1" disabled={loading}>Cancel</button>
+                <button onClick={handleCloseShift} className="btn btn-danger flex-1" disabled={loading}>
+                  {loading ? 'Closing...' : 'Close Shift'}
+                </button>
+              </div>
               </div>
             </div>
           </div>

@@ -1,36 +1,97 @@
 'use client';
 import { useState } from 'react';
 import { TopBar } from '@/components/layout/TopBar';
-import { mockDrivers } from '@/lib/mock-data';
-import { formatCurrency, formatDate, getStatusColor } from '@/lib/utils';
-import { Search, Plus, Filter, Wallet, AlertTriangle, Zap, ChevronRight, Users } from 'lucide-react';
+import { formatCurrency, formatDate } from '@/lib/utils';
+import { Search, Wallet, AlertTriangle, Zap, ChevronRight, Users, Edit, Trash2 } from 'lucide-react';
 import type { Driver } from '@/lib/types';
+import { useDrivers, useVehicles } from '@/hooks/use-database';
+import { useAuthStore } from '@/store/auth';
+import { updateDriver, deleteDriver } from '@/app/actions/drivers';
 
 export default function DriversPage() {
+  const { user } = useAuthStore();
+  const { data: drivers, isLoading, refetch } = useDrivers();
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState<string>('all');
-  const [showAdd, setShowAdd] = useState(false);
   const [selected, setSelected] = useState<Driver | null>(null);
+  
+  // Edit State
+  const [isEditing, setIsEditing] = useState(false);
+  const [editForm, setEditForm] = useState<any>({});
+  const [loading, setLoading] = useState(false);
+  const { data: vehicles } = useVehicles();
 
-  const filtered = mockDrivers.filter(d => {
+  const currentDrivers = drivers || [];
+
+  const handleEdit = (driver: Driver) => {
+    const v = vehicles?.find(v => v.driverId === driver.id);
+    setEditForm({
+      ...driver,
+      vehicle_brand: v?.brand || '',
+      vehicle_model: v?.model || '',
+      vehicle_plate: v?.plateNumber || '',
+    });
+    setIsEditing(true);
+  };
+
+  const handleUpdate = async () => {
+    if (!editForm.id || !editForm.name || !editForm.phone) return;
+    setLoading(true);
+    const res = await updateDriver(editForm.id, {
+      name: editForm.name,
+      phone: editForm.phone,
+      email: editForm.email,
+      type: editForm.type as any,
+      vehicle: editForm.vehicle_plate ? {
+        brand: editForm.vehicle_brand,
+        model: editForm.vehicle_model,
+        plate_number: editForm.vehicle_plate,
+      } : undefined
+    });
+    setLoading(false);
+    if (res.success) {
+      setIsEditing(false);
+      setSelected(null);
+      await refetch();
+    } else {
+      alert('Error: ' + res.error);
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this driver? All associated vehicle links will be removed.')) return;
+    setLoading(true);
+    const res = await deleteDriver(id);
+    setLoading(false);
+    if (res.success) {
+      setSelected(null);
+      await refetch();
+    } else {
+      alert('Error: ' + res.error);
+    }
+  };
+
+  const filtered = currentDrivers.filter(d => {
     const matchSearch = d.name.toLowerCase().includes(search.toLowerCase()) ||
       d.phone.includes(search);
     const matchType = typeFilter === 'all' || d.type === typeFilter;
     return matchSearch && matchType;
   });
 
+  const isSuperAdmin = user?.role === 'super_admin';
+
   return (
     <div>
-      <TopBar title="Drivers" subtitle="Manage EV drivers and fleet accounts" />
+      <TopBar title="Drivers" subtitle="View and manage registered EV drivers" />
       <div className="p-6 space-y-6">
 
         {/* Summary cards */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {[
-            { label: 'Total Drivers', value: mockDrivers.length, color: '#1d4ed8', bg: '#eff6ff' },
-            { label: 'Individual', value: mockDrivers.filter(d => d.type === 'individual').length, color: '#7c3aed', bg: '#f3f0ff' },
-            { label: 'Corporate', value: mockDrivers.filter(d => d.type === 'corporate').length, color: '#0891b2', bg: '#e0f2fe' },
-            { label: 'With Debt', value: mockDrivers.filter(d => d.debtBalance > 0).length, color: '#dc2626', bg: '#fee2e2' },
+            { label: 'Total Drivers', value: currentDrivers.length, color: '#1d4ed8' },
+            { label: 'Individual', value: currentDrivers.filter(d => d.type === 'individual').length, color: '#7c3aed' },
+            { label: 'Corporate', value: currentDrivers.filter(d => d.type === 'corporate').length, color: '#0891b2' },
+            { label: 'With Debt', value: currentDrivers.filter(d => d.debtBalance > 0).length, color: '#dc2626' },
           ].map(card => (
             <div key={card.label} className="stat-card">
               <div className="text-2xl font-bold" style={{ color: card.color }}>{card.value}</div>
@@ -58,9 +119,6 @@ export default function DriversPage() {
               <option value="individual">Individual</option>
               <option value="corporate">Corporate</option>
             </select>
-            <button onClick={() => setShowAdd(true)} className="btn btn-primary gap-2">
-              <Plus size={16} /> Add Driver
-            </button>
           </div>
         </div>
 
@@ -70,14 +128,7 @@ export default function DriversPage() {
             <table>
               <thead>
                 <tr>
-                  <th>Driver</th>
-                  <th>Type</th>
-                  <th>Phone</th>
-                  <th>Wallet Balance</th>
-                  <th>Debt</th>
-                  <th>Sessions</th>
-                  <th>Joined</th>
-                  <th></th>
+                  <th>Driver</th><th>Type</th><th>Phone</th><th>Wallet</th><th>Debt</th><th>Sessions</th><th>Joined</th><th></th>
                 </tr>
               </thead>
               <tbody>
@@ -85,139 +136,122 @@ export default function DriversPage() {
                   <tr key={driver.id} className="cursor-pointer" onClick={() => setSelected(driver)}>
                     <td>
                       <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0"
+                        <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold"
                           style={{ background: driver.type === 'corporate' ? '#0891b2' : '#1d4ed8' }}>
                           {driver.name[0]}
                         </div>
                         <div>
                           <div className="font-medium" style={{ color: 'var(--foreground)' }}>{driver.name}</div>
-                          {driver.email && <div className="text-xs" style={{ color: 'var(--muted-foreground)' }}>{driver.email}</div>}
+                          <div className="text-xs" style={{ color: 'var(--muted-foreground)' }}>{driver.email || 'No email'}</div>
                         </div>
                       </div>
                     </td>
-                    <td>
-                      <span className={`badge ${driver.type === 'corporate' ? 'bg-sky-100 text-sky-700' : 'bg-blue-100 text-blue-700'}`}>
-                        {driver.type}
-                      </span>
-                    </td>
+                    <td><span className={`badge ${driver.type === 'corporate' ? 'bg-sky-100 text-sky-700' : 'bg-blue-100 text-blue-700'}`}>{driver.type}</span></td>
                     <td style={{ color: 'var(--muted-foreground)' }}>{driver.phone}</td>
-                    <td>
-                      <div className="flex items-center gap-1.5">
-                        <Wallet size={14} style={{ color: driver.walletBalance > 0 ? '#16a34a' : 'var(--muted-foreground)' }} />
-                        <span className={`font-medium ${driver.walletBalance > 0 ? 'text-green-600' : ''}`}>
-                          {formatCurrency(driver.walletBalance)}
-                        </span>
-                      </div>
-                    </td>
-                    <td>
-                      {driver.debtBalance > 0 ? (
-                        <div className="flex items-center gap-1.5 text-red-600">
-                          <AlertTriangle size={14} />
-                          <span className="font-medium">{formatCurrency(driver.debtBalance)}</span>
-                        </div>
-                      ) : (
-                        <span style={{ color: 'var(--muted-foreground)' }}>—</span>
-                      )}
-                    </td>
-                    <td>
-                      <div className="flex items-center gap-1.5">
-                        <Zap size={14} style={{ color: 'var(--muted-foreground)' }} />
-                        <span>{driver.totalSessions}</span>
-                      </div>
-                    </td>
-                    <td style={{ color: 'var(--muted-foreground)' }}>{formatDate(driver.createdAt)}</td>
+                    <td><span className="font-medium text-green-600">{formatCurrency(driver.walletBalance)}</span></td>
+                    <td><span className={`font-medium ${driver.debtBalance > 0 ? 'text-red-600' : 'text-slate-400'}`}>{formatCurrency(driver.debtBalance)}</span></td>
+                    <td>{driver.totalSessions}</td>
+                    <td style={{ color: 'var(--muted-foreground)' }} className="text-xs">{formatDate(driver.createdAt)}</td>
                     <td><ChevronRight size={16} style={{ color: 'var(--muted-foreground)' }} /></td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-          {filtered.length === 0 && (
-            <div className="text-center py-12" style={{ color: 'var(--muted-foreground)' }}>
-              <Users className="mx-auto mb-2 opacity-30" size={32} />
-              <p>No drivers found</p>
-            </div>
-          )}
         </div>
 
-        {/* Driver detail modal */}
-        {selected && (
+        {/* Driver detail panel */}
+        {selected && !isEditing && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.4)' }}>
-            <div className="stat-card max-w-md w-full" style={{ maxHeight: '90vh', overflowY: 'auto' }}>
+            <div className="stat-card max-w-md w-full">
               <div className="flex items-center justify-between mb-4">
-                <h2 className="font-semibold text-lg" style={{ color: 'var(--foreground)' }}>Driver Details</h2>
+                <h2 className="font-semibold text-lg">Driver Details</h2>
                 <button onClick={() => setSelected(null)} className="text-gray-400 hover:text-gray-600 text-xl">&times;</button>
               </div>
-              <div className="flex items-center gap-4 mb-6 p-4 rounded-xl" style={{ background: 'var(--muted)' }}>
-                <div className="w-14 h-14 rounded-full flex items-center justify-center text-white text-xl font-bold"
-                  style={{ background: selected.type === 'corporate' ? '#0891b2' : '#1d4ed8' }}>
-                  {selected.name[0]}
+              <div className="space-y-4">
+                <div className="flex items-center gap-4 p-4 rounded-xl bg-slate-50">
+                  <div className="w-12 h-12 rounded-full flex items-center justify-center text-white font-bold bg-blue-600 text-xl">{selected.name[0]}</div>
+                  <div>
+                    <div className="font-bold">{selected.name}</div>
+                    <div className="text-sm text-slate-500">{selected.phone}</div>
+                  </div>
                 </div>
-                <div>
-                  <div className="font-bold text-lg" style={{ color: 'var(--foreground)' }}>{selected.name}</div>
-                  <div style={{ color: 'var(--muted-foreground)' }}>{selected.phone}</div>
-                  {selected.email && <div className="text-sm" style={{ color: 'var(--muted-foreground)' }}>{selected.email}</div>}
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="p-3 bg-slate-50 rounded-lg">
+                    <div className="text-xs text-slate-500">Wallet</div>
+                    <div className="font-bold text-green-600">{formatCurrency(selected.walletBalance)}</div>
+                  </div>
+                  <div className="p-3 bg-slate-50 rounded-lg">
+                    <div className="text-xs text-slate-500">Debt</div>
+                    <div className="font-bold text-red-600">{formatCurrency(selected.debtBalance)}</div>
+                  </div>
                 </div>
-              </div>
-              <div className="grid grid-cols-2 gap-3 mb-4">
-                <div className="p-3 rounded-lg" style={{ background: 'var(--muted)' }}>
-                  <div className="text-xs" style={{ color: 'var(--muted-foreground)' }}>Wallet Balance</div>
-                  <div className="font-bold text-green-600">{formatCurrency(selected.walletBalance)}</div>
+                <div className="flex gap-2">
+                  <button onClick={() => handleEdit(selected)} className="btn btn-primary flex-1 gap-2"><Edit size={14}/> Edit Profile</button>
+                  {isSuperAdmin && (
+                    <button onClick={() => handleDelete(selected.id)} className="btn bg-red-50 text-red-600 hover:bg-red-100 border-red-200 gap-2"><Trash2 size={14}/></button>
+                  )}
+                  <button onClick={() => setSelected(null)} className="btn btn-secondary flex-1">Close</button>
                 </div>
-                <div className="p-3 rounded-lg" style={{ background: 'var(--muted)' }}>
-                  <div className="text-xs" style={{ color: 'var(--muted-foreground)' }}>Debt Balance</div>
-                  <div className={`font-bold ${selected.debtBalance > 0 ? 'text-red-600' : ''}`}>{formatCurrency(selected.debtBalance)}</div>
-                </div>
-                <div className="p-3 rounded-lg" style={{ background: 'var(--muted)' }}>
-                  <div className="text-xs" style={{ color: 'var(--muted-foreground)' }}>Total Sessions</div>
-                  <div className="font-bold" style={{ color: 'var(--foreground)' }}>{selected.totalSessions}</div>
-                </div>
-                <div className="p-3 rounded-lg" style={{ background: 'var(--muted)' }}>
-                  <div className="text-xs" style={{ color: 'var(--muted-foreground)' }}>Driver Type</div>
-                  <div className="font-bold capitalize" style={{ color: 'var(--foreground)' }}>{selected.type}</div>
-                </div>
-              </div>
-              <div className="flex gap-2">
-                <button className="btn btn-primary flex-1">Top Up Wallet</button>
-                <button className="btn btn-secondary flex-1">View History</button>
               </div>
             </div>
           </div>
         )}
 
-        {/* Add driver modal */}
-        {showAdd && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.4)' }}>
-            <div className="stat-card max-w-lg w-full">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="font-semibold text-lg" style={{ color: 'var(--foreground)' }}>Add New Driver</h2>
-                <button onClick={() => setShowAdd(false)} className="text-gray-400 hover:text-gray-600 text-xl">&times;</button>
-              </div>
-              <div className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
+        {/* Edit Modal */}
+        {isEditing && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.5)' }}>
+            <div className="stat-card max-w-md w-full" style={{ maxHeight: '92vh', overflowY: 'auto' }}>
+              <h2 className="font-semibold text-lg mb-4">Edit Driver & Vehicle</h2>
+              <div className="space-y-6">
+                {/* Driver Section */}
+                <div className="space-y-3">
+                  <div className="text-xs font-bold text-slate-400 uppercase">Driver Info</div>
                   <div>
-                    <label className="form-label">Full Name *</label>
-                    <input className="form-input" placeholder="e.g. Ernest Osei" />
+                    <label className="form-label text-xs">Full Name</label>
+                    <input className="form-input" value={editForm.name} onChange={e => setEditForm({...editForm, name: e.target.value})} />
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="form-label text-xs">Phone Number</label>
+                      <input className="form-input" value={editForm.phone} onChange={e => setEditForm({...editForm, phone: e.target.value})} />
+                    </div>
+                    <div>
+                      <label className="form-label text-xs">Driver Type</label>
+                      <select className="form-select" value={editForm.type} onChange={e => setEditForm({...editForm, type: e.target.value as any})}>
+                        <option value="individual">Individual</option>
+                        <option value="corporate">Corporate</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                <hr style={{ borderColor: 'var(--border)' }} />
+
+                {/* Vehicle Section */}
+                <div className="space-y-3">
+                  <div className="text-xs font-bold text-slate-400 uppercase">Vehicle Info</div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="form-label text-xs">Brand</label>
+                      <input className="form-input" value={editForm.vehicle_brand} onChange={e => setEditForm({...editForm, vehicle_brand: e.target.value})} />
+                    </div>
+                    <div>
+                      <label className="form-label text-xs">Model</label>
+                      <input className="form-input" value={editForm.vehicle_model} onChange={e => setEditForm({...editForm, vehicle_model: e.target.value})} />
+                    </div>
                   </div>
                   <div>
-                    <label className="form-label">Phone Number *</label>
-                    <input className="form-input" placeholder="+233 24 000 0000" />
+                    <label className="form-label text-xs">Plate Number</label>
+                    <input className="form-input font-mono" value={editForm.vehicle_plate} onChange={e => setEditForm({...editForm, vehicle_plate: e.target.value.toUpperCase()})} />
                   </div>
                 </div>
-                <div>
-                  <label className="form-label">Email (optional)</label>
-                  <input type="email" className="form-input" placeholder="driver@email.com" />
-                </div>
-                <div>
-                  <label className="form-label">Driver Type *</label>
-                  <select className="form-select">
-                    <option value="individual">Individual</option>
-                    <option value="corporate">Corporate / Fleet</option>
-                  </select>
-                </div>
+
                 <div className="flex gap-3 pt-2">
-                  <button onClick={() => setShowAdd(false)} className="btn btn-secondary flex-1">Cancel</button>
-                  <button onClick={() => setShowAdd(false)} className="btn btn-primary flex-1">Add Driver</button>
+                  <button onClick={() => setIsEditing(false)} className="btn btn-secondary flex-1">Cancel</button>
+                  <button onClick={handleUpdate} className="btn btn-primary flex-1" disabled={loading}>
+                    {loading ? 'Saving...' : 'Update Details'}
+                  </button>
                 </div>
               </div>
             </div>

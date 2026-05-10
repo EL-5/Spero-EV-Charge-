@@ -9,50 +9,67 @@ import {
 } from 'lucide-react';
 import { useUIStore } from '@/store/ui';
 import { useAuthStore } from '@/store/auth';
+import { useSettings } from '@/hooks/use-database';
 
 const navItems = [
-  { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { href: '/drivers', label: 'Drivers', icon: Users },
-  { href: '/vehicles', label: 'Vehicles', icon: Car },
-  { href: '/sessions', label: 'Sessions', icon: Zap },
-  { href: '/payments', label: 'Payments', icon: CreditCard },
-  { href: '/wallets', label: 'Wallets', icon: Wallet },
-  { href: '/debts', label: 'Debts', icon: AlertTriangle },
-  { href: '/shifts', label: 'Shifts', icon: Clock },
-  { href: '/analytics', label: 'Analytics', icon: BarChart3 },
-  { href: '/reports', label: 'Reports', icon: FileText },
-  { href: '/users', label: 'Users', icon: UserCog },
-  { href: '/settings', label: 'Settings', icon: Settings },
+  { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ['super_admin', 'manager', 'accountant', 'finance', 'attendant'] },
+  { href: '/drivers', label: 'Drivers', icon: Users, roles: ['super_admin', 'manager', 'attendant'] },
+  { href: '/vehicles', label: 'Vehicles', icon: Car, roles: ['super_admin', 'manager', 'attendant'] },
+  { href: '/sessions', label: 'Sessions', icon: Zap, roles: ['super_admin', 'manager', 'attendant'] },
+  { href: '/payments', label: 'Payments', icon: CreditCard, roles: ['super_admin', 'manager', 'accountant', 'finance', 'attendant'] },
+  { href: '/receipts', label: 'Receipts', icon: FileText, roles: ['super_admin', 'attendant'] },
+  { href: '/wallets', label: 'Wallets', icon: Wallet, roles: ['super_admin', 'accountant', 'finance'] },
+  { href: '/debts', label: 'Debts', icon: AlertTriangle, roles: ['super_admin', 'accountant', 'finance'] },
+  { href: '/shifts', label: 'Shifts', icon: Clock, roles: ['super_admin', 'manager', 'attendant'] },
+  { href: '/analytics', label: 'Analytics', icon: BarChart3, roles: ['super_admin', 'manager', 'finance', 'accountant'] },
+  { href: '/reports', label: 'Reports', icon: FileText, roles: ['super_admin', 'manager', 'accountant', 'finance'] },
+  { href: '/users', label: 'Users', icon: UserCog, roles: ['super_admin'] },
+  { href: '/settings', label: 'Settings', icon: Settings, roles: ['super_admin'] },
 ];
 
 export function Sidebar() {
   const pathname = usePathname();
   const { sidebarOpen, toggleSidebar } = useUIStore();
   const { user, logout } = useAuthStore();
+  const { data: settings } = useSettings();
+
+  const logoUrl = settings?.logo_url || '/spero-logo.png';
+  const appName = settings?.app_name || 'SCMS';
+  const stationName = settings?.company_name || 'Spero EV Charging';
+  const primaryColor = settings?.primary_color || '#3b82f6';
 
   return (
-    <aside
-      className="flex flex-col transition-all duration-200"
-      style={{
-        width: sidebarOpen ? '240px' : '68px',
-        background: 'var(--sidebar-bg)',
-        borderRight: '1px solid rgba(255,255,255,0.06)',
-        flexShrink: 0,
-        height: '100vh',
-        position: 'sticky',
-        top: 0,
-        overflow: 'hidden',
-      }}
-    >
+    <>
+      {/* Mobile Overlay */}
+      {sidebarOpen && (
+        <div 
+          className="fixed inset-0 z-40 lg:hidden bg-black/50 backdrop-blur-sm"
+          onClick={toggleSidebar}
+        />
+      )}
+
+      <aside
+        className={`fixed inset-y-0 left-0 z-50 lg:static flex flex-col transition-all duration-300 transform 
+          ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
+        `}
+        style={{
+          width: sidebarOpen ? '240px' : '68px',
+          background: 'var(--sidebar-bg)',
+          borderRight: '1px solid rgba(255,255,255,0.06)',
+          flexShrink: 0,
+          height: '100vh',
+          overflow: 'hidden',
+        }}
+      >
       {/* Logo */}
       <div className="flex items-center gap-3 px-4 py-5 border-b border-white/10">
         <div className="flex-shrink-0 w-8 h-8 relative">
-          <Image src="/spero-logo.png" alt="SPERO" width={32} height={32} className="object-contain" />
+          <img src={logoUrl} alt={appName} className="w-full h-full object-contain" />
         </div>
         {sidebarOpen && (
           <div className="min-w-0">
-            <div className="text-white font-bold text-sm leading-tight">SCMS</div>
-            <div className="text-slate-400 text-xs truncate">spero EV Charging</div>
+            <div className="text-white font-bold text-sm leading-tight">{appName}</div>
+            <div className="text-slate-400 text-[10px] truncate uppercase tracking-tighter">{stationName}</div>
           </div>
         )}
         <button
@@ -65,8 +82,10 @@ export function Sidebar() {
 
       {/* Navigation */}
       <nav className="flex-1 px-2 py-4 space-y-0.5 overflow-y-auto">
-        {navItems.map(({ href, label, icon: Icon }) => {
-          const active = pathname === href || pathname.startsWith(href + '/');
+        {navItems
+          .filter(item => !user || item.roles.includes(user.role))
+          .map(({ href, label, icon: Icon }) => {
+            const active = pathname === href || pathname.startsWith(href + '/');
           return (
             <Link
               key={href}
@@ -80,10 +99,10 @@ export function Sidebar() {
                 borderRadius: '8px',
                 fontSize: '0.875rem',
                 color: active ? 'white' : 'var(--sidebar-fg)',
-                background: active ? 'rgba(59,130,246,0.2)' : 'transparent',
+                background: active ? `${primaryColor}33` : 'transparent',
                 transition: 'all 0.15s',
                 textDecoration: 'none',
-                fontWeight: active ? 500 : 400,
+                fontWeight: active ? 600 : 400,
                 whiteSpace: 'nowrap',
               }}
               onMouseEnter={(e) => {
@@ -93,7 +112,7 @@ export function Sidebar() {
                 if (!active) (e.currentTarget as HTMLElement).style.background = 'transparent';
               }}
             >
-              <Icon size={17} style={{ flexShrink: 0, color: active ? '#3b82f6' : 'inherit' }} />
+              <Icon size={17} style={{ flexShrink: 0, color: active ? primaryColor : 'inherit' }} />
               {sidebarOpen && <span>{label}</span>}
             </Link>
           );
@@ -122,5 +141,6 @@ export function Sidebar() {
         )}
       </div>
     </aside>
+    </>
   );
 }

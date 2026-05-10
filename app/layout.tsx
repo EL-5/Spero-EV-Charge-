@@ -8,10 +8,21 @@ export const metadata: Metadata = {
   icons: { icon: '/spero-logo.png' },
 };
 
+import QueryProvider from '@/components/providers/QueryProvider';
+import AuthProvider from '@/components/providers/AuthProvider';
+import { Toaster } from 'sonner';
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className="h-full">
-      <body className="h-full antialiased">{children}</body>
+    <html lang="en" className="h-full" suppressHydrationWarning>
+      <body className="h-full antialiased" suppressHydrationWarning>
+        <QueryProvider>
+          <AuthProvider>
+            {children}
+            <Toaster position="top-right" richColors closeButton />
+          </AuthProvider>
+        </QueryProvider>
+      </body>
     </html>
   );
 }

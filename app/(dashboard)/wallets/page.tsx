@@ -1,9 +1,12 @@
 'use client';
 import { useState } from 'react';
 import { TopBar } from '@/components/layout/TopBar';
-import { mockDrivers, mockWalletTransactions } from '@/lib/mock-data';
 import { formatCurrency, formatDateTime } from '@/lib/utils';
-import { Search, Plus, Wallet, ArrowUpCircle, ArrowDownCircle, Gift } from 'lucide-react';
+import { Search, Plus, ArrowUpCircle, ArrowDownCircle, Gift } from 'lucide-react';
+import type { Driver } from '@/lib/types';
+import { useDrivers, useWalletTransactions } from '@/hooks/use-database';
+import { topUpWallet } from '@/app/actions/wallets';
+import { useAuthStore } from '@/store/auth';
 
 const txTypeColors: Record<string, string> = {
   credit: 'bg-green-100 text-green-700',
@@ -19,17 +22,65 @@ const txTypeIcons: Record<string, React.ReactNode> = {
   bonus: <Gift size={14} />,
 };
 
+
 export default function WalletsPage() {
+  const { user } = useAuthStore();
+  const { data: drivers, isLoading: loadingDrivers } = useDrivers();
+  const { data: transactions, isLoading: loadingTx } = useWalletTransactions();
+  
   const [search, setSearch] = useState('');
   const [showTopUp, setShowTopUp] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<'balances' | 'transactions'>('balances');
+  const [formData, setFormData] = useState({
+    driver_id: '',
+    amount: 0,
+    type: 'top_up' as const,
+    description: '',
+  });
+  const [showSuccess, setShowSuccess] = useState(false);
+  const [successMessage, setSuccessMessage] = useState({ title: '', message: '' });
 
-  const driversWithWallets = mockDrivers.filter(d => d.walletBalance > 0 || d.totalSessions > 0);
-  const totalWalletBalance = mockDrivers.reduce((sum, d) => sum + d.walletBalance, 0);
+  const currentDrivers = drivers || [];
+  const currentTransactions = transactions || [];
 
-  const filteredTx = mockWalletTransactions.filter(t =>
-    t.driverName.toLowerCase().includes(search.toLowerCase()) ||
-    t.description.toLowerCase().includes(search.toLowerCase())
+  const handleTopUp = async () => {
+    setLoading(true);
+    const res = await topUpWallet({
+      ...formData,
+      createdBy: user?.id || '00000000-0000-0000-0000-000000000000',
+    });
+    setLoading(false);
+    if (res.success) {
+      setShowTopUp(false);
+      setFormData({ driver_id: '', amount: 0, type: 'top_up', description: '' });
+      setSuccessMessage({ 
+        title: 'Top-Up Successful', 
+        message: `The driver's wallet has been credited with ${formatCurrency(formData.amount)}.` 
+      });
+      setShowSuccess(true);
+    } else {
+      alert('Error: ' + res.error);
+    }
+  };
+
+  const driversWithWallets = currentDrivers.filter(d => d.walletBalance > 0 || d.totalSessions > 0);
+  const totalWalletBalance = currentDrivers.reduce((sum, d) => sum + d.walletBalance, 0);
+
+  const openTopUp = (driver: Driver) => {
+    setFormData({ ...formData, driver_id: driver.id });
+    setShowTopUp(true);
+  };
+
+  const viewHistory = (driver: Driver) => {
+    setSearch(driver.name);
+    setActiveTab('transactions');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const filteredTx = currentTransactions.filter(t =>
+    (t.driverName || '').toLowerCase().includes(search.toLowerCase()) ||
+    (t.description || '').toLowerCase().includes(search.toLowerCase())
   );
 
   return (
@@ -44,15 +95,15 @@ export default function WalletsPage() {
             <div className="text-sm mt-1" style={{ color: 'var(--muted-foreground)' }}>Total Wallet Holdings</div>
           </div>
           <div className="stat-card">
-            <div className="text-2xl font-bold" style={{ color: '#1d4ed8' }}>{mockDrivers.filter(d => d.walletBalance > 0).length}</div>
+            <div className="text-2xl font-bold" style={{ color: '#1d4ed8' }}>{currentDrivers.filter((d: Driver) => d.walletBalance > 0).length}</div>
             <div className="text-sm mt-1" style={{ color: 'var(--muted-foreground)' }}>Wallets with Balance</div>
           </div>
           <div className="stat-card">
-            <div className="text-2xl font-bold" style={{ color: '#7c3aed' }}>{mockWalletTransactions.filter(t => t.type === 'top_up').length}</div>
+            <div className="text-2xl font-bold" style={{ color: '#7c3aed' }}>{currentTransactions.filter((t: any) => t.type === 'top_up').length}</div>
             <div className="text-sm mt-1" style={{ color: 'var(--muted-foreground)' }}>Top-ups</div>
           </div>
           <div className="stat-card">
-            <div className="text-2xl font-bold" style={{ color: '#d97706' }}>{mockWalletTransactions.filter(t => t.type === 'bonus').length}</div>
+            <div className="text-2xl font-bold" style={{ color: '#d97706' }}>{currentTransactions.filter((t: any) => t.type === 'bonus').length}</div>
             <div className="text-sm mt-1" style={{ color: 'var(--muted-foreground)' }}>Bonus Credits</div>
           </div>
         </div>
@@ -133,8 +184,18 @@ export default function WalletsPage() {
                       <td>{d.totalSessions}</td>
                       <td>
                         <div className="flex gap-1">
-                          <button className="btn btn-secondary btn-sm">Top Up</button>
-                          <button className="btn btn-secondary btn-sm">History</button>
+                          <button 
+                            onClick={() => openTopUp(d)}
+                            className="btn btn-secondary btn-sm"
+                          >
+                            Top Up
+                          </button>
+                          <button 
+                            onClick={() => viewHistory(d)}
+                            className="btn btn-secondary btn-sm"
+                          >
+                            History
+                          </button>
                         </div>
                       </td>
                     </tr>
@@ -213,14 +274,22 @@ export default function WalletsPage() {
               <div className="space-y-4">
                 <div>
                   <label className="form-label">Select Driver *</label>
-                  <select className="form-select">
+                  <select 
+                    className="form-select"
+                    value={formData.driver_id}
+                    onChange={e => setFormData({ ...formData, driver_id: e.target.value })}
+                  >
                     <option value="">Choose driver...</option>
-                    {mockDrivers.map(d => <option key={d.id}>{d.name}</option>)}
+                    {currentDrivers.map((d: Driver) => <option key={d.id} value={d.id}>{d.name} ({d.phone})</option>)}
                   </select>
                 </div>
                 <div>
                   <label className="form-label">Top-Up Type</label>
-                  <select className="form-select">
+                  <select 
+                    className="form-select"
+                    value={formData.type}
+                    onChange={e => setFormData({ ...formData, type: e.target.value as any })}
+                  >
                     <option value="top_up">Manual Top-Up</option>
                     <option value="bonus">Bonus Credit</option>
                     <option value="credit">Overpayment Credit</option>
@@ -228,17 +297,54 @@ export default function WalletsPage() {
                 </div>
                 <div>
                   <label className="form-label">Amount (GHS) *</label>
-                  <input type="number" className="form-input" placeholder="0.00" min="1" />
+                  <input 
+                    type="number" 
+                    className="form-input" 
+                    placeholder="0.00" 
+                    min="1"
+                    value={formData.amount || ''}
+                    onChange={e => setFormData({ ...formData, amount: Number(e.target.value) })}
+                  />
                 </div>
                 <div>
                   <label className="form-label">Notes</label>
-                  <input className="form-input" placeholder="Reason for top-up..." />
+                  <input 
+                    className="form-input" 
+                    placeholder="Reason for top-up..."
+                    value={formData.description}
+                    onChange={e => setFormData({ ...formData, description: e.target.value })}
+                  />
                 </div>
                 <div className="flex gap-3">
-                  <button onClick={() => setShowTopUp(false)} className="btn btn-secondary flex-1">Cancel</button>
-                  <button onClick={() => setShowTopUp(false)} className="btn btn-primary flex-1">Top Up Wallet</button>
+                  <button onClick={() => setShowTopUp(false)} className="btn btn-secondary flex-1" disabled={loading}>Cancel</button>
+                  <button 
+                    onClick={handleTopUp} 
+                    className="btn btn-primary flex-1"
+                    disabled={loading || !formData.driver_id || !formData.amount}
+                  >
+                    {loading ? 'Processing...' : 'Top Up Wallet'}
+                  </button>
                 </div>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* Success Modal */}
+        {showSuccess && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.4)' }}>
+            <div className="stat-card max-w-sm w-full text-center py-8">
+              <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <ArrowUpCircle className="text-green-600" size={32} />
+              </div>
+              <h2 className="font-bold text-xl mb-2" style={{ color: 'var(--foreground)' }}>{successMessage.title}</h2>
+              <p className="text-sm mb-6" style={{ color: 'var(--muted-foreground)' }}>{successMessage.message}</p>
+              <button 
+                onClick={() => setShowSuccess(false)}
+                className="btn btn-primary w-full"
+              >
+                Continue
+              </button>
             </div>
           </div>
         )}
