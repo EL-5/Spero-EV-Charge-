@@ -474,16 +474,74 @@ export default function SettingsPage() {
             {/* ── WALLET & DEBT ── */}
             {activeTab === 'wallet' && (
               <div className="stat-card">
-                <h3 className="font-semibold mb-5" style={{ color: 'var(--foreground)' }}>Wallet & Debt Rules</h3>
-                <div className="space-y-4">
-                  <div>
-                    <label className="form-label">Max Debt Threshold (GHS)</label>
-                    <input type="number" className="form-input" value={wallet.max_debt_threshold} onChange={e => setWallet({ ...wallet, max_debt_threshold: Number(e.target.value) })} />
+                <h3 className="font-bold text-lg mb-6" style={{ color: 'var(--foreground)' }}>Wallet & Debt Rules</h3>
+                
+                <div className="space-y-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                      <label className="form-label">Maximum Debt Threshold (GHS)</label>
+                      <div className="relative">
+                        <input 
+                          type="number" 
+                          className="form-input font-bold" 
+                          style={{ paddingLeft: '60px' }}
+                          value={wallet.max_debt_threshold} 
+                          onChange={e => setWallet({ ...wallet, max_debt_threshold: Number(e.target.value) })} 
+                        />
+                        <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold">GHS</div>
+                      </div>
+                      <p className="text-[10px] mt-1.5 text-slate-400">Total debt allowed before service is restricted</p>
+                    </div>
+                    <div>
+                      <label className="form-label">Warning Threshold (GHS)</label>
+                      <div className="relative">
+                        <input 
+                          type="number" 
+                          className="form-input font-bold" 
+                          style={{ paddingLeft: '60px' }}
+                          value={wallet.debt_warning_threshold} 
+                          onChange={e => setWallet({ ...wallet, debt_warning_threshold: Number(e.target.value) })} 
+                        />
+                        <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold">GHS</div>
+                      </div>
+                      <p className="text-[10px] mt-1.5 text-slate-400">Trigger warnings when debt exceeds this amount</p>
+                    </div>
                   </div>
-                  <div>
-                    <label className="form-label">Warning Threshold (GHS)</label>
-                    <input type="number" className="form-input" value={wallet.debt_warning_threshold} onChange={e => setWallet({ ...wallet, debt_warning_threshold: Number(e.target.value) })} />
+
+                  <hr style={{ borderColor: 'var(--border)' }} />
+
+                  <div className="space-y-4">
+                    <label className="text-xs font-bold uppercase tracking-wider text-slate-400">Enforcement Policies</label>
+                    
+                    <div className="space-y-3">
+                      <label className="flex items-center justify-between p-4 rounded-xl border border-slate-100 bg-slate-50/50 cursor-pointer hover:bg-slate-50 transition-colors">
+                        <div className="space-y-1">
+                          <div className="text-sm font-bold text-slate-800">Block Postpaid on High Debt</div>
+                          <div className="text-xs text-slate-500">Prevent starting new sessions if max threshold is reached</div>
+                        </div>
+                        <input 
+                          type="checkbox" 
+                          className="w-5 h-5 rounded text-blue-600 focus:ring-blue-500"
+                          checked={wallet.block_postpaid_on_debt} 
+                          onChange={e => setWallet({ ...wallet, block_postpaid_on_debt: e.target.checked })}
+                        />
+                      </label>
+
+                      <label className="flex items-center justify-between p-4 rounded-xl border border-slate-100 bg-slate-50/50 cursor-pointer hover:bg-slate-50 transition-colors">
+                        <div className="space-y-1">
+                          <div className="text-sm font-bold text-slate-800">Allow Manager Override</div>
+                          <div className="text-xs text-slate-500">Managers can authorize sessions even if driver is over debt limit</div>
+                        </div>
+                        <input 
+                          type="checkbox" 
+                          className="w-5 h-5 rounded text-blue-600 focus:ring-blue-500"
+                          checked={wallet.manager_override} 
+                          onChange={e => setWallet({ ...wallet, manager_override: e.target.checked })}
+                        />
+                      </label>
+                    </div>
                   </div>
+
                   <SaveBar 
                     status={saveStatus['wallet'] || 'idle'} 
                     error={errorMessages['wallet']}
