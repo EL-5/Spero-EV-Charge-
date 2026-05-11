@@ -668,21 +668,123 @@ export default function SettingsPage() {
 
             {/* ── BRANDING ── */}
             {activeTab === 'branding' && (
-              <div className="stat-card">
-                <h3 className="font-semibold mb-5" style={{ color: 'var(--foreground)' }}>Branding</h3>
-                <div className="space-y-4">
-                  <div>
-                    <label className="form-label">Primary Color</label>
-                    <input type="color" className="h-10 w-20" value={branding.primary_color} onChange={e => setBranding({ ...branding, primary_color: e.target.value })} />
+              <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+                <div className="stat-card">
+                  <h3 className="font-bold text-lg mb-6" style={{ color: 'var(--foreground)' }}>Visual Identity</h3>
+                  
+                  <div className="space-y-6">
+                    {/* Logo Section */}
+                    <div className="space-y-3">
+                      <label className="text-xs font-bold uppercase tracking-wider text-slate-400">Station Logo</label>
+                      <div className="flex items-center gap-6 p-4 rounded-2xl border-2 border-dashed border-slate-100 bg-slate-50/50">
+                        <div className="w-20 h-20 rounded-xl bg-white border border-slate-100 flex items-center justify-center overflow-hidden flex-shrink-0">
+                          {branding.logo_url ? (
+                            <img src={branding.logo_url} alt="Logo" className="w-full h-full object-contain p-2" />
+                          ) : (
+                            <Palette className="text-slate-200" size={32} />
+                          )}
+                        </div>
+                        <div className="flex-1 space-y-2">
+                          <div className="text-sm font-medium text-slate-700">Upload your brand logo</div>
+                          <div className="text-[10px] text-slate-400">PNG or JPG, Max 2MB. Recommended 200x200px.</div>
+                          <label className="inline-block">
+                            <span className="btn btn-secondary btn-sm cursor-pointer">
+                              {isUploading ? 'Uploading...' : 'Choose File'}
+                            </span>
+                            <input type="file" className="hidden" accept="image/*" onChange={handleLogoUpload} disabled={isUploading} />
+                          </label>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* App Name */}
+                    <div>
+                      <label className="form-label">Application Name</label>
+                      <input 
+                        className="form-input font-bold" 
+                        value={branding.app_name} 
+                        onChange={e => setBranding({ ...branding, app_name: e.target.value })} 
+                        placeholder="e.g. SPERO EV"
+                      />
+                    </div>
+
+                    {/* Color Theme */}
+                    <div className="space-y-3">
+                      <label className="text-xs font-bold uppercase tracking-wider text-slate-400">Brand Color Theme</label>
+                      <div className="flex items-center gap-4 p-4 rounded-xl border border-slate-100 bg-slate-50/50">
+                        <div className="relative group">
+                          <input 
+                            type="color" 
+                            className="h-12 w-12 rounded-lg cursor-pointer border-none p-0 bg-transparent" 
+                            value={branding.primary_color} 
+                            onChange={e => setBranding({ ...branding, primary_color: e.target.value })} 
+                          />
+                          <div className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-white border border-slate-100 flex items-center justify-center text-[8px] font-bold shadow-sm">
+                            HEX
+                          </div>
+                        </div>
+                        <div className="flex-1">
+                          <div className="text-sm font-bold text-slate-800 uppercase">{branding.primary_color}</div>
+                          <div className="text-[10px] text-slate-400">Primary button and accent color</div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <SaveBar 
+                      status={saveStatus['branding'] || 'idle'} 
+                      onSave={() => handleSave('branding', branding)} 
+                    />
                   </div>
-                  <div>
-                    <label className="form-label">App Name</label>
-                    <input className="form-input" value={branding.app_name} onChange={e => setBranding({ ...branding, app_name: e.target.value })} />
+                </div>
+
+                {/* Live Theme Preview */}
+                <div className="stat-card bg-slate-100/50 border-dashed border-2">
+                  <div className="text-[10px] font-bold text-slate-400 uppercase mb-6 tracking-widest text-center">UI Theme Preview</div>
+                  
+                  <div className="space-y-6">
+                    {/* Component Previews */}
+                    <div className="stat-card shadow-sm border border-slate-200">
+                      <div className="flex items-center gap-3 mb-4">
+                        <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ backgroundColor: branding.primary_color }}>
+                          <Zap size={16} className="text-white" />
+                        </div>
+                        <div className="font-black text-xs uppercase tracking-tight">{branding.app_name || 'SCMS'}</div>
+                      </div>
+                      
+                      <div className="space-y-3">
+                        <div className="h-2 w-2/3 bg-slate-100 rounded-full"></div>
+                        <div className="h-2 w-1/2 bg-slate-100 rounded-full"></div>
+                        <div className="flex gap-2 pt-2">
+                          <button className="h-8 px-4 rounded-lg text-[10px] font-bold text-white transition-opacity hover:opacity-90" style={{ backgroundColor: branding.primary_color }}>
+                            Primary Button
+                          </button>
+                          <button className="h-8 px-4 rounded-lg text-[10px] font-bold border border-slate-200 text-slate-600 bg-white">
+                            Secondary
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="p-3 rounded-xl border border-slate-200 bg-white shadow-sm">
+                        <div className="text-[8px] font-bold text-slate-400 uppercase mb-1">Status</div>
+                        <div className="flex items-center gap-1.5">
+                          <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: branding.primary_color }}></div>
+                          <div className="text-[10px] font-bold" style={{ color: branding.primary_color }}>Active Channel</div>
+                        </div>
+                      </div>
+                      <div className="p-3 rounded-xl border border-slate-200 bg-white shadow-sm">
+                        <div className="text-[8px] font-bold text-slate-400 uppercase mb-1">Badge Style</div>
+                        <span className="px-2 py-0.5 rounded-full text-[9px] font-bold" style={{ backgroundColor: `${branding.primary_color}15`, color: branding.primary_color }}>
+                          Premium Tier
+                        </span>
+                      </div>
+                    </div>
                   </div>
-                  <SaveBar 
-                    status={saveStatus['branding'] || 'idle'} 
-                    onSave={() => handleSave('branding', branding)} 
-                  />
+
+                  <p className="mt-8 text-center text-[10px] text-slate-400 italic">
+                    Preview changes in real-time before saving to production.
+                  </p>
                 </div>
               </div>
             )}
