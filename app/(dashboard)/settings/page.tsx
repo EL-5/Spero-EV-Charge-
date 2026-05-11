@@ -40,7 +40,7 @@ function SaveBar({ status, error, onSave }: { status: SaveStatus; error?: string
 
 export default function SettingsPage() {
   const queryClient = useQueryClient();
-  const [activeTab, setActiveTab] = useState('general');
+  const [activeTab, setActiveTab] = useState<string>('general');
   const [showNewRate, setShowNewRate] = useState(false);
   const [newRate, setNewRate] = useState('');
   const [newUnitType, setNewUnitType] = useState<'kwh' | 'minutes' | 'hours'>('kwh');
@@ -73,7 +73,7 @@ export default function SettingsPage() {
   });
   const rates = pricingRates || [];
 
-  // ── Controlled form state – seeded from DB ──
+  // ── Controlled form state ──
   const [general, setGeneral] = useState({
     company_name: '', company_phone: '', company_email: '', company_address: '',
     currency: 'GHS', timezone: 'Africa/Accra',
@@ -183,7 +183,6 @@ export default function SettingsPage() {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Check size (max 2MB)
     if (file.size > 2 * 1024 * 1024) {
       alert('Logo file too large. Max 2MB.');
       return;
@@ -207,7 +206,6 @@ export default function SettingsPage() {
 
       if (data?.publicUrl) {
         setBranding(prev => ({ ...prev, logo_url: data.publicUrl }));
-        // Auto-save branding since we have the URL now
         await handleSave('branding', { 
           primary_color: branding.primary_color,
           app_name: branding.app_name,
@@ -224,7 +222,7 @@ export default function SettingsPage() {
 
   if (settingsLoading) {
     return (
-      <div>
+      <div className="min-h-screen bg-[#1a1c23]">
         <TopBar title="Settings" subtitle="System configuration and preferences" />
         <div className="p-6 text-center py-20" style={{ color: 'var(--muted-foreground)' }}>Loading settings...</div>
       </div>
@@ -233,7 +231,7 @@ export default function SettingsPage() {
 
   if (!settingsRow) {
     return (
-      <div>
+      <div className="min-h-screen bg-[#1a1c23]">
         <TopBar title="Settings" subtitle="System configuration and preferences" />
         <div className="p-6">
           <div className="p-4 rounded-xl border border-red-200 bg-red-50 text-red-700 text-sm">
@@ -245,7 +243,7 @@ export default function SettingsPage() {
   }
 
   return (
-    <div>
+    <div className="min-h-screen bg-[#1a1c23]">
       <TopBar title="Settings" subtitle="System configuration and preferences" />
       <div className="p-6">
         <div className="flex flex-col lg:flex-row gap-6">
@@ -365,7 +363,6 @@ export default function SettingsPage() {
                   )}
                 </div>
 
-                {/* Rate history */}
                 <div className="stat-card overflow-hidden">
                   <h3 className="font-semibold mb-4" style={{ color: 'var(--foreground)' }}>Rate History</h3>
                   <div className="overflow-x-auto">
@@ -393,10 +390,6 @@ export default function SettingsPage() {
                     </table>
                   </div>
                 </div>
-
-                <div className="p-4 rounded-xl border border-yellow-200 bg-yellow-50 text-sm text-yellow-800">
-                  <strong>Note:</strong> Rate changes apply only to new sessions. Historical sessions retain the rate at time of creation.
-                </div>
               </div>
             )}
 
@@ -419,23 +412,14 @@ export default function SettingsPage() {
                       <span className="font-semibold">Hubtel MoMo</span>
                       <span className="badge status-active">Configured via .env</span>
                     </div>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div><label className="form-label text-xs">Client ID</label><input type="password" className="form-input" placeholder="From .env.local" disabled /></div>
-                      <div><label className="form-label text-xs">Client Secret</label><input type="password" className="form-input" placeholder="From .env.local" disabled /></div>
-                      <div><label className="form-label text-xs">Sender ID</label><input className="form-input" placeholder="SPERO-EV" disabled /></div>
-                    </div>
-                    <p className="text-xs mt-2" style={{ color: 'var(--muted-foreground)' }}>Hubtel keys are stored in <code>.env.local</code> and cannot be edited here for security.</p>
+                    <p className="text-xs mt-2" style={{ color: 'var(--muted-foreground)' }}>Hubtel keys are managed securely in the server environment.</p>
                   </div>
                   <div className="p-4 rounded-xl border" style={{ borderColor: 'var(--border)' }}>
                     <div className="flex items-center justify-between mb-4">
                       <span className="font-semibold">Paystack</span>
                       <span className="badge status-active">Configured via .env</span>
                     </div>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div><label className="form-label text-xs">Public Key</label><input type="password" className="form-input" placeholder="From .env.local" disabled /></div>
-                      <div><label className="form-label text-xs">Secret Key</label><input type="password" className="form-input" placeholder="From .env.local" disabled /></div>
-                    </div>
-                    <p className="text-xs mt-2" style={{ color: 'var(--muted-foreground)' }}>Paystack keys are stored in <code>.env.local</code> and cannot be edited here for security.</p>
+                    <p className="text-xs mt-2" style={{ color: 'var(--muted-foreground)' }}>Paystack keys are managed securely in the server environment.</p>
                   </div>
                 </div>
               </div>
@@ -446,33 +430,13 @@ export default function SettingsPage() {
               <div className="stat-card">
                 <h3 className="font-semibold mb-5" style={{ color: 'var(--foreground)' }}>Wallet & Debt Rules</h3>
                 <div className="space-y-4">
-                  {[
-                    { key: 'block_postpaid_on_debt', label: 'Block postpaid if driver has debt' },
-                    { key: 'manager_override',       label: 'Allow manager override on debt block' },
-                  ].map(item => (
-                    <div key={item.key} className="flex items-center justify-between p-3 rounded-lg" style={{ background: 'var(--muted)' }}>
-                      <span className="text-sm font-medium" style={{ color: 'var(--foreground)' }}>{item.label}</span>
-                      <button
-                        onClick={() => setWallet(w => ({ ...w, [item.key]: !w[item.key as keyof typeof w] }))}
-                        className="relative inline-flex h-6 w-11 items-center rounded-full transition-colors"
-                        style={{ background: wallet[item.key as keyof typeof wallet] ? 'var(--primary)' : 'var(--border)' }}
-                      >
-                        <span
-                          className="inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform"
-                          style={{ transform: wallet[item.key as keyof typeof wallet] ? 'translateX(22px)' : 'translateX(2px)' }}
-                        />
-                      </button>
-                    </div>
-                  ))}
-                  <div className="grid grid-cols-2 gap-4 pt-2">
-                    <div>
-                      <label className="form-label">Max Debt Threshold (GHS)</label>
-                      <input type="number" className="form-input" value={wallet.max_debt_threshold} onChange={e => setWallet({ ...wallet, max_debt_threshold: Number(e.target.value) })} />
-                    </div>
-                    <div>
-                      <label className="form-label">Warning Threshold (GHS)</label>
-                      <input type="number" className="form-input" value={wallet.debt_warning_threshold} onChange={e => setWallet({ ...wallet, debt_warning_threshold: Number(e.target.value) })} />
-                    </div>
+                  <div>
+                    <label className="form-label">Max Debt Threshold (GHS)</label>
+                    <input type="number" className="form-input" value={wallet.max_debt_threshold} onChange={e => setWallet({ ...wallet, max_debt_threshold: Number(e.target.value) })} />
+                  </div>
+                  <div>
+                    <label className="form-label">Warning Threshold (GHS)</label>
+                    <input type="number" className="form-input" value={wallet.debt_warning_threshold} onChange={e => setWallet({ ...wallet, debt_warning_threshold: Number(e.target.value) })} />
                   </div>
                   <SaveBar 
                     status={saveStatus['wallet'] || 'idle'} 
@@ -485,169 +449,24 @@ export default function SettingsPage() {
 
             {/* ── RECEIPTS ── */}
             {activeTab === 'receipts' && (
-              <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-                <div className="stat-card h-fit">
-                  <h3 className="font-semibold mb-5" style={{ color: 'var(--foreground)' }}>Customize Receipt</h3>
-                  <div className="space-y-6">
-                    <div>
-                      <label className="form-label">Receipt Header Title</label>
-                      <input 
-                        className="form-input" 
-                        value={receipts.header_title} 
-                        onChange={e => setReceipts({ ...receipts, header_title: e.target.value })} 
-                        placeholder="EV Charging Station Receipt" 
-                      />
-                    </div>
-
-                    <div className="space-y-3">
-                      <label className="form-label text-xs uppercase tracking-wider text-slate-400">Visibility Settings</label>
-                      {[
-                        { key: 'show_driver', label: 'Show Driver Name' },
-                        { key: 'show_vehicle', label: 'Show Vehicle Details' },
-                        { key: 'show_units', label: 'Show Energy Units (kWh/min)' },
-                        { key: 'show_rate', label: 'Show Rate per Unit' },
-                        { key: 'show_payment_method', label: 'Show Payment Method' },
-                        { key: 'show_date', label: 'Show Transaction Date' },
-                        { key: 'show_logo', label: 'Show Logo' },
-                      ].map(item => (
-                        <div key={item.key} className="flex items-center justify-between p-3 rounded-lg border border-slate-100 bg-slate-50/50">
-                          <span className="text-sm font-medium text-slate-700">{item.label}</span>
-                          <button
-                            onClick={() => setReceipts(r => ({ ...r, [item.key]: !r[item.key as keyof typeof r] }))}
-                            className="relative inline-flex h-5 w-10 items-center rounded-full transition-colors"
-                            style={{ background: receipts[item.key as keyof typeof receipts] ? 'var(--primary)' : '#cbd5e1' }}
-                          >
-                            <span
-                              className="inline-block h-3 w-3 transform rounded-full bg-white transition-transform"
-                              style={{ transform: receipts[item.key as keyof typeof receipts] ? 'translateX(22px)' : 'translateX(4px)' }}
-                            />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-
-                    {receipts.show_logo && (
-                      <div>
-                        <label className="form-label flex justify-between">
-                          <span>Logo Size</span>
-                          <span className="text-blue-600 font-bold">{receipts.logo_size}px</span>
-                        </label>
-                        <input 
-                          type="range" 
-                          min="20" 
-                          max="100" 
-                          step="5"
-                          className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
-                          value={receipts.logo_size}
-                          onChange={e => setReceipts({ ...receipts, logo_size: Number(e.target.value) })}
-                        />
-                      </div>
-                    )}
-
-                    <div>
-                      <label className="form-label">Receipt Footer Message</label>
-                      <textarea 
-                        className="form-input h-20 resize-none" 
-                        value={receipts.receipt_footer} 
-                        onChange={e => setReceipts({ ...receipts, receipt_footer: e.target.value })} 
-                        placeholder="Thank you for charging with us!" 
-                      />
-                    </div>
-                    
-                    <SaveBar 
-                      status={saveStatus['receipts'] || 'idle'} 
-                      error={errorMessages['receipts']}
-                      onSave={() => handleSave('receipts', { 
-                        receipt_footer: receipts.receipt_footer,
-                        receipt_config: {
-                          headerTitle: receipts.header_title,
-                          showDriver: receipts.show_driver,
-                          showVehicle: receipts.show_vehicle,
-                          showUnits: receipts.show_units,
-                          showRate: receipts.show_rate,
-                          showPaymentMethod: receipts.show_payment_method,
-                          showDate: receipts.show_date,
-                          showLogo: receipts.show_logo,
-                          logoSize: receipts.logo_size,
-                        }
-                      })} 
-                    />
-                  </div>
-                </div>
-
-                {/* Live Preview */}
+              <div className="stat-card">
+                <h3 className="font-semibold mb-5" style={{ color: 'var(--foreground)' }}>Receipt Customization</h3>
                 <div className="space-y-4">
-                  <h3 className="font-semibold text-slate-500 uppercase text-xs tracking-widest ml-2">Live Preview</h3>
-                  <div className="stat-card border-dashed border-2 bg-slate-50/30 flex flex-col items-center justify-center py-10">
-                    <div className="w-full max-w-[320px] bg-white shadow-2xl rounded-sm p-8 text-center text-slate-800 font-mono text-sm border-t-4 border-blue-600">
-                      {receipts.show_logo && (
-                        <div className="flex justify-center mb-4">
-                          <Image src={branding.logo_url} alt="Logo" width={receipts.logo_size} height={receipts.logo_size} className="object-contain" />
-                        </div>
-                      )}
-                      <div className="font-black text-lg mb-0.5 uppercase">{general.company_name || 'STATION NAME'}</div>
-                      <div className="text-[10px] text-slate-500 mb-4">{receipts.header_title || 'Charging Receipt'}</div>
-                      
-                      <div className="border-t border-b border-dashed border-slate-200 py-4 my-4 space-y-2 text-left">
-                        <div className="flex justify-between">
-                          <span className="text-slate-400">Receipt #</span>
-                          <span className="font-bold">RCP-TEST-001</span>
-                        </div>
-                        
-                        {receipts.show_date && (
-                          <div className="flex justify-between">
-                            <span className="text-slate-400">Date</span>
-                            <span>{new Date().toLocaleDateString()}</span>
-                          </div>
-                        )}
-                        
-                        {receipts.show_driver && (
-                          <div className="flex justify-between">
-                            <span className="text-slate-400">Driver</span>
-                            <span>Ernest Osei</span>
-                          </div>
-                        )}
-                        
-                        {receipts.show_vehicle && (
-                          <div className="flex justify-between">
-                            <span className="text-slate-400">Vehicle</span>
-                            <span>GR-2024-EV</span>
-                          </div>
-                        )}
-
-                        {receipts.show_units && (
-                          <div className="flex justify-between">
-                            <span className="text-slate-400">Energy Units</span>
-                            <span>25.4 kWh</span>
-                          </div>
-                        )}
-
-                        {receipts.show_rate && (
-                          <div className="flex justify-between">
-                            <span className="text-slate-400">Rate</span>
-                            <span>GHS 5.50/kWh</span>
-                          </div>
-                        )}
-
-                        <div className="flex justify-between pt-2 border-t border-slate-100 mt-2">
-                          <span className="font-black">TOTAL</span>
-                          <span className="font-black text-blue-600">GHS 139.70</span>
-                        </div>
-
-                        {receipts.show_payment_method && (
-                          <div className="flex justify-between">
-                            <span className="text-slate-400">Paid Via</span>
-                            <span className="uppercase text-[10px] font-bold bg-slate-100 px-1.5 py-0.5 rounded">Cash</span>
-                          </div>
-                        )}
-                      </div>
-
-                      <div className="text-[10px] text-slate-400 leading-relaxed italic">
-                        {receipts.receipt_footer || 'Thank you!'}
-                      </div>
-                    </div>
-                    <p className="mt-4 text-xs text-slate-400 italic">This is how your printed and digital receipts will look.</p>
+                  <div>
+                    <label className="form-label">Receipt Header Title</label>
+                    <input className="form-input" value={receipts.header_title} onChange={e => setReceipts({ ...receipts, header_title: e.target.value })} />
                   </div>
+                  <div>
+                    <label className="form-label">Footer Message</label>
+                    <textarea className="form-input" value={receipts.receipt_footer} onChange={e => setReceipts({ ...receipts, receipt_footer: e.target.value })} />
+                  </div>
+                  <SaveBar 
+                    status={saveStatus['receipts'] || 'idle'} 
+                    onSave={() => handleSave('receipts', {
+                      receipt_footer: receipts.receipt_footer,
+                      receipt_config: { headerTitle: receipts.header_title }
+                    })} 
+                  />
                 </div>
               </div>
             )}
@@ -656,223 +475,79 @@ export default function SettingsPage() {
             {activeTab === 'branding' && (
               <div className="stat-card">
                 <h3 className="font-semibold mb-5" style={{ color: 'var(--foreground)' }}>Branding</h3>
-                <div className="space-y-5">
+                <div className="space-y-4">
                   <div>
-                    <label className="form-label">Company Logo</label>
-                    <div className="flex items-center gap-4 p-4 border rounded-xl" style={{ borderColor: 'var(--border)' }}>
-                      <Image src={branding.logo_url} alt="Logo" width={80} height={80} className="object-contain" />
-                        <div className="flex-1">
-                          <div className="font-medium mb-1" style={{ color: 'var(--foreground)' }}>Logo Settings</div>
-                          
-                          <div className="flex items-center gap-3 mb-4">
-                            <input 
-                              type="file" 
-                              id="logo-upload" 
-                              className="hidden" 
-                              accept="image/*"
-                              onChange={handleLogoUpload}
-                              disabled={isUploading}
-                            />
-                            <label 
-                              htmlFor="logo-upload" 
-                              className={`btn btn-secondary btn-sm cursor-pointer ${isUploading ? 'opacity-50 pointer-events-none' : ''}`}
-                            >
-                              {isUploading ? 'Uploading...' : 'Change Logo'}
-                            </label>
-                            <span className="text-[10px] text-slate-400">Max 2MB. PNG, JPG or SVG.</span>
-                          </div>
-
-                          <div className="text-xs text-slate-400 mb-2 uppercase tracking-wider font-bold">Logo URL</div>
-                          <input 
-                            className="form-input text-xs mb-2" 
-                            value={branding.logo_url} 
-                            onChange={e => setBranding({ ...branding, logo_url: e.target.value })} 
-                            placeholder="/spero-logo.png" 
-                          />
-                          <div className="text-[10px] text-slate-400">Enter a public URL or upload from your device.</div>
-                        </div>
-                    </div>
+                    <label className="form-label">Primary Color</label>
+                    <input type="color" className="h-10 w-20" value={branding.primary_color} onChange={e => setBranding({ ...branding, primary_color: e.target.value })} />
                   </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="form-label">Primary Color</label>
-                      <div className="flex gap-2">
-                        <input
-                          type="color"
-                          className="h-10 w-14 rounded border"
-                          style={{ borderColor: 'var(--border)' }}
-                          value={branding.primary_color}
-                          onChange={e => setBranding({ ...branding, primary_color: e.target.value })}
-                        />
-                        <input
-                          className="form-input"
-                          value={branding.primary_color}
-                          onChange={e => setBranding({ ...branding, primary_color: e.target.value })}
-                        />
-                      </div>
-                    </div>
-                    <div>
-                      <label className="form-label">App Name</label>
-                      <input className="form-input" value={branding.app_name} onChange={e => setBranding({ ...branding, app_name: e.target.value })} />
-                    </div>
+                  <div>
+                    <label className="form-label">App Name</label>
+                    <input className="form-input" value={branding.app_name} onChange={e => setBranding({ ...branding, app_name: e.target.value })} />
                   </div>
                   <SaveBar 
                     status={saveStatus['branding'] || 'idle'} 
-                    error={errorMessages['branding']}
-                    onSave={() => handleSave('branding', {
-                      primary_color: branding.primary_color,
-                      app_name: branding.app_name,
-                      logo_url: branding.logo_url
-                    })} 
+                    onSave={() => handleSave('branding', branding)} 
                   />
                 </div>
-              )}
+              </div>
+            )}
+
             {/* ── MAINTENANCE ── */}
             {activeTab === 'maintenance' && user?.role === 'super_admin' && (
-              <div className="space-y-6">
-                <div className="stat-card border-red-100 bg-red-50/10">
-                  <div className="flex items-center gap-3 mb-6">
-                    <div className="p-2 rounded-lg bg-red-100 text-red-600">
-                      <Trash2 size={20} />
-                    </div>
-                    <div>
-                      <h3 className="font-bold text-red-900">System Reset</h3>
-                      <p className="text-xs text-red-600">Fresh start for the entire station</p>
-                    </div>
+              <div className="stat-card border-red-100 bg-red-50/10">
+                <h3 className="font-bold text-red-900 mb-4 flex items-center gap-2"><Trash2 size={20}/> Danger Zone</h3>
+                <div className="space-y-4">
+                  <div className="p-4 rounded-xl border border-red-200 bg-red-50 text-sm text-red-800">
+                    <p className="font-bold">System Reset is irreversible.</p>
+                    <p>All sessions, payments, drivers, and vehicles will be deleted.</p>
                   </div>
-
-                  <div className="space-y-4">
-                    <div className="p-4 rounded-xl border border-red-200 bg-red-50 text-sm text-red-800 space-y-2">
-                      <p className="font-bold flex items-center gap-2">
-                        <AlertTriangle size={16} /> WARNING: This action is irreversible
-                      </p>
-                      <p>Performing a system reset will permanently delete:</p>
-                      <ul className="list-disc list-inside space-y-1 ml-2 text-xs opacity-80">
-                        <li>All Charging Sessions & History</li>
-                        <li>All Payment Records & Financial Logs</li>
-                        <li>All Registered Drivers & Vehicles</li>
-                        <li>All Wallet Balances & Debt Histories</li>
-                        <li>All Shift Records & System Notifications</li>
-                      </ul>
-                      <p className="pt-2 font-semibold italic">Core settings, pricing rates, and staff accounts will be preserved.</p>
-                    </div>
-
-                    <div className="space-y-3">
-                      <label className="text-xs font-bold uppercase text-slate-500 tracking-wider">To confirm, type "RESET SYSTEM" below</label>
-                      <input 
-                        className="form-input border-red-200 focus:border-red-500 focus:ring-red-200" 
-                        placeholder="RESET SYSTEM"
-                        value={resetConfirm}
-                        onChange={e => setResetConfirm(e.target.value)}
-                      />
-                      <button 
-                        onClick={async () => {
-                          if (resetConfirm !== 'RESET SYSTEM') return;
-                          if (!user) return;
-                          
-                          setIsResetting(true);
-                          const res = await resetSystem(user.id);
-                          setIsResetting(false);
-                          
-                          if (res.success) {
-                            toast.success('System has been reset successfully!');
-                            setResetConfirm('');
-                            queryClient.invalidateQueries();
-                          } else {
-                            toast.error('Reset failed: ' + res.error);
-                          }
-                        }}
-                        disabled={resetConfirm !== 'RESET SYSTEM' || isResetting}
-                        className="btn bg-red-600 hover:bg-red-700 text-white w-full gap-2 py-3 shadow-lg shadow-red-200 disabled:opacity-50"
-                      >
-                        {isResetting ? (
-                          <RefreshCw size={18} className="animate-spin" />
-                        ) : (
-                          <Trash2 size={18} />
-                        )}
-                        {isResetting ? 'Resetting System Data...' : 'Wipe System Data & Fresh Start'}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="stat-card">
-                  <h3 className="font-semibold mb-4" style={{ color: 'var(--foreground)' }}>System Information</h3>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="p-3 rounded-lg bg-slate-50 border border-slate-100">
-                      <div className="text-[10px] uppercase font-bold text-slate-400 mb-1">Last Deployment</div>
-                      <div className="text-sm font-medium text-slate-700">{formatDate(new Date().toISOString())}</div>
-                    </div>
-                    <div className="p-3 rounded-lg bg-slate-50 border border-slate-100">
-                      <div className="text-[10px] uppercase font-bold text-slate-400 mb-1">Environment</div>
-                      <div className="text-sm font-medium text-slate-700">Production</div>
-                    </div>
-                  </div>
+                  <input 
+                    className="form-input border-red-200" 
+                    placeholder='Type "RESET SYSTEM" to confirm'
+                    value={resetConfirm}
+                    onChange={e => setResetConfirm(e.target.value)}
+                  />
+                  <button 
+                    onClick={async () => {
+                      if (resetConfirm !== 'RESET SYSTEM') return;
+                      setIsResetting(true);
+                      const res = await resetSystem(user.id);
+                      setIsResetting(false);
+                      if (res.success) {
+                        toast.success('System reset successfully');
+                        setResetConfirm('');
+                      } else {
+                        toast.error(res.error || 'Reset failed');
+                      }
+                    }}
+                    disabled={resetConfirm !== 'RESET SYSTEM' || isResetting}
+                    className="btn bg-red-600 text-white w-full py-3"
+                  >
+                    {isResetting ? 'Resetting...' : 'Wipe All Data'}
+                  </button>
                 </div>
               </div>
             )}
 
           </div>
         </div>
+      </div>
 
-        {/* ── Update Rate Modal ── */}
-        {showNewRate && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.4)' }}>
-            <div className="stat-card max-w-md w-full">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="font-semibold text-lg" style={{ color: 'var(--foreground)' }}>Update Pricing Rate</h2>
-                <button onClick={() => setShowNewRate(false)} className="text-gray-400 hover:text-gray-600 text-xl">&times;</button>
-              </div>
-              <div className="mb-4 p-3 rounded-lg bg-yellow-50 border border-yellow-200 text-sm text-yellow-800">
-                Rate changes apply only to new sessions. Historical sessions keep their original rate.
-              </div>
-              <div className="space-y-4">
-                <div>
-                  <label className="form-label">Unit Type</label>
-                  <select className="form-select" value={newUnitType} onChange={e => setNewUnitType(e.target.value as any)}>
-                    <option value="kwh">kWh (Energy)</option>
-                    <option value="minutes">Minutes (Time)</option>
-                    <option value="hours">Hours (Time)</option>
-                  </select>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="form-label">Quantity</label>
-                    <input
-                      type="number"
-                      className="form-input"
-                      value={newQuantity}
-                      onChange={e => setNewQuantity(e.target.value)}
-                      placeholder="e.g. 30"
-                    />
-                  </div>
-                  <div>
-                    <label className="form-label">Rate (GHS)</label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      className="form-input"
-                      placeholder="e.g. 5.50"
-                      min="0.01"
-                      value={newRate}
-                      onChange={e => setNewRate(e.target.value)}
-                    />
-                  </div>
-                </div>
-                <div className="text-[11px] text-blue-600 font-medium italic">
-                  Preview: GHS {newRate || '0.00'} for {newQuantity || '0'} {newUnitType}
-                </div>
-                <div className="flex gap-3">
-                  <button onClick={() => setShowNewRate(false)} className="btn btn-secondary flex-1" disabled={saveStatus['pricing'] === 'saving'}>Cancel</button>
-                  <button onClick={handleUpdateRate} className="btn btn-primary flex-1" disabled={saveStatus['pricing'] === 'saving' || !newRate}>
-                    {saveStatus['pricing'] === 'saving' ? 'Updating...' : 'Set New Rate'}
-                  </button>
-                </div>
+      {/* Pricing Modal */}
+      {showNewRate && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="stat-card max-w-md w-full">
+            <h2 className="text-xl font-bold mb-4">Update Rate</h2>
+            <div className="space-y-4">
+              <input type="number" className="form-input" placeholder="Rate (GHS)" value={newRate} onChange={e => setNewRate(e.target.value)} />
+              <div className="flex gap-3">
+                <button onClick={() => setShowNewRate(false)} className="btn btn-secondary flex-1">Cancel</button>
+                <button onClick={handleUpdateRate} className="btn btn-primary flex-1">Save</button>
               </div>
             </div>
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }

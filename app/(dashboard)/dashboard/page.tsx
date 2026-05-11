@@ -36,6 +36,7 @@ export default function DashboardPage() {
 
   const stats = liveStats || {
     revenueToday: 0, totalSessions: 0, activeSessions: 0, pendingPayments: 0,
+    totalDrivers: 0, totalVehicles: 0, unitsSoldToday: 0,
   };
   
   const allPayments = payments || [];
@@ -459,6 +460,7 @@ export default function DashboardPage() {
     { label: 'Total Sessions', value: (stats.totalSessions || 0).toString(), icon: Zap, color: '#7c3aed', bg: '#f3f0ff', trend: null },
     { label: 'Active Sessions', value: (stats.activeSessions || 0).toString(), icon: Activity, color: '#d97706', bg: '#fef3c7', trend: null },
     { label: 'Pending Payments', value: (stats.pendingPayments || 0).toString(), icon: Clock, color: '#dc2626', bg: '#fee2e2', trend: null },
+    { label: 'kWh Sold Today', value: (stats.unitsSoldToday || 0).toFixed(1), icon: Activity, color: '#10b981', bg: '#ecfdf5', trend: null },
     { label: 'Total Drivers', value: (stats.totalDrivers || 0).toString(), icon: Users, color: '#059669', bg: '#ecfdf5', trend: null },
     { label: 'Total Vehicles', value: (stats.totalVehicles || 0).toString(), icon: Zap, color: '#2563eb', bg: '#eff6ff', trend: null },
   ];
