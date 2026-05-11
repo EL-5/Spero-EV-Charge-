@@ -3,7 +3,9 @@ import { useState } from 'react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/auth';
-import { Zap, Eye, EyeOff, Loader2 } from 'lucide-react';
+import { Zap, Eye, EyeOff, Loader2, Activity, Clock, Users, DollarSign } from 'lucide-react';
+import { useDashboardStats, useShifts } from '@/hooks/use-database';
+import { formatCurrency } from '@/lib/utils';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -12,6 +14,16 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const { login } = useAuthStore();
+  const { data: liveStats } = useDashboardStats();
+  const { data: shifts } = useShifts();
+  const activeShiftsCount = shifts?.filter((s: any) => s.status === 'active').length || 0;
+  
+  const stats = [
+    { label: 'Sessions Today', value: (liveStats?.totalSessions || 0).toString() },
+    { label: 'Revenue Today', value: formatCurrency(liveStats?.revenueToday || 0) },
+    { label: 'Active Shifts', value: activeShiftsCount.toString() },
+    { label: 'kWh Sold Today', value: (liveStats?.unitsSoldToday || 0).toFixed(1) },
+  ];
   const router = useRouter();
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -51,12 +63,7 @@ export default function LoginPage() {
         </div>
 
         <div className="grid grid-cols-2 gap-4">
-          {[
-            { label: 'Sessions Today', value: '47' },
-            { label: 'Revenue Today', value: 'GHS 2,340' },
-            { label: 'Active Shifts', value: '3' },
-            { label: 'kWh Sold Today', value: '425.5' },
-          ].map(stat => (
+          {stats.map(stat => (
             <div key={stat.label} className="rounded-xl p-4" style={{ background: 'rgba(255,255,255,0.06)' }}>
               <div className="text-slate-400 text-xs mb-1">{stat.label}</div>
               <div className="text-white font-bold text-lg">{stat.value}</div>
