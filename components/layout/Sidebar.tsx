@@ -57,7 +57,7 @@ export function Sidebar() {
           background: 'var(--sidebar-bg)',
           borderRight: '1px solid rgba(255,255,255,0.06)',
           flexShrink: 0,
-          height: '100vh',
+          height: '100dvh',
           overflow: 'hidden',
         }}
       >
@@ -123,37 +123,37 @@ export function Sidebar() {
       </nav>
 
       {/* User footer - Pinned to bottom */}
-      <div className="mt-auto border-t border-white/10 p-4 bg-[#1a1c23]">
+      <div className="mt-auto border-t border-white/20 p-4 bg-black/20 backdrop-blur-md">
         {sidebarOpen ? (
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-full bg-blue-600 flex items-center justify-center text-white text-sm font-bold flex-shrink-0">
+            <div className="w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center text-white text-sm font-bold flex-shrink-0 shadow-lg">
               {user?.name.split(' ').map(n => n[0]).join('').slice(0,2)}
             </div>
             <div className="min-w-0 flex-1">
-              <div className="text-white text-xs font-semibold truncate">{user?.name}</div>
-              <div className="text-slate-400 text-[10px] capitalize tracking-wide">{user?.role.replace('_', ' ')}</div>
+              <div className="text-white text-xs font-bold truncate">{user?.name}</div>
+              <div className="text-slate-400 text-[10px] capitalize tracking-wider font-medium">{user?.role.replace('_', ' ')}</div>
             </div>
             <button 
               onClick={(e) => {
                 e.stopPropagation();
-                logout();
+                if (confirm('Are you sure you want to sign out?')) logout();
               }} 
-              className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-white/5 transition-all" 
+              className="p-3 rounded-xl text-slate-400 hover:text-red-400 hover:bg-red-400/10 transition-all active:scale-95" 
               title="Logout"
             >
-              <LogOut size={16} />
+              <LogOut size={18} />
             </button>
           </div>
         ) : (
           <button 
             onClick={(e) => {
               e.stopPropagation();
-              logout();
+              if (confirm('Are you sure you want to sign out?')) logout();
             }} 
-            className="flex justify-center w-full p-2 rounded-lg text-slate-400 hover:text-white hover:bg-white/5 transition-all" 
+            className="flex justify-center w-full p-3 rounded-xl text-slate-400 hover:text-red-400 hover:bg-red-400/10 transition-all active:scale-95" 
             title="Logout"
           >
-            <LogOut size={18} />
+            <LogOut size={20} />
           </button>
         )}
       </div>
