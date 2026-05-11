@@ -219,50 +219,50 @@ export default function PaymentsPage() {
                   <div className="text-[9px] uppercase font-bold text-slate-400 mb-0.5 tracking-widest">{config.headerTitle}</div>
                 </div>
                 
-                <div className="border-t border-b border-dashed border-slate-200 pt-4 pb-4 mb-6 space-y-2.5 text-left">
-                  <div className="flex justify-between text-xs">
-                    <span className="text-slate-400 font-medium">Receipt #</span>
-                    <span className="font-mono font-bold text-blue-600">{selectedPayment.receiptNumber}</span>
+                <div className="border-t border-b border-dashed border-slate-200 pt-4 pb-4 mb-6 space-y-3 text-left">
+                  <div className="flex justify-between items-start gap-4">
+                    <span className="text-[11px] text-slate-400 font-medium uppercase shrink-0">Receipt #</span>
+                    <span className="text-[13px] font-mono font-bold text-blue-600 break-all text-right">{selectedPayment.receiptNumber}</span>
                   </div>
                   {config.showDate && (
-                    <div className="flex justify-between text-xs">
-                      <span className="text-slate-400 font-medium">Date</span>
-                      <span className="font-bold text-slate-900">{formatDateTime(selectedPayment.createdAt)}</span>
+                    <div className="flex justify-between items-start gap-4">
+                      <span className="text-[11px] text-slate-400 font-medium uppercase shrink-0">Date</span>
+                      <span className="text-[13px] font-bold text-slate-900 text-right">{formatDateTime(selectedPayment.createdAt)}</span>
                     </div>
                   )}
                   <hr className="border-slate-100" />
                   
                   {config.showDriver && (
-                    <div className="flex justify-between text-xs">
-                      <span className="text-slate-400 font-medium">Driver</span>
-                      <span className="font-bold text-slate-900">{selectedPayment.driverName}</span>
+                    <div className="flex justify-between items-start gap-4">
+                      <span className="text-[11px] text-slate-400 font-medium uppercase shrink-0">Driver</span>
+                      <span className="text-[13px] font-bold text-slate-900 break-words text-right">{selectedPayment.driverName}</span>
                     </div>
                   )}
 
                   {config.showUnits && selectedPayment.unitsConsumed && (
-                    <div className="flex justify-between text-xs">
-                      <span className="text-slate-400 font-medium">Energy</span>
-                      <span className="font-bold text-slate-900">{selectedPayment.unitsConsumed} {selectedPayment.unitType}</span>
+                    <div className="flex justify-between items-start gap-4">
+                      <span className="text-[11px] text-slate-400 font-medium uppercase shrink-0">Energy</span>
+                      <span className="text-[13px] font-bold text-slate-900 text-right">{selectedPayment.unitsConsumed} {selectedPayment.unitType}</span>
                     </div>
                   )}
 
                   {config.showRate && selectedPayment.rateAtTime && (
-                    <div className="flex justify-between text-xs">
-                      <span className="text-slate-400 font-medium">Rate</span>
-                      <span className="font-bold text-slate-700">GHS {selectedPayment.rateAtTime}/{selectedPayment.unitType}</span>
+                    <div className="flex justify-between items-start gap-4">
+                      <span className="text-[11px] text-slate-400 font-medium uppercase shrink-0">Rate</span>
+                      <span className="text-[13px] font-bold text-slate-700 text-right">GHS {selectedPayment.rateAtTime}/{selectedPayment.unitType}</span>
                     </div>
                   )}
 
                   {config.showPaymentMethod && (
-                    <div className="flex justify-between text-xs">
-                      <span className="text-slate-400 font-medium">Method</span>
-                      <span className="font-bold capitalize text-slate-800">{selectedPayment.method}</span>
+                    <div className="flex justify-between items-start gap-4">
+                      <span className="text-[11px] text-slate-400 font-medium uppercase shrink-0">Method</span>
+                      <span className="text-[13px] font-bold capitalize text-slate-800 text-right">{selectedPayment.method}</span>
                     </div>
                   )}
 
-                  <div className="flex justify-between text-xs">
-                    <span className="text-slate-400 font-medium">Ref</span>
-                    <span className="font-mono text-[10px] text-slate-400 truncate max-w-[120px]">{selectedPayment.reference}</span>
+                  <div className="flex justify-between items-start gap-4">
+                    <span className="text-[11px] text-slate-400 font-medium uppercase shrink-0">Ref</span>
+                    <span className="text-[10px] font-mono text-slate-400 break-all text-right">{selectedPayment.reference}</span>
                   </div>
                 </div>
 

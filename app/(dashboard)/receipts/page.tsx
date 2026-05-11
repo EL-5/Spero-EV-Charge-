@@ -140,48 +140,48 @@ export default function ReceiptsPage() {
                     />
                   </div>
                 )}
-                <h1 className="text-lg font-black text-slate-900 leading-tight uppercase tracking-tight">{stationName}</h1>
-                <p className="text-[9px] text-slate-500 uppercase tracking-widest mt-0.5">{headerTitle}</p>
+                <h1 className="text-lg font-black text-slate-900 leading-none uppercase tracking-tight break-words">{stationName}</h1>
+                <p className="text-[9px] text-slate-500 uppercase tracking-widest mt-1.5 leading-tight">{headerTitle}</p>
               </div>
 
-              <div className="space-y-2.5 mb-6 border-t border-b border-dashed border-slate-200 py-4">
-                <div className="flex justify-between text-sm">
-                  <span className="text-slate-400 font-medium">Receipt #</span>
-                  <span className="font-bold text-slate-900">{selectedSession.receiptNumber}</span>
+              <div className="space-y-3 mb-6 border-t border-b border-dashed border-slate-200 py-4">
+                <div className="flex justify-between items-start gap-4">
+                  <span className="text-[11px] text-slate-400 font-medium uppercase shrink-0">Receipt #</span>
+                  <span className="text-[13px] font-bold text-slate-900 break-all text-right">{selectedSession.receiptNumber}</span>
                 </div>
                 
                 {config.showDate !== false && (
-                  <div className="flex justify-between text-sm">
-                    <span className="text-slate-400 font-medium">Date</span>
-                    <span className="font-bold text-slate-900">{formatDateTime(selectedSession.createdAt)}</span>
+                  <div className="flex justify-between items-start gap-4">
+                    <span className="text-[11px] text-slate-400 font-medium uppercase shrink-0">Date</span>
+                    <span className="text-[13px] font-bold text-slate-900 text-right">{formatDateTime(selectedSession.createdAt)}</span>
                   </div>
                 )}
 
                 {config.showDriver !== false && (
-                  <div className="flex justify-between text-sm">
-                    <span className="text-slate-400 font-medium">Driver</span>
-                    <span className="font-bold text-slate-900">{selectedSession.driverName}</span>
+                  <div className="flex justify-between items-start gap-4">
+                    <span className="text-[11px] text-slate-400 font-medium uppercase shrink-0">Driver</span>
+                    <span className="text-[13px] font-bold text-slate-900 break-words text-right">{selectedSession.driverName}</span>
                   </div>
                 )}
 
                 {config.showVehicle !== false && (
-                  <div className="flex justify-between text-sm">
-                    <span className="text-slate-400 font-medium">Vehicle</span>
-                    <span className="font-bold text-slate-900">{selectedSession.vehiclePlate}</span>
+                  <div className="flex justify-between items-start gap-4">
+                    <span className="text-[11px] text-slate-400 font-medium uppercase shrink-0">Vehicle</span>
+                    <span className="text-[13px] font-bold text-slate-900 break-words text-right">{selectedSession.vehiclePlate}</span>
                   </div>
                 )}
 
                 {config.showUnits !== false && (
-                  <div className="flex justify-between text-sm">
-                    <span className="text-slate-400 font-medium">Units</span>
-                    <span className="font-bold text-slate-900">{selectedSession.unitsConsumed} {selectedSession.unitType}</span>
+                  <div className="flex justify-between items-start gap-4">
+                    <span className="text-[11px] text-slate-400 font-medium uppercase shrink-0">Units</span>
+                    <span className="text-[13px] font-bold text-slate-900 text-right">{selectedSession.unitsConsumed} {selectedSession.unitType}</span>
                   </div>
                 )}
 
                 {config.showRate !== false && (
-                  <div className="flex justify-between text-sm">
-                    <span className="text-slate-400 font-medium">Rate</span>
-                    <span className="font-bold text-slate-900">GHS {selectedSession.rateAtTime}/{selectedSession.unitType}</span>
+                  <div className="flex justify-between items-start gap-4">
+                    <span className="text-[11px] text-slate-400 font-medium uppercase shrink-0">Rate</span>
+                    <span className="text-[13px] font-bold text-slate-900 text-right">GHS {selectedSession.rateAtTime}/{selectedSession.unitType}</span>
                   </div>
                 )}
               </div>
