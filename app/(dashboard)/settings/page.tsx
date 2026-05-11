@@ -5,8 +5,11 @@ import { formatDate } from '@/lib/utils';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import Image from 'next/image';
-import { Settings, DollarSign, Zap, CreditCard, Wallet, FileText, Palette, CheckCircle, AlertTriangle } from 'lucide-react';
+import { Settings, DollarSign, Zap, CreditCard, Wallet, FileText, Palette, CheckCircle, AlertTriangle, Trash2, RefreshCw } from 'lucide-react';
 import { saveSettings, updatePricingRate } from '@/app/actions/settings';
+import { resetSystem } from '@/app/actions/system';
+import { useAuthStore } from '@/store/auth';
+import { toast } from 'sonner';
 
 const tabs = [
   { id: 'general',  label: 'General',      icon: Settings  },
@@ -15,6 +18,7 @@ const tabs = [
   { id: 'wallet',   label: 'Wallet & Debt', icon: Wallet    },
   { id: 'receipts', label: 'Receipts',      icon: FileText  },
   { id: 'branding', label: 'Branding',      icon: Palette   },
+  { id: 'maintenance', label: 'Maintenance', icon: RefreshCw },
 ];
 
 type SaveStatus = 'idle' | 'saving' | 'saved' | 'error';
@@ -44,6 +48,9 @@ export default function SettingsPage() {
   const [saveStatus, setSaveStatus] = useState<Record<string, SaveStatus>>({});
   const [errorMessages, setErrorMessages] = useState<Record<string, string>>({});
   const [isUploading, setIsUploading] = useState(false);
+  const [resetConfirm, setResetConfirm] = useState('');
+  const [isResetting, setIsResetting] = useState(false);
+  const { user } = useAuthStore();
 
   // ── Load settings row ──
   const { data: settingsRow, isLoading: settingsLoading } = useQuery({
@@ -246,7 +253,7 @@ export default function SettingsPage() {
           {/* Tab nav */}
           <div className="w-full lg:w-52 flex-shrink-0">
             <nav className="space-y-1">
-              {tabs.map(tab => {
+              {tabs.filter(t => t.id !== 'maintenance' || user?.role === 'super_admin').map(tab => {
                 const Icon = tab.icon;
                 return (
                   <button
@@ -718,6 +725,89 @@ export default function SettingsPage() {
                       logo_url: branding.logo_url
                     })} 
                   />
+                </div>
+              )}
+            {/* ── MAINTENANCE ── */}
+            {activeTab === 'maintenance' && user?.role === 'super_admin' && (
+              <div className="space-y-6">
+                <div className="stat-card border-red-100 bg-red-50/10">
+                  <div className="flex items-center gap-3 mb-6">
+                    <div className="p-2 rounded-lg bg-red-100 text-red-600">
+                      <Trash2 size={20} />
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-red-900">System Reset</h3>
+                      <p className="text-xs text-red-600">Fresh start for the entire station</p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-4">
+                    <div className="p-4 rounded-xl border border-red-200 bg-red-50 text-sm text-red-800 space-y-2">
+                      <p className="font-bold flex items-center gap-2">
+                        <AlertTriangle size={16} /> WARNING: This action is irreversible
+                      </p>
+                      <p>Performing a system reset will permanently delete:</p>
+                      <ul className="list-disc list-inside space-y-1 ml-2 text-xs opacity-80">
+                        <li>All Charging Sessions & History</li>
+                        <li>All Payment Records & Financial Logs</li>
+                        <li>All Registered Drivers & Vehicles</li>
+                        <li>All Wallet Balances & Debt Histories</li>
+                        <li>All Shift Records & System Notifications</li>
+                      </ul>
+                      <p className="pt-2 font-semibold italic">Core settings, pricing rates, and staff accounts will be preserved.</p>
+                    </div>
+
+                    <div className="space-y-3">
+                      <label className="text-xs font-bold uppercase text-slate-500 tracking-wider">To confirm, type "RESET SYSTEM" below</label>
+                      <input 
+                        className="form-input border-red-200 focus:border-red-500 focus:ring-red-200" 
+                        placeholder="RESET SYSTEM"
+                        value={resetConfirm}
+                        onChange={e => setResetConfirm(e.target.value)}
+                      />
+                      <button 
+                        onClick={async () => {
+                          if (resetConfirm !== 'RESET SYSTEM') return;
+                          if (!user) return;
+                          
+                          setIsResetting(true);
+                          const res = await resetSystem(user.id);
+                          setIsResetting(false);
+                          
+                          if (res.success) {
+                            toast.success('System has been reset successfully!');
+                            setResetConfirm('');
+                            queryClient.invalidateQueries();
+                          } else {
+                            toast.error('Reset failed: ' + res.error);
+                          }
+                        }}
+                        disabled={resetConfirm !== 'RESET SYSTEM' || isResetting}
+                        className="btn bg-red-600 hover:bg-red-700 text-white w-full gap-2 py-3 shadow-lg shadow-red-200 disabled:opacity-50"
+                      >
+                        {isResetting ? (
+                          <RefreshCw size={18} className="animate-spin" />
+                        ) : (
+                          <Trash2 size={18} />
+                        )}
+                        {isResetting ? 'Resetting System Data...' : 'Wipe System Data & Fresh Start'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="stat-card">
+                  <h3 className="font-semibold mb-4" style={{ color: 'var(--foreground)' }}>System Information</h3>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="p-3 rounded-lg bg-slate-50 border border-slate-100">
+                      <div className="text-[10px] uppercase font-bold text-slate-400 mb-1">Last Deployment</div>
+                      <div className="text-sm font-medium text-slate-700">{formatDate(new Date().toISOString())}</div>
+                    </div>
+                    <div className="p-3 rounded-lg bg-slate-50 border border-slate-100">
+                      <div className="text-[10px] uppercase font-bold text-slate-400 mb-1">Environment</div>
+                      <div className="text-sm font-medium text-slate-700">Production</div>
+                    </div>
+                  </div>
                 </div>
               </div>
             )}

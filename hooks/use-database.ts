@@ -45,14 +45,21 @@ export function useDashboardStats(options: { attendantId?: string } = {}) {
   return useQuery({
     queryKey: ['dashboard-stats', options.attendantId],
     queryFn: async () => {
-      let sessionQuery = supabase.from('sessions').select('*', { count: 'exact', head: true }).eq('status', 'completed');
+      // Start of today (00:00:00)
+      const startOfToday = new Date();
+      startOfToday.setHours(0, 0, 0, 0);
+      const todayISO = startOfToday.toISOString();
+
+      let sessionQuery = supabase.from('sessions').select('*', { count: 'exact', head: true }).eq('status', 'completed').gte('created_at', todayISO);
       let activeQuery = supabase.from('sessions').select('*', { count: 'exact', head: true }).eq('status', 'active');
-      let revenueQuery = supabase.from('payments').select('amount');
+      let revenueQuery = supabase.from('payments').select('amount').gte('created_at', todayISO);
+      let unitsQuery = supabase.from('sessions').select('units_consumed').eq('status', 'completed').gte('created_at', todayISO);
 
       if (options.attendantId) {
         sessionQuery = sessionQuery.eq('attendant_id', options.attendantId);
         activeQuery = activeQuery.eq('attendant_id', options.attendantId);
         revenueQuery = revenueQuery.eq('attendant_id', options.attendantId);
+        unitsQuery = unitsQuery.eq('attendant_id', options.attendantId);
       }
 
       const { count: sessionCount } = await sessionQuery;
@@ -61,17 +68,20 @@ export function useDashboardStats(options: { attendantId?: string } = {}) {
       const { count: vehicleCount } = await supabase.from('vehicles').select('*', { count: 'exact', head: true });
       
       const { data: revenueData } = await revenueQuery;
+      const { data: unitsData } = await unitsQuery;
       
       const totalRevenue = revenueData?.reduce((acc, p) => acc + (p.amount || 0), 0) || 0;
+      const totalUnits = unitsData?.reduce((acc, s) => acc + (Number(s.units_consumed) || 0), 0) || 0;
 
       return {
         revenueToday: totalRevenue,
         totalSessions: sessionCount || 0,
         activeSessions: activeCount || 0,
-        pendingPayments: activeCount || 0, // Counting started but not completed sessions
+        pendingPayments: activeCount || 0,
         totalDrivers: driverCount || 0,
         totalVehicles: vehicleCount || 0,
-      } as Partial<DashboardStats>;
+        unitsSoldToday: totalUnits,
+      } as Partial<DashboardStats> & { unitsSoldToday: number };
     },
   });
 }
