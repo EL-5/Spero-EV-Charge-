@@ -216,10 +216,10 @@ export default function ReceiptsPage() {
             </div>
 
             {/* Receipt Content (printable area) */}
-            <div id="printable-receipt" className="p-6 text-slate-800">
-              <div className="text-center mb-8">
+            <div id="printable-receipt" className="p-6" style={{ color: '#1e293b', backgroundColor: '#ffffff' }}>
+              <div className="text-center mb-6">
                 {config.showLogo !== false && (
-                  <div className="flex justify-center mb-4">
+                  <div className="flex justify-center mb-3">
                     <img 
                       src={logoUrl} 
                       alt="Logo" 
@@ -228,68 +228,68 @@ export default function ReceiptsPage() {
                     />
                   </div>
                 )}
-                <h1 className="text-lg font-black text-slate-900 leading-none uppercase tracking-tight break-words">{stationName}</h1>
-                <p className="text-[9px] text-slate-500 uppercase tracking-widest mt-1.5 leading-tight">{headerTitle}</p>
+                <h1 className="text-lg font-black leading-none uppercase tracking-tight break-words" style={{ color: '#0f172a' }}>{stationName}</h1>
+                <p className="text-[9px] uppercase tracking-widest mt-1.5 leading-tight" style={{ color: '#64748b' }}>{headerTitle}</p>
               </div>
 
-              <div className="space-y-3 mb-6 border-t border-b border-dashed border-slate-200 py-4">
+              <div className="space-y-3 mb-6 border-t border-b border-dashed py-4" style={{ borderColor: '#e2e8f0' }}>
                 <div className="flex justify-between items-start gap-4">
-                  <span className="text-[11px] text-slate-400 font-medium uppercase shrink-0">Receipt #</span>
-                  <span className="text-[13px] font-bold text-slate-900 break-all text-right">{selectedSession.receiptNumber}</span>
+                  <span className="text-[11px] font-medium uppercase shrink-0" style={{ color: '#94a3b8' }}>Receipt #</span>
+                  <span className="text-[13px] font-bold break-all text-right" style={{ color: '#0f172a' }}>{selectedSession.receiptNumber}</span>
                 </div>
                 
                 {config.showDate !== false && (
                   <div className="flex justify-between items-start gap-4">
-                    <span className="text-[11px] text-slate-400 font-medium uppercase shrink-0">Date</span>
-                    <span className="text-[13px] font-bold text-slate-900 text-right">{formatDateTime(selectedSession.createdAt)}</span>
+                    <span className="text-[11px] font-medium uppercase shrink-0" style={{ color: '#94a3b8' }}>Date</span>
+                    <span className="text-[13px] font-bold text-right" style={{ color: '#0f172a' }}>{formatDateTime(selectedSession.createdAt)}</span>
                   </div>
                 )}
 
                 {config.showDriver !== false && (
                   <div className="flex justify-between items-start gap-4">
-                    <span className="text-[11px] text-slate-400 font-medium uppercase shrink-0">Driver</span>
-                    <span className="text-[13px] font-bold text-slate-900 break-words text-right">{selectedSession.driverName}</span>
+                    <span className="text-[11px] font-medium uppercase shrink-0" style={{ color: '#94a3b8' }}>Driver</span>
+                    <span className="text-[13px] font-bold break-words text-right" style={{ color: '#0f172a' }}>{selectedSession.driverName}</span>
                   </div>
                 )}
 
                 {config.showVehicle !== false && (
                   <div className="flex justify-between items-start gap-4">
-                    <span className="text-[11px] text-slate-400 font-medium uppercase shrink-0">Vehicle</span>
-                    <span className="text-[13px] font-bold text-slate-900 break-words text-right">{selectedSession.vehiclePlate}</span>
+                    <span className="text-[11px] font-medium uppercase shrink-0" style={{ color: '#94a3b8' }}>Vehicle</span>
+                    <span className="text-[13px] font-bold break-words text-right" style={{ color: '#0f172a' }}>{selectedSession.vehiclePlate}</span>
                   </div>
                 )}
 
                 {config.showUnits !== false && (
                   <div className="flex justify-between items-start gap-4">
-                    <span className="text-[11px] text-slate-400 font-medium uppercase shrink-0">Units</span>
-                    <span className="text-[13px] font-bold text-slate-900 text-right">{selectedSession.unitsConsumed} {selectedSession.unitType}</span>
+                    <span className="text-[11px] font-medium uppercase shrink-0" style={{ color: '#94a3b8' }}>Units</span>
+                    <span className="text-[13px] font-bold text-right" style={{ color: '#0f172a' }}>{selectedSession.unitsConsumed} {selectedSession.unitType}</span>
                   </div>
                 )}
 
                 {config.showRate !== false && (
                   <div className="flex justify-between items-start gap-4">
-                    <span className="text-[11px] text-slate-400 font-medium uppercase shrink-0">Rate</span>
-                    <span className="text-[13px] font-bold text-slate-900 text-right">GHS {selectedSession.rateAtTime}/{selectedSession.unitType}</span>
+                    <span className="text-[11px] font-medium uppercase shrink-0" style={{ color: '#94a3b8' }}>Rate</span>
+                    <span className="text-[13px] font-bold text-right" style={{ color: '#0f172a' }}>GHS {selectedSession.rateAtTime}/{selectedSession.unitType}</span>
                   </div>
                 )}
               </div>
 
               <div className="space-y-1 mb-6">
                 <div className="flex justify-between items-end">
-                  <span className="text-xs font-black text-slate-900 uppercase">Total</span>
-                  <span className="text-base font-black text-slate-900">GHS {selectedSession.totalAmount?.toFixed(2)}</span>
+                  <span className="text-xs font-black uppercase tracking-wider" style={{ color: '#0f172a' }}>Total</span>
+                  <span className="text-base font-black" style={{ color: '#0f172a' }}>GHS {selectedSession.totalAmount?.toFixed(2)}</span>
                 </div>
                 {config.showPaymentMethod !== false && (
                   <div className="flex justify-between text-xs">
-                    <span className="text-slate-400 font-medium">Method</span>
-                    <span className="font-bold text-slate-500 capitalize">{selectedSession.paymentMethod || 'N/A'}</span>
+                    <span className="font-medium" style={{ color: '#94a3b8' }}>Method</span>
+                    <span className="font-bold capitalize" style={{ color: '#64748b' }}>{selectedSession.paymentMethod || 'N/A'}</span>
                   </div>
                 )}
               </div>
 
               <div className="text-center">
-                <p className="text-[10px] text-slate-400 font-medium leading-relaxed italic">{footerMessage}</p>
-                <p className="text-[8px] text-slate-300 mt-2 font-mono uppercase tracking-tighter">Verified by Spero Fleet SCMS</p>
+                <p className="text-[10px] italic font-medium leading-relaxed" style={{ color: '#94a3b8' }}>{footerMessage}</p>
+                <p className="text-[8px] mt-2 font-mono uppercase tracking-tighter" style={{ color: '#cbd5e1' }}>Verified by Spero Fleet SCMS</p>
               </div>
             </div>
 

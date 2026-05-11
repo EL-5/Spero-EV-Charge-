@@ -291,7 +291,7 @@ export default function PaymentsPage() {
                 </button>
               </div>
 
-              <div id="printable-receipt-payment" className="p-6 text-slate-800">
+              <div id="printable-receipt-payment" className="p-6" style={{ color: '#1e293b', backgroundColor: '#ffffff' }}>
                 <div className="text-center mb-6">
                   {config.showLogo && branding.logo_url && (
                     <div className="flex justify-center mb-3">
@@ -303,67 +303,67 @@ export default function PaymentsPage() {
                       />
                     </div>
                   )}
-                  <div className="font-black text-lg uppercase tracking-tight text-slate-900">{branding.company_name}</div>
-                  <div className="text-[9px] uppercase font-bold text-slate-400 mb-0.5 tracking-widest">{config.headerTitle}</div>
+                  <div className="font-black text-lg uppercase tracking-tight" style={{ color: '#0f172a' }}>{branding.company_name}</div>
+                  <div className="text-[9px] uppercase font-bold mb-0.5 tracking-widest" style={{ color: '#94a3b8' }}>{config.headerTitle}</div>
                 </div>
                 
-                <div className="border-t border-b border-dashed border-slate-200 pt-4 pb-4 mb-6 space-y-3 text-left">
+                <div className="border-t border-b border-dashed pt-4 pb-4 mb-6 space-y-3 text-left" style={{ borderColor: '#e2e8f0' }}>
                   <div className="flex justify-between items-start gap-4">
-                    <span className="text-[11px] text-slate-400 font-medium uppercase shrink-0">Receipt #</span>
-                    <span className="text-[13px] font-mono font-bold text-blue-600 break-all text-right">{selectedPayment.receiptNumber}</span>
+                    <span className="text-[11px] font-medium uppercase shrink-0" style={{ color: '#94a3b8' }}>Receipt #</span>
+                    <span className="text-[13px] font-mono font-bold break-all text-right" style={{ color: '#2563eb' }}>{selectedPayment.receiptNumber}</span>
                   </div>
                   {config.showDate && (
                     <div className="flex justify-between items-start gap-4">
-                      <span className="text-[11px] text-slate-400 font-medium uppercase shrink-0">Date</span>
-                      <span className="text-[13px] font-bold text-slate-900 text-right">{formatDateTime(selectedPayment.createdAt)}</span>
+                      <span className="text-[11px] font-medium uppercase shrink-0" style={{ color: '#94a3b8' }}>Date</span>
+                      <span className="text-[13px] font-bold text-right" style={{ color: '#0f172a' }}>{formatDateTime(selectedPayment.createdAt)}</span>
                     </div>
                   )}
-                  <hr className="border-slate-100" />
+                  <hr style={{ borderColor: '#f1f5f9' }} />
                   
                   {config.showDriver && (
                     <div className="flex justify-between items-start gap-4">
-                      <span className="text-[11px] text-slate-400 font-medium uppercase shrink-0">Driver</span>
-                      <span className="text-[13px] font-bold text-slate-900 break-words text-right">{selectedPayment.driverName}</span>
+                      <span className="text-[11px] font-medium uppercase shrink-0" style={{ color: '#94a3b8' }}>Driver</span>
+                      <span className="text-[13px] font-bold break-words text-right" style={{ color: '#0f172a' }}>{selectedPayment.driverName}</span>
                     </div>
                   )}
 
                   {config.showUnits && selectedPayment.unitsConsumed && (
                     <div className="flex justify-between items-start gap-4">
-                      <span className="text-[11px] text-slate-400 font-medium uppercase shrink-0">Energy</span>
-                      <span className="text-[13px] font-bold text-slate-900 text-right">{selectedPayment.unitsConsumed} {selectedPayment.unitType}</span>
+                      <span className="text-[11px] font-medium uppercase shrink-0" style={{ color: '#94a3b8' }}>Energy</span>
+                      <span className="text-[13px] font-bold text-right" style={{ color: '#0f172a' }}>{selectedPayment.unitsConsumed} {selectedPayment.unitType}</span>
                     </div>
                   )}
 
                   {config.showRate && selectedPayment.rateAtTime && (
                     <div className="flex justify-between items-start gap-4">
-                      <span className="text-[11px] text-slate-400 font-medium uppercase shrink-0">Rate</span>
-                      <span className="text-[13px] font-bold text-slate-700 text-right">GHS {selectedPayment.rateAtTime}/{selectedPayment.unitType}</span>
+                      <span className="text-[11px] font-medium uppercase shrink-0" style={{ color: '#94a3b8' }}>Rate</span>
+                      <span className="text-[13px] font-bold text-right" style={{ color: '#334155' }}>GHS {selectedPayment.rateAtTime}/{selectedPayment.unitType}</span>
                     </div>
                   )}
 
                   {config.showPaymentMethod && (
                     <div className="flex justify-between items-start gap-4">
-                      <span className="text-[11px] text-slate-400 font-medium uppercase shrink-0">Method</span>
-                      <span className="text-[13px] font-bold capitalize text-slate-800 text-right">{selectedPayment.method}</span>
+                      <span className="text-[11px] font-medium uppercase shrink-0" style={{ color: '#94a3b8' }}>Method</span>
+                      <span className="text-[13px] font-bold capitalize text-right" style={{ color: '#1e293b' }}>{selectedPayment.method}</span>
                     </div>
                   )}
 
                   <div className="flex justify-between items-start gap-4">
-                    <span className="text-[11px] text-slate-400 font-medium uppercase shrink-0">Ref</span>
-                    <span className="text-[10px] font-mono text-slate-400 break-all text-right">{selectedPayment.reference}</span>
+                    <span className="text-[11px] font-medium uppercase shrink-0" style={{ color: '#94a3b8' }}>Ref</span>
+                    <span className="text-[10px] font-mono break-all text-right" style={{ color: '#94a3b8' }}>{selectedPayment.reference}</span>
                   </div>
                 </div>
 
                 <div className="mb-6">
                   <div className="flex justify-between items-end">
-                    <span className="text-xs font-black text-slate-900 uppercase tracking-wider">Total Paid</span>
-                    <span className="text-lg font-black text-blue-600">{formatCurrency(selectedPayment.amount)}</span>
+                    <span className="text-xs font-black uppercase tracking-wider" style={{ color: '#0f172a' }}>Total Paid</span>
+                    <span className="text-lg font-black" style={{ color: '#2563eb' }}>{formatCurrency(selectedPayment.amount)}</span>
                   </div>
                 </div>
                 
                 <div className="text-center">
-                  <p className="text-[10px] text-slate-400 italic font-medium">{footer}</p>
-                  <p className="text-[8px] text-slate-300 mt-2 font-mono uppercase tracking-tighter">Verified by Spero Fleet SCMS</p>
+                  <p className="text-[10px] italic font-medium" style={{ color: '#94a3b8' }}>{footer}</p>
+                  <p className="text-[8px] mt-2 font-mono uppercase tracking-tighter" style={{ color: '#cbd5e1' }}>Verified by Spero Fleet SCMS</p>
                 </div>
               </div>
 
