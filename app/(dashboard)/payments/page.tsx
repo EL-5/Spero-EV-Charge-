@@ -2,7 +2,7 @@
 import { useState } from 'react';
 import { TopBar } from '@/components/layout/TopBar';
 import { formatCurrency, formatDateTime, getStatusColor, getStatusLabel } from '@/lib/utils';
-import { Search, CreditCard, DollarSign, Smartphone, Wallet, Activity } from 'lucide-react';
+import { Search, CreditCard, DollarSign, Smartphone, Wallet, Activity, XCircle, Printer, Share2 } from 'lucide-react';
 import { useAuthStore } from '@/store/auth';
 import { usePayments, useDrivers, useSettings } from '@/hooks/use-database';
 
@@ -194,94 +194,97 @@ export default function PaymentsPage() {
 
         {/* Receipt Modal */}
         {selectedPayment && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-hidden" style={{ background: 'rgba(0,0,0,0.5)' }}>
-            <div className="stat-card w-full print-visible" style={{ maxWidth: '420px', maxHeight: '92vh', overflowY: 'auto' }}>
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="font-bold text-lg">Transaction Receipt</h2>
-                <button onClick={() => setSelectedPayment(null)} className="text-slate-400 hover:text-slate-600 text-xl">&times;</button>
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-hidden bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-[340px] overflow-hidden border border-slate-200 animate-in zoom-in-95 duration-200" style={{ maxHeight: '92vh', overflowY: 'auto' }}>
+              <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-100 bg-slate-50">
+                <h2 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Transaction Receipt</h2>
+                <button onClick={() => setSelectedPayment(null)} className="text-slate-400 hover:text-slate-600 transition-colors">
+                  <XCircle size={18} />
+                </button>
               </div>
 
-              <div className="border rounded-xl p-6 text-center text-sm mb-6" style={{ borderColor: 'var(--border)' }}>
-                {config.showLogo && branding.logo_url && (
-                  <div className="flex justify-center mb-4">
-                    <img 
-                      src={branding.logo_url} 
-                      alt="Station Logo" 
-                      style={{ width: `${config.logoSize}px`, height: 'auto' }} 
-                      className="object-contain" 
-                    />
-                  </div>
-                )}
-                <div className="font-bold text-lg mb-1 uppercase tracking-tight">{branding.company_name}</div>
-                <div className="text-[10px] uppercase font-bold text-slate-400 mb-4 tracking-widest">{config.headerTitle}</div>
+              <div className="p-6 text-slate-800">
+                <div className="text-center mb-6">
+                  {config.showLogo && branding.logo_url && (
+                    <div className="flex justify-center mb-3">
+                      <img 
+                        src={branding.logo_url} 
+                        alt="Station Logo" 
+                        style={{ width: `${config.logoSize}px`, height: 'auto' }} 
+                        className="object-contain" 
+                      />
+                    </div>
+                  )}
+                  <div className="font-black text-lg uppercase tracking-tight text-slate-900">{branding.company_name}</div>
+                  <div className="text-[9px] uppercase font-bold text-slate-400 mb-0.5 tracking-widest">{config.headerTitle}</div>
+                </div>
                 
-                <div className="border-t border-dashed pt-4 mb-4 text-left space-y-3" style={{ borderColor: 'var(--border)' }}>
-                  <div className="flex justify-between">
-                    <span className="text-slate-500">Receipt Number</span>
+                <div className="border-t border-b border-dashed border-slate-200 pt-4 pb-4 mb-6 space-y-2.5 text-left">
+                  <div className="flex justify-between text-xs">
+                    <span className="text-slate-400 font-medium">Receipt #</span>
                     <span className="font-mono font-bold text-blue-600">{selectedPayment.receiptNumber}</span>
                   </div>
                   {config.showDate && (
-                    <div className="flex justify-between">
-                      <span className="text-slate-500">Date</span>
-                      <span className="font-medium">{formatDateTime(selectedPayment.createdAt)}</span>
+                    <div className="flex justify-between text-xs">
+                      <span className="text-slate-400 font-medium">Date</span>
+                      <span className="font-bold text-slate-900">{formatDateTime(selectedPayment.createdAt)}</span>
                     </div>
                   )}
-                  <hr style={{ borderStyle: 'dashed', borderColor: 'var(--border)' }} />
+                  <hr className="border-slate-100" />
                   
                   {config.showDriver && (
-                    <div className="flex justify-between">
-                      <span className="text-slate-500">Driver</span>
-                      <span className="font-bold text-slate-800">{selectedPayment.driverName}</span>
+                    <div className="flex justify-between text-xs">
+                      <span className="text-slate-400 font-medium">Driver</span>
+                      <span className="font-bold text-slate-900">{selectedPayment.driverName}</span>
                     </div>
                   )}
 
                   {config.showUnits && selectedPayment.unitsConsumed && (
-                    <div className="flex justify-between">
-                      <span className="text-slate-500">Energy Delivered</span>
-                      <span className="font-bold text-slate-800">{selectedPayment.unitsConsumed} {selectedPayment.unitType}</span>
+                    <div className="flex justify-between text-xs">
+                      <span className="text-slate-400 font-medium">Energy</span>
+                      <span className="font-bold text-slate-900">{selectedPayment.unitsConsumed} {selectedPayment.unitType}</span>
                     </div>
                   )}
 
                   {config.showRate && selectedPayment.rateAtTime && (
-                    <div className="flex justify-between">
-                      <span className="text-slate-500">Applied Rate</span>
-                      <span className="font-medium text-slate-600">GHS {selectedPayment.rateAtTime} / {selectedPayment.unitType}</span>
+                    <div className="flex justify-between text-xs">
+                      <span className="text-slate-400 font-medium">Rate</span>
+                      <span className="font-bold text-slate-700">GHS {selectedPayment.rateAtTime}/{selectedPayment.unitType}</span>
                     </div>
                   )}
 
                   {config.showPaymentMethod && (
-                    <div className="flex justify-between">
-                      <span className="text-slate-500">Payment Method</span>
+                    <div className="flex justify-between text-xs">
+                      <span className="text-slate-400 font-medium">Method</span>
                       <span className="font-bold capitalize text-slate-800">{selectedPayment.method}</span>
                     </div>
                   )}
 
-                  <div className="flex justify-between">
-                    <span className="text-slate-500">Reference</span>
-                    <span className="font-mono text-[10px] text-slate-400 truncate max-w-[150px]">{selectedPayment.reference}</span>
+                  <div className="flex justify-between text-xs">
+                    <span className="text-slate-400 font-medium">Ref</span>
+                    <span className="font-mono text-[10px] text-slate-400 truncate max-w-[120px]">{selectedPayment.reference}</span>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-500">Attendant</span>
-                    <span className="font-medium text-slate-600">{selectedPayment.attendantName}</span>
-                  </div>
-                  
-                  <div className="border-t border-slate-200 pt-4 mt-4">
-                    <div className="flex justify-between items-center">
-                      <span className="font-bold text-slate-800 text-base">Total Amount Paid</span>
-                      <span className="font-black text-xl text-blue-600">{formatCurrency(selectedPayment.amount)}</span>
-                    </div>
+                </div>
+
+                <div className="mb-6">
+                  <div className="flex justify-between items-end">
+                    <span className="text-xs font-black text-slate-900 uppercase tracking-wider">Total Paid</span>
+                    <span className="text-lg font-black text-blue-600">{formatCurrency(selectedPayment.amount)}</span>
                   </div>
                 </div>
                 
-                <div className="text-[10px] text-slate-400 italic mt-4">{footer}</div>
+                <div className="text-center">
+                  <p className="text-[10px] text-slate-400 italic font-medium">{footer}</p>
+                  <p className="text-[8px] text-slate-300 mt-2 font-mono uppercase tracking-tighter">Verified by Spero Fleet SCMS</p>
+                </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="p-4 bg-slate-50 flex gap-2 border-t border-slate-100">
                 <button 
                   onClick={() => window.print()}
-                  className="btn btn-secondary py-3 flex items-center justify-center gap-2"
+                  className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-100 transition-colors"
                 >
-                  Print
+                  <Printer size={14} /> Print
                 </button>
                 <button 
                   onClick={() => {
@@ -295,9 +298,9 @@ export default function PaymentsPage() {
                       alert('Sharing is not supported on this browser/device.');
                     }
                   }}
-                  className="btn btn-primary py-3 flex items-center justify-center gap-2"
+                  className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-blue-600 rounded-xl text-xs font-bold text-white hover:bg-blue-700 transition-colors"
                 >
-                  Share
+                  <Share2 size={14} /> Share
                 </button>
               </div>
             </div>

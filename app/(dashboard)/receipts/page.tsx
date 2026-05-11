@@ -115,20 +115,20 @@ export default function ReceiptsPage() {
       {/* ─── RECEIPT PREVIEW MODAL ─── */}
       {selectedSession && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full overflow-hidden border border-slate-200 animate-in zoom-in-95 duration-200">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-[340px] w-full overflow-hidden border border-slate-200 animate-in zoom-in-95 duration-200">
             {/* Header */}
-            <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between bg-slate-50">
-              <span className="text-xs font-bold text-slate-500 uppercase tracking-widest">Receipt Preview</span>
+            <div className="px-4 py-2.5 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Receipt Preview</span>
               <button 
                 onClick={() => setSelectedSession(null)}
                 className="p-1 hover:bg-slate-200 rounded-full transition-colors"
               >
-                <X size={18} />
+                <X size={16} />
               </button>
             </div>
 
             {/* Receipt Content (printable area) */}
-            <div id="printable-receipt" className="p-8 text-slate-800">
+            <div id="printable-receipt" className="p-6 text-slate-800">
               <div className="text-center mb-8">
                 {config.showLogo !== false && (
                   <div className="flex justify-center mb-4">
@@ -140,11 +140,11 @@ export default function ReceiptsPage() {
                     />
                   </div>
                 )}
-                <h1 className="text-xl font-black text-slate-900 leading-tight uppercase">{stationName}</h1>
-                <p className="text-[10px] text-slate-500 uppercase tracking-widest mt-1">{headerTitle}</p>
+                <h1 className="text-lg font-black text-slate-900 leading-tight uppercase tracking-tight">{stationName}</h1>
+                <p className="text-[9px] text-slate-500 uppercase tracking-widest mt-0.5">{headerTitle}</p>
               </div>
 
-              <div className="space-y-3 mb-8 border-t border-b border-dashed border-slate-200 py-4">
+              <div className="space-y-2.5 mb-6 border-t border-b border-dashed border-slate-200 py-4">
                 <div className="flex justify-between text-sm">
                   <span className="text-slate-400 font-medium">Receipt #</span>
                   <span className="font-bold text-slate-900">{selectedSession.receiptNumber}</span>
@@ -186,10 +186,10 @@ export default function ReceiptsPage() {
                 )}
               </div>
 
-              <div className="space-y-1 mb-8">
+              <div className="space-y-1 mb-6">
                 <div className="flex justify-between items-end">
-                  <span className="text-sm font-black text-slate-900 uppercase">Total</span>
-                  <span className="text-lg font-black text-slate-900">GHS {selectedSession.totalAmount?.toFixed(2)}</span>
+                  <span className="text-xs font-black text-slate-900 uppercase">Total</span>
+                  <span className="text-base font-black text-slate-900">GHS {selectedSession.totalAmount?.toFixed(2)}</span>
                 </div>
                 {config.showPaymentMethod !== false && (
                   <div className="flex justify-between text-xs">
