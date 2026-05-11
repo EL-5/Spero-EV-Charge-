@@ -111,6 +111,9 @@ export function Sidebar() {
               onMouseLeave={(e) => {
                 if (!active) (e.currentTarget as HTMLElement).style.background = 'transparent';
               }}
+              onClick={() => {
+                if (window.innerWidth < 1024) toggleSidebar();
+              }}
             >
               <Icon size={17} style={{ flexShrink: 0, color: active ? primaryColor : 'inherit' }} />
               {sidebarOpen && <span>{label}</span>}
@@ -119,24 +122,38 @@ export function Sidebar() {
         })}
       </nav>
 
-      {/* User footer */}
-      <div className="border-t border-white/10 p-3">
+      {/* User footer - Pinned to bottom */}
+      <div className="mt-auto border-t border-white/10 p-4 bg-[#1a1c23]">
         {sidebarOpen ? (
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-full bg-blue-600 flex items-center justify-center text-white text-sm font-bold flex-shrink-0">
               {user?.name.split(' ').map(n => n[0]).join('').slice(0,2)}
             </div>
             <div className="min-w-0 flex-1">
-              <div className="text-white text-xs font-medium truncate">{user?.name}</div>
-              <div className="text-slate-400 text-xs capitalize">{user?.role.replace('_', ' ')}</div>
+              <div className="text-white text-xs font-semibold truncate">{user?.name}</div>
+              <div className="text-slate-400 text-[10px] capitalize tracking-wide">{user?.role.replace('_', ' ')}</div>
             </div>
-            <button onClick={logout} className="text-slate-400 hover:text-white ml-auto" title="Logout">
-              <LogOut size={15} />
+            <button 
+              onClick={(e) => {
+                e.stopPropagation();
+                logout();
+              }} 
+              className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-white/5 transition-all" 
+              title="Logout"
+            >
+              <LogOut size={16} />
             </button>
           </div>
         ) : (
-          <button onClick={logout} className="flex justify-center w-full text-slate-400 hover:text-white" title="Logout">
-            <LogOut size={17} />
+          <button 
+            onClick={(e) => {
+              e.stopPropagation();
+              logout();
+            }} 
+            className="flex justify-center w-full p-2 rounded-lg text-slate-400 hover:text-white hover:bg-white/5 transition-all" 
+            title="Logout"
+          >
+            <LogOut size={18} />
           </button>
         )}
       </div>
