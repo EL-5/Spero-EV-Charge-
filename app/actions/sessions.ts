@@ -71,18 +71,41 @@ export async function startSession(formData: {
   rate_at_time: number;
   attendant_id: string;
   shift_id?: string;
+  pricing_id?: string;
 }) {
   try {
-    const [driverRes, vehicleRes, rateRes] = await Promise.all([
+    const [driverRes, vehicleRes] = await Promise.all([
       supabaseAdmin.from('drivers').select('name').eq('id', formData.driver_id).single(),
       supabaseAdmin.from('vehicles').select('plate_number, brand, model').eq('id', formData.vehicle_id).single(),
-      supabaseAdmin.from('pricing').select('rate, unit_quantity').eq('unit_type', formData.unit_type).eq('is_active', true).single(),
     ]);
 
-    if (!rateRes.data) throw new Error(`No active rate found for ${formData.unit_type}`);
+    // Fetch the specific rate if pricing_id is provided, otherwise fallback to the most recent active rate for the unit type
+    let rateData = null;
+    if (formData.pricing_id) {
+      const { data } = await supabaseAdmin
+        .from('pricing')
+        .select('rate, unit_quantity')
+        .eq('id', formData.pricing_id)
+        .single();
+      rateData = data;
+    }
+
+    if (!rateData) {
+      const { data } = await supabaseAdmin
+        .from('pricing')
+        .select('rate, unit_quantity')
+        .eq('unit_type', formData.unit_type)
+        .eq('is_active', true)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single();
+      rateData = data;
+    }
+
+    if (!rateData) throw new Error(`No active rate found for ${formData.unit_type}. Please configure pricing in Settings.`);
     
     // Calculate the actual rate per 1 unit if quantity > 1
-    const actualRate = Number(rateRes.data.rate) / Number(rateRes.data.unit_quantity || 1);
+    const actualRate = Number(rateData.rate) / Number(rateData.unit_quantity || 1);
 
     const receiptNumber = `RCP-${Math.floor(100000 + Math.random() * 900000)}`;
 
@@ -92,6 +115,7 @@ export async function startSession(formData: {
         driver_id: formData.driver_id,
         vehicle_id: formData.vehicle_id,
         shift_id: formData.shift_id,
+        pricing_id: formData.pricing_id, // Store the tier used
         driver_name: driverRes.data?.name || 'Unknown',
         vehicle_plate: vehicleRes.data?.plate_number || 'Unknown',
         vehicle_details: `${vehicleRes.data?.brand} ${vehicleRes.data?.model}`,
