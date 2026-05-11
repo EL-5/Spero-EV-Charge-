@@ -5,7 +5,7 @@ import { formatDate } from '@/lib/utils';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import Image from 'next/image';
-import { Settings, DollarSign, Zap, CreditCard, Wallet, FileText, Palette, CheckCircle, AlertTriangle, Trash2, RefreshCw, Plus } from 'lucide-react';
+import { Settings, DollarSign, Zap, CreditCard, Wallet, FileText, Palette, CheckCircle, AlertTriangle, Trash2, RefreshCw, Plus, Smartphone } from 'lucide-react';
 import { saveSettings, updatePricingRate, togglePricingRate } from '@/app/actions/settings';
 import { resetSystem } from '@/app/actions/system';
 import { useAuthStore } from '@/store/auth';
@@ -791,37 +791,100 @@ export default function SettingsPage() {
 
             {/* ── MAINTENANCE ── */}
             {activeTab === 'maintenance' && user?.role === 'super_admin' && (
-              <div className="stat-card border-red-100 bg-red-50/10">
-                <h3 className="font-bold text-red-900 mb-4 flex items-center gap-2"><Trash2 size={20}/> Danger Zone</h3>
-                <div className="space-y-4">
-                  <div className="p-4 rounded-xl border border-red-200 bg-red-50 text-sm text-red-800">
-                    <p className="font-bold">System Reset is irreversible.</p>
-                    <p>All sessions, payments, drivers, and vehicles will be deleted.</p>
+              <div className="space-y-6">
+                
+                {/* Integration Status */}
+                <div className="stat-card">
+                  <h3 className="font-bold text-lg mb-6" style={{ color: 'var(--foreground)' }}>System Health & Integrations</h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    {[
+                      { name: 'Supabase DB', status: 'connected', latency: '42ms', icon: RefreshCw },
+                      { name: 'Paystack Gateway', status: 'connected', latency: '118ms', icon: CreditCard },
+                      { name: 'Hubtel SMS API', status: 'connected', latency: '85ms', icon: Smartphone },
+                    ].map(service => (
+                      <div key={service.name} className="p-4 rounded-2xl border border-slate-100 bg-slate-50/30 flex items-center gap-4">
+                        <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center text-green-600">
+                          <service.icon size={18} />
+                        </div>
+                        <div>
+                          <div className="text-xs font-bold text-slate-800">{service.name}</div>
+                          <div className="flex items-center gap-1.5 mt-0.5">
+                            <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></div>
+                            <span className="text-[10px] font-medium text-green-600 uppercase tracking-wider">{service.status}</span>
+                            <span className="text-[10px] text-slate-400 ml-1">({service.latency})</span>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                  <input 
-                    className="form-input border-red-200" 
-                    placeholder='Type "RESET SYSTEM" to confirm'
-                    value={resetConfirm}
-                    onChange={e => setResetConfirm(e.target.value)}
-                  />
-                  <button 
-                    onClick={async () => {
-                      if (resetConfirm !== 'RESET SYSTEM') return;
-                      setIsResetting(true);
-                      const res = await resetSystem(user.id);
-                      setIsResetting(false);
-                      if (res.success) {
-                        toast.success('System reset successfully');
-                        setResetConfirm('');
-                      } else {
-                        toast.error(res.error || 'Reset failed');
-                      }
-                    }}
-                    disabled={resetConfirm !== 'RESET SYSTEM' || isResetting}
-                    className="btn bg-red-600 text-white w-full py-3"
-                  >
-                    {isResetting ? 'Resetting...' : 'Wipe All Data'}
-                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  {/* Operational Tools */}
+                  <div className="stat-card">
+                    <h3 className="font-bold text-slate-800 mb-4">System Operations</h3>
+                    <div className="space-y-3">
+                      {[
+                        { title: 'Re-index Database', desc: 'Optimize query performance and sync stats', icon: RefreshCw },
+                        { title: 'Archive Sessions', desc: 'Move completed sessions to historical storage', icon: FileText },
+                        { title: 'Sync Driver Wallets', desc: 'Reconcile balances with transaction history', icon: Wallet },
+                      ].map(tool => (
+                        <div key={tool.title} className="flex items-center justify-between p-4 rounded-xl border border-slate-100 bg-slate-50/50 hover:bg-slate-50 transition-colors group">
+                          <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 rounded-lg bg-white border border-slate-200 flex items-center justify-center text-slate-400 group-hover:text-blue-600 transition-colors">
+                              <tool.icon size={14} />
+                            </div>
+                            <div>
+                              <div className="text-sm font-bold text-slate-700">{tool.title}</div>
+                              <div className="text-[10px] text-slate-500">{tool.desc}</div>
+                            </div>
+                          </div>
+                          <button className="text-[10px] font-black uppercase text-blue-600 hover:underline">Run</button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Danger Zone */}
+                  <div className="stat-card border-red-100 bg-red-50/5 overflow-hidden relative">
+                    <div className="absolute top-0 right-0 p-8 opacity-5 text-red-600 pointer-events-none">
+                      <Trash2 size={120} />
+                    </div>
+                    <h3 className="font-bold text-red-900 mb-4 flex items-center gap-2"><Trash2 size={20}/> Danger Zone</h3>
+                    <div className="space-y-4">
+                      <div className="p-4 rounded-xl border border-red-200 bg-red-50/50 text-sm text-red-800">
+                        <p className="font-bold flex items-center gap-2"><AlertTriangle size={14}/> System Reset is irreversible.</p>
+                        <p className="text-xs mt-1">All sessions, payments, drivers, and vehicles will be permanently deleted from the station database.</p>
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-bold uppercase text-red-400 tracking-widest">Administrative Confirmation</label>
+                        <input 
+                          className="form-input border-red-100 bg-white focus:border-red-500 focus:ring-red-200" 
+                          placeholder='Type "RESET SYSTEM" to confirm'
+                          value={resetConfirm}
+                          onChange={e => setResetConfirm(e.target.value)}
+                        />
+                      </div>
+                      <button 
+                        onClick={async () => {
+                          if (resetConfirm !== 'RESET SYSTEM') return;
+                          setIsResetting(true);
+                          const res = await resetSystem(user.id);
+                          setIsResetting(false);
+                          if (res.success) {
+                            toast.success('System reset successfully');
+                            setResetConfirm('');
+                          } else {
+                            toast.error(res.error || 'Reset failed');
+                          }
+                        }}
+                        disabled={resetConfirm !== 'RESET SYSTEM' || isResetting}
+                        className="btn bg-red-600 text-white w-full py-4 font-black tracking-widest text-xs uppercase shadow-lg shadow-red-200 disabled:opacity-50 disabled:shadow-none"
+                      >
+                        {isResetting ? 'Wiping Database...' : 'Wipe All Station Data'}
+                      </button>
+                    </div>
+                  </div>
                 </div>
               </div>
             )}
