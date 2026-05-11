@@ -495,24 +495,115 @@ export default function SettingsPage() {
 
             {/* ── RECEIPTS ── */}
             {activeTab === 'receipts' && (
-              <div className="stat-card">
-                <h3 className="font-semibold mb-5" style={{ color: 'var(--foreground)' }}>Receipt Customization</h3>
-                <div className="space-y-4">
-                  <div>
-                    <label className="form-label">Receipt Header Title</label>
-                    <input className="form-input" value={receipts.header_title} onChange={e => setReceipts({ ...receipts, header_title: e.target.value })} />
+              <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+                <div className="stat-card">
+                  <h3 className="font-bold text-lg mb-6" style={{ color: 'var(--foreground)' }}>Receipt Configuration</h3>
+                  
+                  <div className="space-y-6">
+                    <div>
+                      <label className="form-label">Receipt Header Title</label>
+                      <input className="form-input" value={receipts.header_title} onChange={e => setReceipts({ ...receipts, header_title: e.target.value })} />
+                    </div>
+
+                    <div className="space-y-3">
+                      <label className="text-xs font-bold uppercase tracking-wider text-slate-400">Information Visibility</label>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        {[
+                          { key: 'show_driver', label: 'Driver Details' },
+                          { key: 'show_vehicle', label: 'Vehicle Details' },
+                          { key: 'show_units', label: 'Units Consumed' },
+                          { key: 'show_rate', label: 'Applied Rate' },
+                          { key: 'show_payment_method', label: 'Payment Method' },
+                          { key: 'show_date', label: 'Transaction Date' },
+                        ].map(item => (
+                          <label key={item.key} className="flex items-center gap-3 p-3 rounded-xl border border-slate-100 bg-slate-50/50 cursor-pointer transition-colors hover:bg-slate-50">
+                            <input 
+                              type="checkbox" 
+                              className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500"
+                              checked={(receipts as any)[item.key]} 
+                              onChange={e => setReceipts({ ...receipts, [item.key]: e.target.checked })}
+                            />
+                            <span className="text-sm font-medium text-slate-700">{item.label}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="form-label">Footer Message</label>
+                      <textarea 
+                        className="form-input min-h-[80px]" 
+                        value={receipts.receipt_footer} 
+                        onChange={e => setReceipts({ ...receipts, receipt_footer: e.target.value })}
+                        placeholder="e.g. Powered by Spero EV — Thank you!"
+                      />
+                    </div>
+
+                    <SaveBar 
+                      status={saveStatus['receipts'] || 'idle'} 
+                      onSave={() => handleSave('receipts', {
+                        receipt_footer: receipts.receipt_footer,
+                        receipt_config: { 
+                          headerTitle: receipts.header_title,
+                          showDriver: receipts.show_driver,
+                          showVehicle: receipts.show_vehicle,
+                          showUnits: receipts.show_units,
+                          showRate: receipts.show_rate,
+                          showPaymentMethod: receipts.show_payment_method,
+                          showDate: receipts.show_date
+                        }
+                      })} 
+                    />
                   </div>
-                  <div>
-                    <label className="form-label">Footer Message</label>
-                    <textarea className="form-input" value={receipts.receipt_footer} onChange={e => setReceipts({ ...receipts, receipt_footer: e.target.value })} />
+                </div>
+
+                {/* Live Preview */}
+                <div className="stat-card bg-slate-100/50 border-dashed border-2">
+                  <div className="text-[10px] font-bold text-slate-400 uppercase mb-4 tracking-widest text-center">Live Receipt Preview</div>
+                  <div className="bg-white mx-auto w-full max-w-[320px] shadow-xl rounded-sm p-6 text-slate-800 font-mono text-[10px] space-y-4">
+                    <div className="text-center space-y-1">
+                      <div className="font-black text-xs uppercase">{receipts.header_title || 'STATION RECEIPT'}</div>
+                      <div>Accra, Ghana</div>
+                      <div className="pt-2 border-b border-dashed"></div>
+                    </div>
+
+                    <div className="space-y-1">
+                      <div className="flex justify-between"><span>RECEIPT:</span> <span>#RCP-123456</span></div>
+                      {receipts.show_date && <div className="flex justify-between"><span>DATE:</span> <span>{new Date().toLocaleDateString()}</span></div>}
+                    </div>
+
+                    <div className="border-b border-dashed"></div>
+
+                    <div className="space-y-1">
+                      {receipts.show_driver && <div className="flex justify-between"><span>DRIVER:</span> <span>Kwame Mensah</span></div>}
+                      {receipts.show_vehicle && <div className="flex justify-between"><span>VEHICLE:</span> <span>GR-1234-24</span></div>}
+                    </div>
+
+                    <div className="pt-2">
+                      <div className="flex justify-between font-bold">
+                        <span>DESCRIPTION</span>
+                        <span>TOTAL</span>
+                      </div>
+                      <div className="flex justify-between py-1">
+                        <span>EV Charging {receipts.show_units && '(45.2 kWh)'}</span>
+                        <span>GHS 248.60</span>
+                      </div>
+                      {receipts.show_rate && <div className="text-[8px] text-slate-400 italic">Rate: GHS 5.50 / kWh</div>}
+                    </div>
+
+                    <div className="border-t-2 border-double pt-2">
+                      <div className="flex justify-between font-black text-xs">
+                        <span>TOTAL PAID</span>
+                        <span>GHS 248.60</span>
+                      </div>
+                      {receipts.show_payment_method && <div className="flex justify-between pt-1"><span>METHOD:</span> <span>MOBILE MONEY</span></div>}
+                    </div>
+
+                    <div className="pt-4 text-center space-y-2">
+                      <div className="border-b border-dashed"></div>
+                      <div className="italic text-[8px]">{receipts.receipt_footer || 'Thank you for your business!'}</div>
+                    </div>
                   </div>
-                  <SaveBar 
-                    status={saveStatus['receipts'] || 'idle'} 
-                    onSave={() => handleSave('receipts', {
-                      receipt_footer: receipts.receipt_footer,
-                      receipt_config: { headerTitle: receipts.header_title }
-                    })} 
-                  />
                 </div>
               </div>
             )}
