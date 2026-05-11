@@ -50,19 +50,25 @@ export async function updatePricingRate(payload: {
 
     if (insertError) throw insertError;
 
-    // 2. Deactivate all OTHER rates of the same type
-    if (newRate) {
-      await supabaseAdmin
-        .from('pricing')
-        .update({ is_active: false })
-        .eq('unit_type', payload.unit_type)
-        .neq('id', newRate.id);
-    }
-
     revalidatePath('/settings');
     return { success: true };
   } catch (e: any) {
     console.error('Pricing update error:', e);
+    return { success: false, error: e.message };
+  }
+}
+
+export async function togglePricingRate(id: string, active: boolean) {
+  try {
+    const { error } = await supabaseAdmin
+      .from('pricing')
+      .update({ is_active: active })
+      .eq('id', id);
+
+    if (error) throw error;
+    revalidatePath('/settings');
+    return { success: true };
+  } catch (e: any) {
     return { success: false, error: e.message };
   }
 }

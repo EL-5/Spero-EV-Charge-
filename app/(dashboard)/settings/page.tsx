@@ -5,8 +5,8 @@ import { formatDate } from '@/lib/utils';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import Image from 'next/image';
-import { Settings, DollarSign, Zap, CreditCard, Wallet, FileText, Palette, CheckCircle, AlertTriangle, Trash2, RefreshCw } from 'lucide-react';
-import { saveSettings, updatePricingRate } from '@/app/actions/settings';
+import { Settings, DollarSign, Zap, CreditCard, Wallet, FileText, Palette, CheckCircle, AlertTriangle, Trash2, RefreshCw, Plus } from 'lucide-react';
+import { saveSettings, updatePricingRate, togglePricingRate } from '@/app/actions/settings';
 import { resetSystem } from '@/app/actions/system';
 import { useAuthStore } from '@/store/auth';
 import { toast } from 'sonner';
@@ -179,6 +179,16 @@ export default function SettingsPage() {
     }
   };
 
+  const handleToggleRate = async (id: string, active: boolean) => {
+    const res = await togglePricingRate(id, active);
+    if (res.success) {
+      queryClient.invalidateQueries({ queryKey: ['pricing'] });
+      toast.success(`Rate ${active ? 'activated' : 'deactivated'} successfully`);
+    } else {
+      toast.error('Error: ' + res.error);
+    }
+  };
+
   const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -329,60 +339,96 @@ export default function SettingsPage() {
             {activeTab === 'pricing' && (
               <div className="space-y-4">
                 <div className="stat-card">
-                  <div className="flex items-center justify-between mb-4">
-                    <h3 className="font-semibold" style={{ color: 'var(--foreground)' }}>Current Pricing</h3>
-                    <button onClick={() => setShowNewRate(true)} className="btn btn-primary btn-sm">Update Rate</button>
+                  <div className="flex items-center justify-between mb-6">
+                    <div>
+                      <h3 className="font-bold text-lg" style={{ color: 'var(--foreground)' }}>Pricing Menu</h3>
+                      <p className="text-xs" style={{ color: 'var(--muted-foreground)' }}>Active rates available to attendants for new sessions</p>
+                    </div>
+                    <button onClick={() => setShowNewRate(true)} className="btn btn-primary btn-sm flex items-center gap-2">
+                      <Plus size={14} /> Add New Tier
+                    </button>
                   </div>
+                  
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {rates.filter((p: any) => p.is_active).length === 0 && (
-                      <div className="col-span-2 py-10 text-center border-2 border-dashed rounded-xl" style={{ borderColor: 'var(--border)', color: 'var(--muted-foreground)' }}>
-                        <Zap size={24} className="mx-auto mb-2 opacity-20" />
-                        <p className="text-sm">No active rates configured for this station.</p>
+                      <div className="col-span-2 py-12 text-center border-2 border-dashed rounded-2xl" style={{ borderColor: 'var(--border)', color: 'var(--muted-foreground)' }}>
+                        <Zap size={32} className="mx-auto mb-3 opacity-20" />
+                        <p className="text-sm">No active pricing tiers found.</p>
                       </div>
                     )}
                     {rates.filter((p: any) => p.is_active).map((p: any) => (
-                      <div key={p.id} className="p-4 rounded-xl border-2 border-blue-200 bg-blue-50">
-                        <div className="flex items-center gap-2 mb-2">
-                          <span className="font-semibold text-blue-800">
-                            {p.unit_type === 'kwh' ? 'kWh Consumption' : p.unit_type === 'minutes' ? 'Per-Minute Rate' : 'Hourly Rate'}
-                          </span>
-                          <span className="badge bg-green-100 text-green-700 ml-auto">Active</span>
+                      <div key={p.id} className="p-4 rounded-xl border border-blue-100 bg-blue-50/20 relative group transition-all hover:bg-blue-50/40">
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="flex items-center gap-2">
+                            <span className="p-1.5 rounded-lg bg-blue-100 text-blue-600">
+                              {p.unit_type === 'kwh' ? <Zap size={14} /> : <RefreshCw size={14} />}
+                            </span>
+                            <span className="font-bold text-slate-800">
+                              {p.unit_type === 'kwh' ? 'kWh Meter' : 'Time Based'}
+                            </span>
+                          </div>
+                          <button 
+                            onClick={() => handleToggleRate(p.id, false)}
+                            className="text-[10px] font-bold uppercase tracking-wider text-red-500 hover:text-red-700 opacity-0 group-hover:opacity-100 transition-opacity"
+                          >
+                            Deactivate
+                          </button>
                         </div>
-                        <div className="text-3xl font-bold text-blue-900">
+                        <div className="text-2xl font-black text-slate-900">
                           GHS {Number(p.rate).toFixed(2)}
-                          <span className="text-base font-normal text-blue-600 ml-1">
-                            / {Number(p.unit_quantity) === 1 ? '' : p.unit_quantity} {p.unit_type === 'kwh' ? 'kWh' : p.unit_type === 'minutes' ? 'min' : 'hr'}
+                          <span className="text-sm font-normal text-slate-500 ml-1">
+                            / {Number(p.unit_quantity)} {p.unit_type}
                           </span>
                         </div>
-                        <div className="text-xs text-blue-600 mt-1">Set on {formatDate(p.created_at)}</div>
+                        <div className="mt-3 flex items-center justify-between text-[10px] font-medium text-slate-400">
+                          <span>CREATED {formatDate(p.created_at)}</span>
+                          <span className="px-2 py-0.5 rounded-full bg-green-100 text-green-700">LIVE</span>
+                        </div>
                       </div>
                     ))}
                   </div>
-                  {saveStatus['pricing'] === 'saved' && (
-                    <div className="flex items-center gap-1.5 text-green-600 text-sm mt-3"><CheckCircle size={14} /> Rate updated successfully</div>
-                  )}
                 </div>
 
                 <div className="stat-card overflow-hidden">
-                  <h3 className="font-semibold mb-4" style={{ color: 'var(--foreground)' }}>Rate History</h3>
+                  <h3 className="font-bold text-slate-800 mb-4">Rate Repository</h3>
                   <div className="overflow-x-auto">
                     <table>
                       <thead>
                         <tr>
-                          <th>Unit Type</th><th>Rate</th><th>Currency</th><th>Set On</th><th>Status</th>
+                          <th>Tier Details</th>
+                          <th>Unit Rate</th>
+                          <th>Status</th>
+                          <th>Created</th>
+                          <th>Action</th>
                         </tr>
                       </thead>
                       <tbody>
                         {rates.map((p: any) => (
                           <tr key={p.id}>
-                            <td className="capitalize font-medium">{Number(p.unit_quantity)} {p.unit_type}</td>
-                            <td className="font-bold">{Number(p.rate).toFixed(2)}</td>
-                            <td>GHS</td>
-                            <td>{formatDate(p.created_at)}</td>
                             <td>
-                              <span className={`badge ${p.is_active ? 'status-active' : 'bg-gray-100 text-gray-500'}`}>
-                                {p.is_active ? 'Active' : 'Superseded'}
+                              <div className="font-bold text-slate-700 capitalize">
+                                {p.unit_type} Billing
+                              </div>
+                              <div className="text-[10px] text-slate-400 uppercase">
+                                {p.unit_quantity} {p.unit_type} units
+                              </div>
+                            </td>
+                            <td>
+                              <div className="font-black text-blue-600">GHS {Number(p.rate).toFixed(2)}</div>
+                            </td>
+                            <td>
+                              <span className={`badge ${p.is_active ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'}`}>
+                                {p.is_active ? 'Active' : 'Inactive'}
                               </span>
+                            </td>
+                            <td className="text-xs text-slate-400">{formatDate(p.created_at)}</td>
+                            <td>
+                              <button 
+                                onClick={() => handleToggleRate(p.id, !p.is_active)}
+                                className={`text-[10px] font-black uppercase tracking-widest ${p.is_active ? 'text-red-500' : 'text-blue-600'}`}
+                              >
+                                {p.is_active ? 'Disable' : 'Enable'}
+                              </button>
                             </td>
                           </tr>
                         ))}

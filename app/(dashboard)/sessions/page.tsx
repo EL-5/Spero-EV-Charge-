@@ -49,6 +49,7 @@ export default function SessionsPage() {
     driver_id: '',
     vehicle_id: '',
     unit_type: 'kwh' as const,
+    pricing_id: '',
     prepaid_amount: 0,
   });
 
@@ -69,13 +70,16 @@ export default function SessionsPage() {
     if (!user) return toast.error('Session expired. Please login again.');
     if (!activeShift) return toast.error('You must START A SHIFT on the Dashboard before starting a session.');
     
-    // Find active rate for selected unit type
-    const activeRate = activeRates?.find(r => r.unitType === formData.unit_type);
-    const rateToUse = activeRate ? (activeRate.rate / activeRate.unitQuantity) : 5.5;
+    // Find specific selected rate or fallback to unit-type default
+    const selectedRate = activeRates?.find(r => r.id === formData.pricing_id) || 
+                         activeRates?.find(r => r.unitType === formData.unit_type);
+                         
+    const rateToUse = selectedRate ? (selectedRate.rate / selectedRate.unitQuantity) : 5.5;
 
     setLoading(true);
     const res = await startSession({
       ...formData,
+      unit_type: selectedRate?.unitType || formData.unit_type,
       mode: newMode,
       rate_at_time: rateToUse,
       attendant_id: user.id,
@@ -84,7 +88,7 @@ export default function SessionsPage() {
     setLoading(false);
     if (res.success) {
       setShowNew(false);
-      setFormData({ driver_id: '', vehicle_id: '', unit_type: 'kwh', prepaid_amount: 0 });
+      setFormData({ driver_id: '', vehicle_id: '', unit_type: 'kwh', pricing_id: '', prepaid_amount: 0 });
       await refetchSessions();
       toast.success('Session started successfully!');
     } else {
@@ -546,25 +550,28 @@ export default function SessionsPage() {
                       )}
                     </div>
 
-                    {/* Unit type */}
+                    {/* Pricing Selector */}
                     <div>
-                      <label className="form-label">Unit Type</label>
+                      <label className="form-label">Pricing Tier</label>
                       <select
-                        className="form-select"
-                        value={formData.unit_type}
-                        onChange={e => setFormData({ ...formData, unit_type: e.target.value as any })}
+                        className="form-select border-blue-200 bg-blue-50/20"
+                        value={formData.pricing_id}
+                        onChange={e => {
+                          const rid = e.target.value;
+                          const r = activeRates?.find(i => i.id === rid);
+                          setFormData({ 
+                            ...formData, 
+                            pricing_id: rid,
+                            unit_type: r?.unitType || formData.unit_type 
+                          });
+                        }}
                       >
+                        <option value="">Select pricing...</option>
                         {activeRates?.map(r => (
-                          <option key={r.id} value={r.unitType}>
-                            {r.unitType === 'kwh' ? 'kWh' : r.unitType === 'minutes' ? 'Minutes' : 'Hours'} — GHS {r.rate.toFixed(2)} / {r.unitQuantity} {r.unitType}
+                          <option key={r.id} value={r.id}>
+                            {r.unitType === 'kwh' ? '⚡ kWh' : '🕒 Time'} — GHS {r.rate.toFixed(2)} / {r.unitQuantity} {r.unitType}
                           </option>
                         ))}
-                        {(!activeRates || activeRates.length === 0) && (
-                          <>
-                            <option value="kwh">kWh — GHS 5.50/kWh</option>
-                            <option value="minutes">Minutes — GHS 1.20/min</option>
-                          </>
-                        )}
                       </select>
                     </div>
 
