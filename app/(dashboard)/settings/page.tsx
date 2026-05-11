@@ -567,6 +567,7 @@ export default function SettingsPage() {
                       <label className="text-xs font-bold uppercase tracking-wider text-slate-400">Information Visibility</label>
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         {[
+                          { key: 'show_logo', label: 'Show Station Logo' },
                           { key: 'show_driver', label: 'Driver Details' },
                           { key: 'show_vehicle', label: 'Vehicle Details' },
                           { key: 'show_units', label: 'Units Consumed' },
@@ -586,6 +587,23 @@ export default function SettingsPage() {
                         ))}
                       </div>
                     </div>
+
+                    {receipts.show_logo && (
+                      <div className="p-4 rounded-xl border border-blue-50 bg-blue-50/20">
+                        <label className="text-[10px] font-bold uppercase text-blue-400 mb-3 block">Logo Scaling (Thermal Optimization)</label>
+                        <div className="flex items-center gap-4">
+                          <input 
+                            type="range" 
+                            min="20" 
+                            max="80" 
+                            className="flex-1 accent-blue-600" 
+                            value={receipts.logo_size} 
+                            onChange={e => setReceipts({ ...receipts, logo_size: Number(e.target.value) })}
+                          />
+                          <span className="text-xs font-bold text-blue-600 w-10">{receipts.logo_size}px</span>
+                        </div>
+                      </div>
+                    )}
 
                     <div>
                       <label className="form-label">Footer Message</label>
@@ -608,7 +626,9 @@ export default function SettingsPage() {
                           showUnits: receipts.show_units,
                           showRate: receipts.show_rate,
                           showPaymentMethod: receipts.show_payment_method,
-                          showDate: receipts.show_date
+                          showDate: receipts.show_date,
+                          showLogo: receipts.show_logo,
+                          logoSize: receipts.logo_size
                         }
                       })} 
                     />
