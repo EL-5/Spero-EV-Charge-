@@ -582,13 +582,69 @@ export default function SettingsPage() {
       {/* Pricing Modal */}
       {showNewRate && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="stat-card max-w-md w-full">
-            <h2 className="text-xl font-bold mb-4">Update Rate</h2>
-            <div className="space-y-4">
-              <input type="number" className="form-input" placeholder="Rate (GHS)" value={newRate} onChange={e => setNewRate(e.target.value)} />
-              <div className="flex gap-3">
+          <div className="stat-card max-w-md w-full animate-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-xl font-bold" style={{ color: 'var(--foreground)' }}>Create New Pricing Tier</h2>
+              <button onClick={() => setShowNewRate(false)} className="text-slate-400 hover:text-slate-600 text-2xl">&times;</button>
+            </div>
+            
+            <div className="space-y-5">
+              <div>
+                <label className="form-label">Billing Rate (GHS) *</label>
+                <div className="relative">
+                  <input 
+                    type="number" 
+                    className="form-input text-lg font-bold" 
+                    style={{ paddingLeft: '60px' }}
+                    placeholder="0.00" 
+                    value={newRate} 
+                    onChange={e => setNewRate(e.target.value)} 
+                  />
+                  <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold">GHS</div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="form-label">Unit Type</label>
+                  <select 
+                    className="form-select" 
+                    value={newUnitType} 
+                    onChange={e => setNewUnitType(e.target.value as any)}
+                  >
+                    <option value="kwh">⚡ kWh</option>
+                    <option value="minutes">🕒 Minutes</option>
+                    <option value="hours">⏰ Hours</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="form-label">Quantity</label>
+                  <input 
+                    type="number" 
+                    className="form-input" 
+                    placeholder="e.g. 1" 
+                    value={newQuantity} 
+                    onChange={e => setNewQuantity(e.target.value)} 
+                  />
+                </div>
+              </div>
+
+              <div className="p-4 rounded-xl bg-blue-50 border border-blue-100">
+                <div className="text-[10px] font-bold text-blue-600 uppercase mb-1">Preview</div>
+                <div className="text-sm font-medium text-blue-900">
+                  {newRate ? `GHS ${Number(newRate).toFixed(2)}` : '0.00'} per {newQuantity || '1'} {newUnitType}
+                </div>
+              </div>
+
+              <div className="flex gap-3 pt-2">
                 <button onClick={() => setShowNewRate(false)} className="btn btn-secondary flex-1">Cancel</button>
-                <button onClick={handleUpdateRate} className="btn btn-primary flex-1">Save</button>
+                <button 
+                  onClick={handleUpdateRate} 
+                  className="btn btn-primary flex-1"
+                  disabled={!newRate || Number(newRate) <= 0}
+                >
+                  {saveStatus['pricing'] === 'saving' ? 'Saving...' : 'Add Pricing Tier'}
+                </button>
               </div>
             </div>
           </div>
