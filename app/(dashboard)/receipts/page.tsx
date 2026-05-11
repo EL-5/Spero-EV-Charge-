@@ -1,11 +1,14 @@
 'use client';
 
 import { useState } from 'react';
+import { toast } from 'sonner';
 import { TopBar } from '@/components/layout/TopBar';
 import { useSessions, useSettings } from '@/hooks/use-database';
 import { formatCurrency, formatDateTime } from '@/lib/utils';
 import { Search, Printer, Download, Share2, Eye, X, Calendar } from 'lucide-react';
 import type { Session } from '@/lib/types';
+import html2canvas from 'html2canvas';
+import jsPDF from 'jspdf';
 
 export default function ReceiptsPage() {
   const { data: sessions, isLoading } = useSessions({ limit: 100 });
@@ -31,9 +34,84 @@ export default function ReceiptsPage() {
     window.print();
   };
 
-  const handleWhatsApp = (session: Session) => {
-    const message = `*SPERO ENERGY RESOURCES LTD*%0A*Receipt #:* ${session.receiptNumber}%0A*Driver:* ${session.driverName}%0A*Vehicle:* ${session.vehiclePlate}%0A*Units:* ${session.unitsConsumed} ${session.unitType}%0A*Total:* GHS ${session.totalAmount}%0A%0A_Powered by SCMS — Spero EV_`;
-    window.open(`https://wa.me/?text=${message}`, '_blank');
+  const generatePDFBlob = async (session: Session) => {
+    const element = document.getElementById('printable-receipt');
+    if (!element) return null;
+
+    try {
+      const canvas = await html2canvas(element, {
+        scale: 2,
+        useCORS: true,
+        logging: false,
+        backgroundColor: '#ffffff'
+      });
+      
+      const imgData = canvas.toDataURL('image/png');
+      const pdf = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: [80, 160] // Adjusted for thermal height
+      });
+
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const imgProps = pdf.getImageProperties(imgData);
+      const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
+      
+      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+      return { 
+        blob: pdf.output('blob'), 
+        filename: `Receipt-${session.receiptNumber}.pdf`,
+        pdfObj: pdf
+      };
+    } catch (error) {
+      console.error('PDF Generation Error:', error);
+      return null;
+    }
+  };
+
+  const handleDownloadPDF = async (session: Session) => {
+    toast.loading('Generating PDF...', { id: 'pdf-gen' });
+    const result = await generatePDFBlob(session);
+    if (result) {
+      result.pdfObj.save(result.filename);
+      toast.success('Receipt downloaded successfully', { id: 'pdf-gen' });
+    } else {
+      toast.error('Failed to generate PDF', { id: 'pdf-gen' });
+    }
+  };
+
+  const handleShareWhatsApp = async (session: Session) => {
+    toast.loading('Preparing receipt for sharing...', { id: 'pdf-share' });
+    const result = await generatePDFBlob(session);
+    
+    if (!result) {
+      toast.error('Could not prepare PDF. Sending text instead.', { id: 'pdf-share' });
+      const message = `*${stationName}*%0A*Receipt #:* ${session.receiptNumber}%0A*Total:* GHS ${session.totalAmount}`;
+      window.open(`https://wa.me/?text=${message}`, '_blank');
+      return;
+    }
+
+    const file = new File([result.blob], result.filename, { type: 'application/pdf' });
+
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      try {
+        await navigator.share({
+          files: [file],
+          title: `Receipt ${session.receiptNumber}`,
+          text: `Charging Receipt from ${stationName}`,
+        });
+        toast.success('Shared successfully', { id: 'pdf-share' });
+      } catch (err) {
+        console.error('Sharing failed', err);
+        // Fallback to normal text share if user cancels or it fails
+        const message = `*${stationName}*%0A*Receipt #:* ${session.receiptNumber}%0A*Total:* GHS ${session.totalAmount}`;
+        window.open(`https://wa.me/?text=${message}`, '_blank');
+        toast.dismiss('pdf-share');
+      }
+    } else {
+      toast.info('Direct file sharing not supported. Downloading instead.', { id: 'pdf-share' });
+      result.pdfObj.save(result.filename);
+    }
   };
 
   return (
@@ -95,7 +173,7 @@ export default function ReceiptsPage() {
                             <Eye size={16} />
                           </button>
                           <button 
-                            onClick={() => handleWhatsApp(session)}
+                            onClick={() => handleShareWhatsApp(session)}
                             className="p-2 rounded-lg bg-emerald-100 text-emerald-600 hover:bg-emerald-600 hover:text-white transition-colors"
                             title="Share on WhatsApp"
                           >
@@ -214,13 +292,13 @@ export default function ReceiptsPage() {
                 <Printer size={14} /> Print
               </button>
               <button 
-                onClick={handlePrint} // Print-to-PDF
+                onClick={() => handleDownloadPDF(selectedSession)}
                 className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-100 transition-colors"
               >
                 <Download size={14} /> PDF
               </button>
               <button 
-                onClick={() => handleWhatsApp(selectedSession)}
+                onClick={() => handleShareWhatsApp(selectedSession)}
                 className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-emerald-600 rounded-xl text-xs font-bold text-white hover:bg-emerald-700 transition-colors"
               >
                 <Share2 size={14} /> WhatsApp

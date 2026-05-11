@@ -1,10 +1,13 @@
 'use client';
 import { useState } from 'react';
+import { toast } from 'sonner';
 import { TopBar } from '@/components/layout/TopBar';
 import { formatCurrency, formatDateTime, getStatusColor, getStatusLabel } from '@/lib/utils';
-import { Search, CreditCard, DollarSign, Smartphone, Wallet, Activity, XCircle, Printer, Share2 } from 'lucide-react';
+import { Search, CreditCard, DollarSign, Smartphone, Wallet, Activity, XCircle, Printer, Share2, Download } from 'lucide-react';
 import { useAuthStore } from '@/store/auth';
 import { usePayments, useDrivers, useSettings } from '@/hooks/use-database';
+import html2canvas from 'html2canvas';
+import jsPDF from 'jspdf';
 
 const methodIcons: Record<string, React.ReactNode> = {
   cash: <DollarSign size={14} />,
@@ -48,6 +51,81 @@ export default function PaymentsPage() {
     logoSize: 40,
   };
   const footer = settings?.receipt_footer || 'Powered by SCMS — Spero Fleet Management';
+
+  const generatePDFBlob = async (payment: any) => {
+    const element = document.getElementById('printable-receipt-payment');
+    if (!element) return null;
+
+    try {
+      const canvas = await html2canvas(element, {
+        scale: 2,
+        useCORS: true,
+        logging: false,
+        backgroundColor: '#ffffff'
+      });
+      
+      const imgData = canvas.toDataURL('image/png');
+      const pdf = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: [80, 160]
+      });
+
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const imgProps = pdf.getImageProperties(imgData);
+      const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
+      
+      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+      return { 
+        blob: pdf.output('blob'), 
+        filename: `Receipt-${payment.receiptNumber}.pdf`,
+        pdfObj: pdf
+      };
+    } catch (error) {
+      console.error('PDF Generation Error:', error);
+      return null;
+    }
+  };
+
+  const handleDownloadPDF = async (payment: any) => {
+    toast.loading('Generating PDF...', { id: 'pdf-gen-pay' });
+    const result = await generatePDFBlob(payment);
+    if (result) {
+      result.pdfObj.save(result.filename);
+      toast.success('Receipt downloaded successfully', { id: 'pdf-gen-pay' });
+    } else {
+      toast.error('Failed to generate PDF', { id: 'pdf-gen-pay' });
+    }
+  };
+
+  const handleShareWhatsApp = async (payment: any) => {
+    toast.loading('Preparing receipt for sharing...', { id: 'pdf-share-pay' });
+    const result = await generatePDFBlob(payment);
+    
+    if (!result) {
+      toast.error('Could not prepare PDF. Sharing cancelled.', { id: 'pdf-share-pay' });
+      return;
+    }
+
+    const file = new File([result.blob], result.filename, { type: 'application/pdf' });
+
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      try {
+        await navigator.share({
+          files: [file],
+          title: `Receipt ${payment.receiptNumber}`,
+          text: `Charging Receipt from ${branding.company_name}`,
+        });
+        toast.success('Shared successfully', { id: 'pdf-share-pay' });
+      } catch (err) {
+        console.error('Sharing failed', err);
+        toast.dismiss('pdf-share-pay');
+      }
+    } else {
+      toast.info('Direct sharing not supported. Downloading instead.', { id: 'pdf-share-pay' });
+      result.pdfObj.save(result.filename);
+    }
+  };
 
   const allPayments = payments || [];
 
@@ -203,7 +281,7 @@ export default function PaymentsPage() {
                 </button>
               </div>
 
-              <div className="p-6 text-slate-800">
+              <div id="printable-receipt-payment" className="p-6 text-slate-800">
                 <div className="text-center mb-6">
                   {config.showLogo && branding.logo_url && (
                     <div className="flex justify-center mb-3">
@@ -287,17 +365,13 @@ export default function PaymentsPage() {
                   <Printer size={14} /> Print
                 </button>
                 <button 
-                  onClick={() => {
-                    if (navigator.share) {
-                      navigator.share({
-                        title: `Spero Receipt ${selectedPayment.receiptNumber}`,
-                        text: `Charging Receipt for ${selectedPayment.driverName} - ${formatCurrency(selectedPayment.amount)}`,
-                        url: window.location.href,
-                      }).catch(console.error);
-                    } else {
-                      alert('Sharing is not supported on this browser/device.');
-                    }
-                  }}
+                  onClick={() => handleDownloadPDF(selectedPayment)}
+                  className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-100 transition-colors"
+                >
+                  <Download size={14} /> PDF
+                </button>
+                <button 
+                  onClick={() => handleShareWhatsApp(selectedPayment)}
                   className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-blue-600 rounded-xl text-xs font-bold text-white hover:bg-blue-700 transition-colors"
                 >
                   <Share2 size={14} /> Share
