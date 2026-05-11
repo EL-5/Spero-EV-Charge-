@@ -16,7 +16,7 @@ type ModalStep = 'session' | 'register_new';
 
 export default function SessionsPage() {
   const { user } = useAuthStore();
-  const { data: sessions, isLoading, refetch: refetchSessions } = useSessions(50);
+  const { data: sessions, isLoading, refetch: refetchSessions } = useSessions({ limit: 50 });
   const { data: drivers, refetch: refetchDrivers } = useDrivers();
   const { data: vehicles, refetch: refetchVehicles } = useVehicles();
   const { data: shifts } = useShifts();
