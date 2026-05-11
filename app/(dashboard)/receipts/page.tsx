@@ -36,28 +36,38 @@ export default function ReceiptsPage() {
 
   const generatePDFBlob = async (session: Session) => {
     const element = document.getElementById('printable-receipt');
-    if (!element) return null;
+    if (!element) {
+      console.error('Receipt element not found');
+      return null;
+    }
 
     try {
+      // Small delay to ensure DOM is ready and images are painted
+      await new Promise(resolve => setTimeout(resolve, 150));
+
       const canvas = await html2canvas(element, {
-        scale: 2,
+        scale: 3, // Higher scale for better text clarity
         useCORS: true,
+        allowTaint: true,
         logging: false,
-        backgroundColor: '#ffffff'
+        backgroundColor: '#ffffff',
+        windowWidth: element.scrollWidth,
+        windowHeight: element.scrollHeight
       });
       
-      const imgData = canvas.toDataURL('image/png');
+      const imgData = canvas.toDataURL('image/jpeg', 1.0);
+      const imgProps = { width: canvas.width, height: canvas.height };
+      
+      const pdfWidth = 80; // Standard 80mm
+      const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
+      
       const pdf = new jsPDF({
         orientation: 'portrait',
         unit: 'mm',
-        format: [80, 160] // Adjusted for thermal height
+        format: [pdfWidth, pdfHeight]
       });
 
-      const pdfWidth = pdf.internal.pageSize.getWidth();
-      const imgProps = pdf.getImageProperties(imgData);
-      const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
-      
-      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+      pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
       return { 
         blob: pdf.output('blob'), 
         filename: `Receipt-${session.receiptNumber}.pdf`,
