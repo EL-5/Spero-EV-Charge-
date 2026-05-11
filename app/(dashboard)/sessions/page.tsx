@@ -164,7 +164,7 @@ export default function SessionsPage() {
     
     // 1. If Mobile Money (MTN, Telecel, etc), initiate Paystack Charge
     let reference = `${paymentMethod.toUpperCase()}-${Date.now()}`;
-    if (!['cash', 'wallet'].includes(paymentMethod)) {
+    if (!['cash', 'wallet', 'hubtel'].includes(paymentMethod)) {
       const paystackRes = await initiatePaystackCharge({
         sessionId: selected.id,
         amount: actualAmount,
@@ -877,8 +877,8 @@ export default function SessionsPage() {
 
                 <div className="flex gap-3 pt-2">
                   <button onClick={() => setIsPaying(false)} className="btn btn-secondary flex-1">Back</button>
-                  <button onClick={handleTriggerPayment} className="btn btn-primary flex-1 py-4" disabled={loading || (!['cash', 'wallet'].includes(paymentMethod) && !paymentPhone)}>
-                    {loading ? 'Processing...' : paymentMethod === 'cash' ? 'Confirm Payment' : paymentMethod === 'wallet' ? 'Pay from Wallet' : 'Send Prompt'}
+                  <button onClick={handleTriggerPayment} className="btn btn-primary flex-1 py-4" disabled={loading || (!['cash', 'wallet', 'hubtel'].includes(paymentMethod) && !paymentPhone)}>
+                    {loading ? 'Processing...' : paymentMethod === 'cash' ? 'Confirm Payment' : paymentMethod === 'wallet' ? 'Pay from Wallet' : paymentMethod === 'hubtel' ? 'Mark Payment' : 'Send Prompt'}
                   </button>
                 </div>
               </div>
