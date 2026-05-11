@@ -7,7 +7,7 @@ import { Search, Plus, Zap, Clock, CheckCircle, XCircle, UserPlus, Car, AlertTri
 import type { Session } from '@/lib/types';
 import { useSessions, useDrivers, useVehicles, useShifts, usePricing } from '@/hooks/use-database';
 import { useAuthStore } from '@/store/auth';
-import { startSession, updateSessionStatus, completeSession, processPayment, initiatePaystackCharge } from '@/app/actions/sessions';
+import { startSession, updateSessionStatus, completeSession, processPayment, initiatePaystackCharge, deleteSession } from '@/app/actions/sessions';
 import { addDriver } from '@/app/actions/drivers';
 import { addVehicle } from '@/app/actions/vehicles';
 
@@ -206,6 +206,23 @@ export default function SessionsPage() {
       await refetchSessions();
     } else {
       toast.error('Payment recording failed: ' + res.error);
+    }
+  };
+  
+  const handleDelete = async (id: string) => {
+    if (!user || user.role !== 'super_admin') return;
+    if (!window.confirm('PERMANENT DELETE: Are you sure you want to delete this session and all its records? This cannot be undone.')) return;
+    
+    setLoading(true);
+    const res = await deleteSession(id, user.id);
+    setLoading(false);
+    
+    if (res.success) {
+      setSelected(null);
+      await refetchSessions();
+      toast.success('Session permanently deleted.');
+    } else {
+      toast.error('Error: ' + res.error);
     }
   };
 
@@ -666,6 +683,18 @@ export default function SessionsPage() {
                       </button>
                     )}
                   </div>
+                  
+                  {user?.role === 'super_admin' && (
+                    <div className="pt-2 border-t border-slate-100 mt-2">
+                      <button 
+                        onClick={() => handleDelete(selected.id)} 
+                        className="w-full btn bg-red-600 text-white hover:bg-red-700 flex items-center justify-center gap-2 py-3"
+                        disabled={loading}
+                      >
+                        <XCircle size={16}/> {loading ? 'Deleting...' : 'Permanent Delete Session'}
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">

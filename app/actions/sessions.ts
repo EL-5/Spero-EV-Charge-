@@ -297,3 +297,36 @@ export async function completeSession(id: string, data: {
     return { success: false, error: error.message };
   }
 }
+
+export async function deleteSession(id: string, adminId: string) {
+  try {
+    // 1. Verify caller is super_admin
+    const { data: profile } = await supabaseAdmin
+      .from('profiles')
+      .select('role')
+      .eq('id', adminId)
+      .single();
+
+    if (!profile || profile.role !== 'super_admin') {
+      throw new Error('Unauthorized: Only Super Admins can delete sessions.');
+    }
+
+    // 2. Delete associated payments first (if any)
+    await supabaseAdmin.from('payments').delete().eq('session_id', id);
+    
+    // 3. Delete the session
+    const { error } = await supabaseAdmin
+      .from('sessions')
+      .delete()
+      .eq('id', id);
+
+    if (error) throw error;
+
+    revalidatePath('/sessions');
+    revalidatePath('/dashboard');
+    return { success: true };
+  } catch (error: any) {
+    console.error('Error deleting session:', error.message);
+    return { success: false, error: error.message };
+  }
+}
