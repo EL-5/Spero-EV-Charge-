@@ -4,10 +4,13 @@ import { TopBar } from '@/components/layout/TopBar';
 import { formatCurrency, formatDateTime, formatTime, getStatusColor, getStatusLabel, calcDuration } from '@/lib/utils';
 import { Clock, Play, Square, DollarSign, CreditCard, Smartphone, Wallet } from 'lucide-react';
 import { useShifts, useProfiles } from '@/hooks/use-database';
+import { useAuthStore } from '@/store/auth';
 import { startShift, closeShift } from '@/app/actions/shifts';
 
 export default function ShiftsPage() {
-  const { data: shifts, refetch } = useShifts();
+  const { user } = useAuthStore();
+  const isAttendant = user?.role === 'attendant';
+  const { data: shifts, refetch } = useShifts(isAttendant ? { attendantId: user?.id } : {});
   const { data: profiles } = useProfiles();
   const [showStart, setShowStart] = useState(false);
   const [showClose, setShowClose] = useState(false);

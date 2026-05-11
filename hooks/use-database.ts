@@ -225,20 +225,26 @@ export function useWalletTransactions() {
 }
 
 // --- Shifts ---
-export function useShifts() {
-  useRealtimeSync('shifts', [['shifts']]);
-  useRealtimeSync('payments', [['shifts']]); // Shifts track payments too
+export function useShifts(options: { attendantId?: string } = {}) {
+  useRealtimeSync('shifts', [['shifts', options.attendantId]]);
+  useRealtimeSync('payments', [['shifts', options.attendantId]]); // Shifts track payments too
   
   return useQuery({
-    queryKey: ['shifts'],
+    queryKey: ['shifts', options.attendantId],
     queryFn: async () => {
-      const { data, error } = await supabase
+      let query = supabase
         .from('shifts')
         .select(`
           *,
           profiles:attendant_id (name)
         `)
         .order('start_time', { ascending: false });
+      
+      if (options.attendantId) {
+        query = query.eq('attendant_id', options.attendantId);
+      }
+
+      const { data, error } = await query;
       
       if (error) throw error;
       

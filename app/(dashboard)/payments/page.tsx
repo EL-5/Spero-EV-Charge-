@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { TopBar } from '@/components/layout/TopBar';
 import { formatCurrency, formatDateTime, getStatusColor, getStatusLabel } from '@/lib/utils';
 import { Search, CreditCard, DollarSign, Smartphone, Wallet, Activity } from 'lucide-react';
+import { useAuthStore } from '@/store/auth';
 import { usePayments, useDrivers } from '@/hooks/use-database';
 
 const methodIcons: Record<string, React.ReactNode> = {
@@ -20,7 +21,9 @@ const methodColors: Record<string, string> = {
 };
 
 export default function PaymentsPage() {
-  const { data: payments, isLoading } = usePayments();
+  const { user } = useAuthStore();
+  const isAttendant = user?.role === 'attendant';
+  const { data: payments, isLoading } = usePayments(isAttendant ? { attendantId: user?.id } : {});
   const { data: drivers } = useDrivers();
   const [selectedPayment, setSelectedPayment] = useState<any>(null);
   const [search, setSearch] = useState('');

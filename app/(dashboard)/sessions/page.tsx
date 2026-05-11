@@ -16,10 +16,14 @@ type ModalStep = 'session' | 'register_new';
 
 export default function SessionsPage() {
   const { user } = useAuthStore();
-  const { data: sessions, isLoading, refetch: refetchSessions } = useSessions({ limit: 50 });
+  const isAttendant = user?.role === 'attendant';
+  const { data: sessions, isLoading, refetch: refetchSessions } = useSessions({ 
+    limit: 50, 
+    attendantId: isAttendant ? user?.id : undefined 
+  });
   const { data: drivers, refetch: refetchDrivers } = useDrivers();
   const { data: vehicles, refetch: refetchVehicles } = useVehicles();
-  const { data: shifts } = useShifts();
+  const { data: shifts } = useShifts(isAttendant ? { attendantId: user?.id } : {});
   const { data: activeRates } = usePricing();
 
   const activeShift = shifts?.find(s => s.status === 'active' && s.attendantId === user?.id);
