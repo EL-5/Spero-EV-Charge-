@@ -357,7 +357,7 @@ export default function SessionsPage() {
             <table>
               <thead>
                 <tr>
-                  <th>Receipt</th><th>Mode</th><th>Unit</th><th>Rate</th><th>Amount</th><th>Status</th><th>Started</th>
+                  <th>Receipt</th><th>Mode</th><th>Unit</th><th>Volume</th><th>Rate</th><th>Amount</th><th>Status</th><th>Started</th>
                 </tr>
               </thead>
               <tbody>
@@ -366,6 +366,9 @@ export default function SessionsPage() {
                     <td className="font-mono text-xs">{(s as any).receipt_number || s.receiptNumber}</td>
                     <td><span className={`badge ${s.mode === 'prepaid' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'}`}>{s.mode}</span></td>
                     <td className="capitalize">{(s as any).unit_type || s.unitType}</td>
+                    <td className="font-bold text-slate-700">
+                      {s.unitsConsumed ? `${s.unitsConsumed} ${s.unitType}` : '—'}
+                    </td>
                     <td>GHS {(s as any).rate_at_time || s.rateAtTime}</td>
                     <td className="font-medium text-blue-600">
                       {s.mode === 'prepaid' ? (

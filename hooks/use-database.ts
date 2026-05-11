@@ -279,7 +279,8 @@ export function usePayments(options: { attendantId?: string } = {}) {
         .select(`
           *,
           profiles:attendant_id (name),
-          drivers:driver_id (name)
+          drivers:driver_id (name),
+          sessions:session_id (units_consumed, rate_at_time, unit_type)
         `)
         .order('created_at', { ascending: false });
 
@@ -303,6 +304,9 @@ export function usePayments(options: { attendantId?: string } = {}) {
         status: p.status,
         attendantId: p.attendant_id,
         attendantName: (p as any).profiles?.name || 'Unknown',
+        unitsConsumed: (p as any).sessions?.units_consumed,
+        rateAtTime: (p as any).sessions?.rate_at_time,
+        unitType: (p as any).sessions?.unit_type,
         createdAt: p.created_at,
       }));
     },

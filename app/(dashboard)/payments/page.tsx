@@ -4,7 +4,7 @@ import { TopBar } from '@/components/layout/TopBar';
 import { formatCurrency, formatDateTime, getStatusColor, getStatusLabel } from '@/lib/utils';
 import { Search, CreditCard, DollarSign, Smartphone, Wallet, Activity } from 'lucide-react';
 import { useAuthStore } from '@/store/auth';
-import { usePayments, useDrivers } from '@/hooks/use-database';
+import { usePayments, useDrivers, useSettings } from '@/hooks/use-database';
 
 const methodIcons: Record<string, React.ReactNode> = {
   cash: <DollarSign size={14} />,
@@ -25,9 +25,29 @@ export default function PaymentsPage() {
   const isAttendant = user?.role === 'attendant';
   const { data: payments, isLoading } = usePayments(isAttendant ? { attendantId: user?.id } : {});
   const { data: drivers } = useDrivers();
+  const { data: settings } = useSettings();
+
   const [selectedPayment, setSelectedPayment] = useState<any>(null);
   const [search, setSearch] = useState('');
   const [methodFilter, setMethodFilter] = useState('all');
+
+  // Branding & Config
+  const branding = {
+    logo_url: settings?.logo_url || '/spero-logo.png',
+    company_name: settings?.company_name || 'SPERO ENERGY RESOURCES LTD',
+  };
+  const config = settings?.receipt_config || {
+    headerTitle: 'EV Charging Station Receipt',
+    showLogo: true,
+    showDriver: true,
+    showVehicle: true,
+    showUnits: true,
+    showRate: true,
+    showPaymentMethod: true,
+    showDate: true,
+    logoSize: 40,
+  };
+  const footer = settings?.receipt_footer || 'Powered by SCMS — Spero Fleet Management';
 
   const allPayments = payments || [];
 
@@ -182,27 +202,60 @@ export default function PaymentsPage() {
               </div>
 
               <div className="border rounded-xl p-6 text-center text-sm mb-6" style={{ borderColor: 'var(--border)' }}>
-                <div className="font-bold text-lg mb-1">SPERO ENERGY RESOURCES LTD</div>
-                <div className="text-[10px] uppercase font-bold text-slate-400 mb-4 tracking-widest">EV Charging Station Receipt</div>
+                {config.showLogo && branding.logo_url && (
+                  <div className="flex justify-center mb-4">
+                    <img 
+                      src={branding.logo_url} 
+                      alt="Station Logo" 
+                      style={{ width: `${config.logoSize}px`, height: 'auto' }} 
+                      className="object-contain" 
+                    />
+                  </div>
+                )}
+                <div className="font-bold text-lg mb-1 uppercase tracking-tight">{branding.company_name}</div>
+                <div className="text-[10px] uppercase font-bold text-slate-400 mb-4 tracking-widest">{config.headerTitle}</div>
                 
                 <div className="border-t border-dashed pt-4 mb-4 text-left space-y-3" style={{ borderColor: 'var(--border)' }}>
                   <div className="flex justify-between">
                     <span className="text-slate-500">Receipt Number</span>
                     <span className="font-mono font-bold text-blue-600">{selectedPayment.receiptNumber}</span>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-500">Date</span>
-                    <span className="font-medium">{formatDateTime(selectedPayment.createdAt)}</span>
-                  </div>
+                  {config.showDate && (
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">Date</span>
+                      <span className="font-medium">{formatDateTime(selectedPayment.createdAt)}</span>
+                    </div>
+                  )}
                   <hr style={{ borderStyle: 'dashed', borderColor: 'var(--border)' }} />
-                  <div className="flex justify-between">
-                    <span className="text-slate-500">Driver</span>
-                    <span className="font-bold text-slate-800">{selectedPayment.driverName}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-500">Payment Method</span>
-                    <span className="font-bold capitalize text-slate-800">{selectedPayment.method}</span>
-                  </div>
+                  
+                  {config.showDriver && (
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">Driver</span>
+                      <span className="font-bold text-slate-800">{selectedPayment.driverName}</span>
+                    </div>
+                  )}
+
+                  {config.showUnits && selectedPayment.unitsConsumed && (
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">Energy Delivered</span>
+                      <span className="font-bold text-slate-800">{selectedPayment.unitsConsumed} {selectedPayment.unitType}</span>
+                    </div>
+                  )}
+
+                  {config.showRate && selectedPayment.rateAtTime && (
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">Applied Rate</span>
+                      <span className="font-medium text-slate-600">GHS {selectedPayment.rateAtTime} / {selectedPayment.unitType}</span>
+                    </div>
+                  )}
+
+                  {config.showPaymentMethod && (
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">Payment Method</span>
+                      <span className="font-bold capitalize text-slate-800">{selectedPayment.method}</span>
+                    </div>
+                  )}
+
                   <div className="flex justify-between">
                     <span className="text-slate-500">Reference</span>
                     <span className="font-mono text-[10px] text-slate-400 truncate max-w-[150px]">{selectedPayment.reference}</span>
@@ -220,7 +273,7 @@ export default function PaymentsPage() {
                   </div>
                 </div>
                 
-                <div className="text-[10px] text-slate-400 italic">Powered by SCMS — Spero Fleet Management</div>
+                <div className="text-[10px] text-slate-400 italic mt-4">{footer}</div>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
