@@ -78,8 +78,11 @@ export const useAuthStore = create<AuthStore>()(
           };
 
           set({ user, isAuthenticated: true, isInitialized: true });
+          
+          // Return immediately to allow navigation
           return true;
         } catch (error) {
+          console.error('Login error:', error);
           return false;
         }
       },

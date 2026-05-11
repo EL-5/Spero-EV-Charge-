@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/auth';
@@ -13,7 +13,7 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const { login } = useAuthStore();
+  const { login, isAuthenticated, isInitialized } = useAuthStore();
   const { data: liveStats } = useDashboardStats();
   const { data: shifts } = useShifts();
   const activeShiftsCount = shifts?.filter((s: any) => s.status === 'active').length || 0;
@@ -25,6 +25,13 @@ export default function LoginPage() {
     { label: 'kWh Sold Today', value: (liveStats?.unitsSoldToday || 0).toFixed(1) },
   ];
   const router = useRouter();
+  
+  // Auto-redirect if already authenticated
+  useEffect(() => {
+    if (isInitialized && isAuthenticated) {
+      router.replace('/dashboard');
+    }
+  }, [isInitialized, isAuthenticated, router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
