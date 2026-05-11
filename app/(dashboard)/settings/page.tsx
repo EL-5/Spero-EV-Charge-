@@ -640,6 +640,16 @@ export default function SettingsPage() {
                   <div className="text-[10px] font-bold text-slate-400 uppercase mb-4 tracking-widest text-center">Live Receipt Preview</div>
                   <div className="bg-white mx-auto w-full max-w-[320px] shadow-xl rounded-sm p-6 text-slate-800 font-mono text-[10px] space-y-4">
                     <div className="text-center space-y-1">
+                      {receipts.show_logo && branding.logo_url && (
+                        <div className="flex justify-center mb-3">
+                          <img 
+                            src={branding.logo_url} 
+                            alt="Preview Logo" 
+                            style={{ width: `${receipts.logo_size}px`, height: 'auto' }} 
+                            className="object-contain contrast-125" 
+                          />
+                        </div>
+                      )}
                       <div className="font-black text-xs uppercase">{receipts.header_title || 'STATION RECEIPT'}</div>
                       <div>Accra, Ghana</div>
                       <div className="pt-2 border-b border-dashed"></div>

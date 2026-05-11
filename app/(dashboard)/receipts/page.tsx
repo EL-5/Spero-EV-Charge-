@@ -269,7 +269,7 @@ export default function ReceiptsPage() {
           /* Optimize Logo for Thermal */
           #printable-receipt img {
             max-width: 40mm;
-            filter: grayscale(100%) contrast(150%);
+            filter: contrast(150%);
             margin-bottom: 2mm;
           }
 

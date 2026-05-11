@@ -40,7 +40,7 @@ export default function SessionsPage() {
   const [completeForm, setCompleteForm] = useState({ units: 0, amount: 0 });
   const [isPaying, setIsPaying] = useState(false);
   const [paymentPhone, setPaymentPhone] = useState('');
-  const [paymentMethod, setPaymentMethod] = useState<'cash' | 'wallet' | 'mtn' | 'telecel' | 'airteltigo'>('mtn');
+  const [paymentMethod, setPaymentMethod] = useState<'cash' | 'wallet' | 'mtn' | 'telecel' | 'airteltigo' | 'hubtel'>('mtn');
   const [paymentStatus, setPaymentStatus] = useState<string | null>(null);
   const [actualAmount, setActualAmount] = useState<number>(0);
 
@@ -805,6 +805,7 @@ export default function SessionsPage() {
                     {[
                       { id: 'cash', label: 'Cash', color: 'bg-emerald-500', icon: DollarSign },
                       { id: 'wallet', label: 'Wallet', color: 'bg-blue-600', icon: Wallet },
+                      { id: 'hubtel', label: 'Hubtel', color: 'bg-teal-600', icon: Smartphone },
                       { id: 'mtn', label: 'MTN MoMo', color: 'bg-yellow-400', icon: Smartphone },
                       { id: 'telecel', label: 'Telecel', color: 'bg-red-600', icon: Smartphone },
                       { id: 'airteltigo', label: 'AirtelTigo', color: 'bg-blue-500', icon: Smartphone },
@@ -833,7 +834,25 @@ export default function SessionsPage() {
                   </div>
                 </div>
 
-                {paymentMethod !== 'cash' && (
+                {paymentMethod === 'hubtel' && (
+                  <div className="p-4 rounded-xl border-2 border-teal-100 bg-teal-50 animate-in zoom-in-95 duration-300">
+                    <div className="flex items-center gap-3 mb-3">
+                      <div className="w-10 h-10 rounded-full bg-teal-600 flex items-center justify-center text-white">
+                        <Smartphone size={20} />
+                      </div>
+                      <div>
+                        <div className="text-[10px] font-bold uppercase text-teal-600 tracking-widest">Hubtel USSD Payment</div>
+                        <div className="text-sm font-bold text-teal-900">Direct Merchant Code</div>
+                      </div>
+                    </div>
+                    <div className="bg-white border-2 border-teal-200 rounded-lg p-4 text-center shadow-sm">
+                      <div className="text-2xl font-black text-teal-900 tracking-widest mb-1">*713*600#</div>
+                      <div className="text-[10px] text-teal-500 font-bold uppercase">Dial this code to pay</div>
+                    </div>
+                  </div>
+                )}
+
+                {!['cash', 'wallet', 'hubtel'].includes(paymentMethod) && (
                   <div className="animate-in fade-in slide-in-from-top-2 duration-300">
                     <label className="form-label">Mobile Money Number</label>
                     <div className="relative">
