@@ -83,6 +83,34 @@ export async function updateDriver(id: string, formData: {
 
 export async function deleteDriver(id: string) {
   try {
+    // 1. Dissociate related records instead of hard deleting them
+    // This resolves foreign key constraints while preserving historical data
+    
+    // Update Vehicles
+    await supabaseAdmin
+      .from('vehicles')
+      .update({ driver_id: null })
+      .eq('driver_id', id);
+
+    // Update Sessions
+    await supabaseAdmin
+      .from('sessions')
+      .update({ driver_id: null })
+      .eq('driver_id', id);
+
+    // Update Payments
+    await supabaseAdmin
+      .from('payments')
+      .update({ driver_id: null })
+      .eq('driver_id', id);
+
+    // Update Wallet Transactions
+    await supabaseAdmin
+      .from('wallet_transactions')
+      .update({ driver_id: null })
+      .eq('driver_id', id);
+
+    // 2. Finally delete the driver
     const { error } = await supabaseAdmin
       .from('drivers')
       .delete()
@@ -91,6 +119,10 @@ export async function deleteDriver(id: string) {
     if (error) throw error;
 
     revalidatePath('/drivers');
+    revalidatePath('/vehicles');
+    revalidatePath('/sessions');
+    revalidatePath('/payments');
+    
     return { success: true };
   } catch (error: any) {
     console.error('Error deleting driver:', error.message);
