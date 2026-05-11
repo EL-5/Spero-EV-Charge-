@@ -233,19 +233,54 @@ export default function ReceiptsPage() {
       {/* Global Print Styles */}
       <style jsx global>{`
         @media print {
+          /* Hide everything except the receipt */
           body * {
             visibility: hidden;
           }
           #printable-receipt, #printable-receipt * {
             visibility: visible;
           }
+
+          /* Reset page layout for thermal rolls */
+          @page {
+            margin: 0;
+            size: auto;
+          }
+
           #printable-receipt {
-            position: absolute;
+            position: fixed;
             left: 0;
             top: 0;
-            width: 100%;
+            width: 80mm; /* Standard thermal width */
+            padding: 5mm;
             margin: 0;
-            padding: 20px;
+            background: white;
+            font-family: 'Courier New', Courier, monospace; /* Use monospaced for alignment */
+            color: black !important;
+            -webkit-print-color-adjust: exact;
+          }
+
+          /* Force black text for thermal high-contrast */
+          #printable-receipt * {
+            color: black !important;
+            border-color: black !important;
+          }
+
+          /* Optimize Logo for Thermal */
+          #printable-receipt img {
+            max-width: 40mm;
+            filter: grayscale(100%) contrast(150%);
+            margin-bottom: 2mm;
+          }
+
+          /* Tighten spacing */
+          .mb-8 { margin-bottom: 4mm !important; }
+          .py-4 { padding-top: 2mm !important; padding-bottom: 2mm !important; }
+          
+          /* Remove shadows and borders that don't print well */
+          .shadow-2xl, .stat-card {
+            box-shadow: none !important;
+            border: none !important;
           }
         }
       `}</style>
