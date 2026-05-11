@@ -4,12 +4,6 @@ const nextConfig: NextConfig = {
   images: {
     unoptimized: true,
   },
-  experimental: {
-    // This helps resolve the workspace root issue
-    turbopack: {
-      root: '.',
-    },
-  },
   async headers() {
     return [
       {
