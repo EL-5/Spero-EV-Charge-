@@ -281,7 +281,7 @@ export async function completeSession(id: string, data: {
     const { error } = await supabaseAdmin
       .from('sessions')
       .update({
-        status: 'completed',
+        status: 'pending_payment',
         units_consumed: data.units_consumed,
         total_amount: data.total_amount,
         end_time: new Date().toISOString(),

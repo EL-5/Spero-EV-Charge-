@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
 import { TopBar } from '@/components/layout/TopBar';
 import { formatCurrency, formatDateTime, getStatusColor, getStatusLabel } from '@/lib/utils';
-import { Search, Plus, Zap, Clock, CheckCircle, XCircle, UserPlus, Car, AlertTriangle, DollarSign, Smartphone, Wallet } from 'lucide-react';
+import { Search, Plus, Zap, Clock, CheckCircle, XCircle, UserPlus, Car, AlertTriangle, DollarSign, Smartphone, Wallet, Trash2 } from 'lucide-react';
 import type { Session } from '@/lib/types';
 import { useSessions, useDrivers, useVehicles, useShifts, usePricing } from '@/hooks/use-database';
 import { useAuthStore } from '@/store/auth';
@@ -641,74 +641,137 @@ export default function SessionsPage() {
         {/* ─── SESSION DETAILS & ACTIONS MODAL ─── */}
         {selected && !showNew && !isCompleting && !isPaying && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.5)' }}>
-            <div className="stat-card max-w-md w-full">
-              <div className="flex items-center justify-between mb-6">
+            <div className="stat-card max-w-lg w-full overflow-hidden">
+              <div className="flex items-center justify-between p-6 pb-2">
                 <div>
-                  <h2 className="font-bold text-lg">Session Details</h2>
-                  <div className="text-xs text-slate-400 font-mono">{(selected as any).receipt_number || selected.receiptNumber}</div>
+                  <h2 className="font-bold text-xl">Session Summary</h2>
+                  <div className="text-xs text-slate-400 font-mono tracking-tight mt-0.5">{(selected as any).receipt_number || selected.receiptNumber}</div>
                 </div>
-                <button onClick={() => setSelected(null)} className="text-slate-400 hover:text-slate-600 text-xl">&times;</button>
+                <button onClick={() => setSelected(null)} className="text-slate-400 hover:text-slate-600 transition-colors">
+                  <XCircle size={24} />
+                </button>
               </div>
               
-              <div className="space-y-4">
-                <div className="p-4 rounded-xl bg-slate-50 border border-slate-100">
-                  <div className="flex justify-between items-center mb-2">
-                    <span className="text-xs text-slate-500 font-bold uppercase tracking-wider">Status</span>
-                    <span className={`badge ${getStatusColor(selected.status)}`}>{getStatusLabel(selected.status)}</span>
+              <div className="p-6 space-y-5">
+                {/* Status Banner */}
+                <div className={`p-4 rounded-xl flex items-center justify-between border ${
+                  selected.status === 'active' ? 'bg-orange-50 border-orange-100' :
+                  selected.status === 'pending_payment' ? 'bg-red-50 border-red-100' :
+                  selected.status === 'completed' ? 'bg-green-50 border-green-100' :
+                  'bg-slate-50 border-slate-100'
+                }`}>
+                  <div className="flex items-center gap-3">
+                    <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
+                      selected.status === 'active' ? 'bg-orange-100 text-orange-600' :
+                      selected.status === 'pending_payment' ? 'bg-red-100 text-red-600' :
+                      'bg-green-100 text-green-600'
+                    }`}>
+                      {selected.status === 'active' ? <Clock size={20} /> : 
+                       selected.status === 'pending_payment' ? <AlertTriangle size={20} /> : <CheckCircle size={20} />}
+                    </div>
+                    <div>
+                      <div className="text-[10px] font-bold uppercase tracking-wider opacity-60">Session Status</div>
+                      <div className="font-bold text-sm capitalize">{getStatusLabel(selected.status)}</div>
+                    </div>
                   </div>
-                  <div className="text-sm">
-                    {selected.status === 'active' && (
-                      <p className="text-slate-600 mb-4">This session is currently charging. You can end it when the driver is done.</p>
-                    )}
-                    {selected.status === 'completed' && (
-                      <p className="text-green-600 font-medium mb-4">This session is finished. Ensure payment is collected.</p>
-                    )}
+                  <span className={`badge ${getStatusColor(selected.status)}`}>{getStatusLabel(selected.status)}</span>
+                </div>
+
+                {/* Data Grid */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <div className="text-[10px] font-bold uppercase text-slate-400">Driver</div>
+                    <div className="font-semibold text-slate-900 flex items-center gap-1.5">
+                      <UserPlus size={14} className="text-slate-400" />
+                      {selected.driverName || 'Walk-in Customer'}
+                    </div>
                   </div>
+                  <div className="space-y-1 text-right">
+                    <div className="text-[10px] font-bold uppercase text-slate-400">Vehicle</div>
+                    <div className="font-semibold text-slate-900 flex items-center justify-end gap-1.5">
+                      {selected.vehiclePlate || 'N/A'}
+                      <Car size={14} className="text-slate-400" />
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <div className="text-[10px] font-bold uppercase text-slate-400">Energy Delivered</div>
+                    <div className="font-black text-blue-600 flex items-center gap-1.5">
+                      <Zap size={14} />
+                      {selected.unitsConsumed ? `${selected.unitsConsumed} ${selected.unitType}` : 'Calculating...'}
+                    </div>
+                  </div>
+                  <div className="space-y-1 text-right">
+                    <div className="text-[10px] font-bold uppercase text-slate-400">Total Bill</div>
+                    <div className="font-black text-slate-900">
+                      {formatCurrency(selected.totalAmount || selected.prepaidAmount || 0)}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Timeline */}
+                <div className="p-4 rounded-xl bg-slate-50 border border-slate-100 space-y-3">
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="text-slate-400 font-medium">Started At</span>
+                    <span className="text-slate-700 font-bold">{formatDateTime(selected.startTime || selected.createdAt)}</span>
+                  </div>
+                  {selected.endTime && (
+                    <div className="flex justify-between items-center text-xs">
+                      <span className="text-slate-400 font-medium">Finished At</span>
+                      <span className="text-slate-700 font-bold">{formatDateTime(selected.endTime)}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="text-slate-400 font-medium">Pricing Tier</span>
+                    <span className="text-slate-700 font-bold">GHS {selected.rateAtTime} / {selected.unitType}</span>
+                  </div>
+                </div>
+
+                {/* Actions */}
+                <div className="flex flex-col gap-2 pt-2">
+                  {selected.status === 'active' && (
+                    <button onClick={handleOpenComplete} className="btn btn-primary w-full py-4 gap-2 text-base shadow-lg shadow-blue-200">
+                      <Zap size={18} fill="currentColor" /> Finish Charging Session
+                    </button>
+                  )}
                   
-                  <div className="flex gap-2">
-                    {selected.status === 'active' && (
-                      <button onClick={handleOpenComplete} className="btn btn-primary flex-1 gap-2"><CheckCircle size={16}/> Complete Session</button>
-                    )}
-                    {selected.status === 'completed' && (
-                      <button onClick={() => { setIsPaying(true); setPaymentPhone(''); }} className="btn btn-primary flex-1 gap-2"><Zap size={16}/> Make Payment</button>
-                    )}
-                    {selected.status === 'active' && (
-                      <button 
-                        onClick={() => {
-                          if (confirm('Are you sure you want to cancel this active session?')) {
-                            handleUpdateStatus(selected.id, 'cancelled').catch(err => console.error("Cancellation error:", err));
-                          }
-                        }} 
-                        className="btn bg-red-50 text-red-600 border-red-100 flex-1 gap-2"
-                        disabled={loading}
-                      >
-                        <XCircle size={16}/> {loading ? '...' : 'Cancel'}
-                      </button>
-                    )}
-                  </div>
-                  
+                  {selected.status === 'pending_payment' && (
+                    <button onClick={() => { setIsPaying(true); setPaymentPhone(''); }} className="btn btn-primary w-full py-4 gap-2 text-base shadow-lg shadow-blue-200">
+                      <DollarSign size={18} /> Record & Collect Payment
+                    </button>
+                  )}
+
+                  {selected.status === 'completed' && (
+                    <div className="p-3 rounded-xl bg-green-50 border border-green-100 text-green-700 text-center font-bold text-sm flex items-center justify-center gap-2">
+                      <CheckCircle size={16} /> TRANSACTION FULLY SETTLED
+                    </div>
+                  )}
+
+                  {selected.status === 'active' && (
+                    <button 
+                      onClick={() => {
+                        if (confirm('CANCEL SESSION: This will stop the session without recording usage. Proceed?')) {
+                          handleUpdateStatus(selected.id, 'cancelled');
+                        }
+                      }} 
+                      className="btn bg-white border border-red-200 text-red-500 hover:bg-red-50 w-full py-3 gap-2"
+                      disabled={loading}
+                    >
+                      <XCircle size={16}/> Cancel Active Session
+                    </button>
+                  )}
+
                   {user?.role === 'super_admin' && (
-                    <div className="pt-2 border-t border-slate-100 mt-2">
+                    <div className="pt-4 mt-2 border-t border-slate-100">
                       <button 
                         onClick={() => handleDelete(selected.id)} 
                         className="w-full btn bg-red-600 text-white hover:bg-red-700 flex items-center justify-center gap-2 py-3"
                         disabled={loading}
                       >
-                        <XCircle size={16}/> {loading ? 'Deleting...' : 'Permanent Delete Session'}
+                        <Trash2 size={16}/> {loading ? 'Deleting...' : 'Permanent Data Pruning'}
                       </button>
+                      <p className="text-[9px] text-center text-slate-400 mt-2 font-medium">SUPER ADMIN ONLY: PERMANENTLY REMOVE RECORDS</p>
                     </div>
                   )}
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="p-3 rounded-lg bg-slate-50">
-                    <div className="text-[10px] uppercase font-bold text-slate-400">Rate</div>
-                    <div className="font-semibold text-slate-700">GHS {selected.rateAtTime} / {selected.unitType}</div>
-                  </div>
-                  <div className="p-3 rounded-lg bg-slate-50">
-                    <div className="text-[10px] uppercase font-bold text-slate-400">Mode</div>
-                    <div className="font-semibold text-slate-700 capitalize">{selected.mode}</div>
-                  </div>
                 </div>
               </div>
             </div>
