@@ -11,3 +11,6 @@ SET
   vehicle_details = v.brand || ' ' || v.model
 FROM drivers d, vehicles v
 WHERE s.driver_id = d.id AND s.vehicle_id = v.id;
+
+-- Add pricing_id to sessions to support multi-tier billing
+ALTER TABLE sessions ADD COLUMN IF NOT EXISTS pricing_id UUID REFERENCES pricing(id);
