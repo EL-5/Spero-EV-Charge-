@@ -108,9 +108,9 @@ export const mockShifts: Shift[] = [
 ];
 
 export const mockPricingHistory: PricingConfig[] = [
-  { id: 'pr1', unitType: 'kwh', pricePerUnit: 5.50, currency: 'GHS', effectiveFrom: '2025-01-01', createdBy: 'Kwame Mensah', isActive: true },
-  { id: 'pr2', unitType: 'kwh', pricePerUnit: 5.20, currency: 'GHS', effectiveFrom: '2024-06-01', createdBy: 'Kwame Mensah', isActive: false },
-  { id: 'pr3', unitType: 'minutes', pricePerUnit: 1.20, currency: 'GHS', effectiveFrom: '2025-01-01', createdBy: 'Kwame Mensah', isActive: true },
+  { id: 'pr1', unitType: 'kwh', unitQuantity: 1, pricePerUnit: 5.50, currency: 'GHS', effectiveFrom: '2025-01-01', createdBy: 'Kwame Mensah', isActive: true },
+  { id: 'pr2', unitType: 'kwh', unitQuantity: 1, pricePerUnit: 5.20, currency: 'GHS', effectiveFrom: '2024-06-01', createdBy: 'Kwame Mensah', isActive: false },
+  { id: 'pr3', unitType: 'minutes', unitQuantity: 1, pricePerUnit: 1.20, currency: 'GHS', effectiveFrom: '2025-01-01', createdBy: 'Kwame Mensah', isActive: true },
 ];
 
 export const mockAuditLogs: AuditLog[] = [
@@ -135,6 +135,8 @@ export const mockDashboardStats: DashboardStats = {
   hubtelRevenue: 4890.25,
   paystackRevenue: 4500.50,
   activeShifts: 1,
+  totalDrivers: 45,
+  totalVehicles: 42,
 };
 
 export const mockRevenueData = [
