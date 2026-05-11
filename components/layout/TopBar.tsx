@@ -1,5 +1,5 @@
 'use client';
-import { Bell, Moon, Sun, Search, Wifi, WifiOff, Menu } from 'lucide-react';
+import { Bell, Moon, Sun, Search, Wifi, WifiOff, Menu, LogOut } from 'lucide-react';
 import { useUIStore } from '@/store/ui';
 import { useAuthStore } from '@/store/auth';
 import { getRoleLabel, formatDateTime } from '@/lib/utils';
@@ -14,7 +14,7 @@ interface TopBarProps {
 
 export function TopBar({ title, subtitle }: TopBarProps) {
   const { darkMode, toggleDarkMode, toggleSidebar } = useUIStore();
-  const { user } = useAuthStore();
+  const { user, logout } = useAuthStore();
   const { data: settings } = useSettings();
   const [showNotifications, setShowNotifications] = useState(false);
   const { data: notifications } = useNotifications(user?.id);
@@ -160,6 +160,14 @@ export function TopBar({ title, subtitle }: TopBarProps) {
             <div className="text-sm font-medium leading-tight" style={{ color: 'var(--foreground)' }}>{user?.name}</div>
             <div className="text-xs" style={{ color: 'var(--muted-foreground)' }}>{user ? getRoleLabel(user.role) : ''}</div>
           </div>
+          {/* Mobile Logout */}
+          <button
+            onClick={logout}
+            className="p-2 ml-1 rounded-lg text-red-500 hover:bg-red-50 transition-colors md:ml-2"
+            title="Logout"
+          >
+            <LogOut size={17} />
+          </button>
         </div>
       </div>
     </header>
