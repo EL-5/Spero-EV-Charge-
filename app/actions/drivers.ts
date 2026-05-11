@@ -83,45 +83,59 @@ export async function updateDriver(id: string, formData: {
 
 export async function deleteDriver(id: string) {
   try {
-    // 1. Dissociate related records instead of hard deleting them
-    // This resolves foreign key constraints while preserving historical data
+    // 1. Attempt to dissociate related records
+    // This preserves history if the schema allows NULLs
     
-    // Update Vehicles
-    await supabaseAdmin
+    // Vehicles
+    const { error: vError } = await supabaseAdmin
       .from('vehicles')
       .update({ driver_id: null })
       .eq('driver_id', id);
+    if (vError) {
+      // If we can't set to NULL, we must delete to satisfy the clean start requirement
+      await supabaseAdmin.from('vehicles').delete().eq('driver_id', id);
+    }
 
-    // Update Sessions
-    await supabaseAdmin
+    // Sessions
+    const { error: sError } = await supabaseAdmin
       .from('sessions')
       .update({ driver_id: null })
       .eq('driver_id', id);
+    if (sError) {
+      await supabaseAdmin.from('sessions').delete().eq('driver_id', id);
+    }
 
-    // Update Payments
-    await supabaseAdmin
+    // Payments
+    const { error: pError } = await supabaseAdmin
       .from('payments')
       .update({ driver_id: null })
       .eq('driver_id', id);
+    if (pError) {
+      await supabaseAdmin.from('payments').delete().eq('driver_id', id);
+    }
 
-    // Update Wallet Transactions
-    await supabaseAdmin
+    // Wallet Transactions
+    const { error: wtError } = await supabaseAdmin
       .from('wallet_transactions')
       .update({ driver_id: null })
       .eq('driver_id', id);
+    if (wtError) {
+      await supabaseAdmin.from('wallet_transactions').delete().eq('driver_id', id);
+    }
 
     // 2. Finally delete the driver
-    const { error } = await supabaseAdmin
+    const { error: finalError } = await supabaseAdmin
       .from('drivers')
       .delete()
       .eq('id', id);
 
-    if (error) throw error;
+    if (finalError) throw finalError;
 
     revalidatePath('/drivers');
     revalidatePath('/vehicles');
     revalidatePath('/sessions');
     revalidatePath('/payments');
+    revalidatePath('/wallets');
     
     return { success: true };
   } catch (error: any) {
