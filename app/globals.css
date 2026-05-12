@@ -217,25 +217,48 @@ tbody tr:hover td { background: var(--muted); }
 
 /* --- Print Styles --- */
 @media print {
-  body * {
-    visibility: hidden;
+  @page {
+    margin: 0;
+    size: auto;
+  }
+  body {
+    background: white !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+  /* Hide everything by default */
+  body > * {
+    display: none !important;
+  }
+  /* Show only the modal and its printable content */
+  body > .fixed, /* Usually the modal container */
+  body > div[role="dialog"] {
+    display: block !important;
+    background: transparent !important;
+  }
+  /* Hide all modal contents EXCEPT the receipt */
+  .fixed * {
+    visibility: hidden !important;
   }
   .print-visible,
   .print-visible * {
-    visibility: visible;
+    visibility: visible !important;
+    display: block !important;
   }
   .print-visible {
-    position: absolute;
-    left: 0;
-    top: 0;
-    width: 100%;
-    margin: 0;
-    padding: 0;
+    position: fixed !important;
+    top: 0 !important;
+    left: 50% !important;
+    transform: translateX(-50%) !important;
+    width: 340px !important;
+    margin: 0 !important;
+    padding: 20px !important;
+    background: white !important;
     box-shadow: none !important;
     border: none !important;
   }
   /* Hide buttons in print */
-  .btn, button {
+  .btn, button, .no-print {
     display: none !important;
   }
 }

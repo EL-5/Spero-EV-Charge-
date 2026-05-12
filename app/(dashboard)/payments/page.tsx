@@ -291,7 +291,7 @@ export default function PaymentsPage() {
                 </button>
               </div>
 
-              <div id="printable-receipt-payment" className="p-6" style={{ color: '#1e293b', backgroundColor: '#ffffff' }}>
+              <div id="printable-receipt-payment" className="p-6 print-visible" style={{ color: '#1e293b', backgroundColor: '#ffffff' }}>
                 <div className="text-center mb-6">
                   {config.showLogo && branding.logo_url && (
                     <div className="flex justify-center mb-3">

@@ -216,7 +216,7 @@ export default function ReceiptsPage() {
             </div>
 
             {/* Receipt Content (printable area) */}
-            <div id="printable-receipt" className="p-6" style={{ color: '#1e293b', backgroundColor: '#ffffff' }}>
+            <div id="printable-receipt" className="p-6 print-visible" style={{ color: '#1e293b', backgroundColor: '#ffffff' }}>
               <div className="text-center mb-6">
                 {config.showLogo !== false && (
                   <div className="flex justify-center mb-3">
