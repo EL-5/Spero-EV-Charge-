@@ -2,7 +2,7 @@
 import { useState } from 'react';
 import { TopBar } from '@/components/layout/TopBar';
 import { formatDate, formatDateTime, getRoleLabel, getRoleColor } from '@/lib/utils';
-import { Search, Plus, Shield, UserCog } from 'lucide-react';
+import { Search, Plus, Shield, UserCog, Eye, EyeOff } from 'lucide-react';
 
 import { createUser, toggleUserStatus, updateUser } from '@/app/actions/users';
 
@@ -24,6 +24,7 @@ export default function UsersPage() {
     role: 'attendant',
     password: '',
   });
+  const [showPassword, setShowPassword] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
   const [successMessage, setSuccessMessage] = useState({ title: '', message: '' });
 
@@ -318,18 +319,32 @@ export default function UsersPage() {
                     <option value="super_admin">Super Admin</option>
                   </select>
                 </div>
-                {!editingUser && (
-                  <div>
-                    <label className="form-label">Temporary Password *</label>
+                <div>
+                  <label className="form-label">
+                    {editingUser ? 'Reset Password (Optional)' : 'Temporary Password *'}
+                  </label>
+                  <div className="relative">
                     <input 
-                      type="password" 
-                      className="form-input" 
-                      placeholder="Min 8 characters" 
+                      type={showPassword ? 'text' : 'password'} 
+                      className="form-input pr-10" 
+                      placeholder={editingUser ? 'Leave blank to keep current' : 'Min 8 characters'} 
                       value={formData.password}
                       onChange={e => setFormData({ ...formData, password: e.target.value })}
                     />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                    >
+                      {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
                   </div>
-                )}
+                  {editingUser && (
+                    <p className="text-[10px] mt-1 text-slate-500 italic">
+                      Entering a new password will immediately override the user's current credentials.
+                    </p>
+                  )}
+                </div>
                 <div className="flex gap-3">
                   <button 
                     onClick={() => {

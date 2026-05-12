@@ -67,9 +67,28 @@ export async function updateUser(userId: string, data: {
   email: string;
   phone: string;
   role: string;
+  password?: string;
 }) {
   try {
-    const { error } = await supabaseAdmin
+    // 1. Update Auth data (Email, Password, Metadata)
+    const authUpdate: any = {
+      email: data.email,
+      user_metadata: { name: data.name, role: data.role }
+    };
+
+    if (data.password && data.password.trim() !== '') {
+      authUpdate.password = data.password;
+    }
+
+    const { error: authError } = await supabaseAdmin.auth.admin.updateUserById(
+      userId,
+      authUpdate
+    );
+
+    if (authError) throw authError;
+
+    // 2. Update Profile data
+    const { error: profileError } = await supabaseAdmin
       .from('profiles')
       .update({
         name: data.name,
@@ -79,7 +98,7 @@ export async function updateUser(userId: string, data: {
       })
       .eq('id', userId);
 
-    if (error) throw error;
+    if (profileError) throw profileError;
 
     revalidatePath('/users');
     return { success: true };
