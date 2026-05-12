@@ -81,15 +81,25 @@ export default function ReportsPage() {
 
     if (rows.length === 0) return;
 
-    const csvContent = "data:text/csv;charset=utf-8," + 
-      [headers, ...rows].map(e => e.map(val => `"${val}"`).join(",")).join("\n");
+    // Create CSV content with proper escaping
+    const csvString = [headers, ...rows]
+      .map(row => row.map(val => {
+        const stringVal = String(val ?? '');
+        // Escape quotes and wrap in quotes
+        return `"${stringVal.replace(/"/g, '""')}"`;
+      }).join(","))
+      .join("\n");
+    
+    const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
     
     const link = document.createElement("a");
-    link.setAttribute("href", encodeURI(csvContent));
+    link.setAttribute("href", url);
     link.setAttribute("download", filename);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    URL.revokeObjectURL(url); // Clean up
   };
 
   const exportPDF = () => {
