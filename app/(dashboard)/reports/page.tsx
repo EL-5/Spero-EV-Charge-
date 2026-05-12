@@ -299,10 +299,17 @@ export default function ReportsPage() {
                         });
                         return Object.values(attendants).map((a: any) => (
                           <tr key={a.name}>
-                            <td className="font-medium">{a.name}</td>
-                            <td>{a.count}</td>
-                            <td className="font-bold">{formatCurrency(a.revenue)}</td>
-                            <td><span className="badge bg-green-100 text-green-700">Balanced</span></td>
+                            <td className="font-medium" style={{ color: '#1e293b' }}>{a.name}</td>
+                            <td style={{ color: '#475569' }}>{a.count}</td>
+                            <td className="font-bold" style={{ color: '#0f172a' }}>{formatCurrency(a.revenue)}</td>
+                            <td>
+                              <span 
+                                className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider"
+                                style={{ backgroundColor: '#dcfce7', color: '#15803d' }}
+                              >
+                                Balanced
+                              </span>
+                            </td>
                           </tr>
                         ));
                       })()}
@@ -321,10 +328,17 @@ export default function ReportsPage() {
                     <tbody>
                       {reportData.map((s: any) => (
                         <tr key={s.id}>
-                          <td><span className="badge bg-blue-100 text-blue-700">Session Completed</span></td>
-                          <td>{s.attendantName}</td>
-                          <td className="text-xs">Receipt {s.receiptNumber} - {formatCurrency(s.totalAmount)}</td>
-                          <td className="text-xs">{formatDate(s.createdAt)}</td>
+                          <td>
+                            <span 
+                              className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider"
+                              style={{ backgroundColor: '#dbeafe', color: '#1d4ed8' }}
+                            >
+                              Session Completed
+                            </span>
+                          </td>
+                          <td style={{ color: '#1e293b' }}>{s.attendantName}</td>
+                          <td className="text-xs" style={{ color: '#475569' }}>Receipt {s.receiptNumber} - {formatCurrency(s.totalAmount)}</td>
+                          <td className="text-xs" style={{ color: '#64748b' }}>{formatDate(s.createdAt)}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -343,11 +357,11 @@ export default function ReportsPage() {
                     <tbody>
                       {reportData.map((s: any) => (
                         <tr key={s.id}>
-                          <td className="font-mono text-xs">{s.receiptNumber}</td>
-                          <td>{s.driverName}</td>
-                          <td>{s.unitsConsumed ? `${s.unitsConsumed.toFixed(1)} kWh` : '—'}</td>
-                          <td className="font-medium">{formatCurrency(s.totalAmount)}</td>
-                          <td className="text-xs" style={{ color: 'var(--muted-foreground)' }}>{formatDate(s.createdAt)}</td>
+                          <td className="font-mono text-xs" style={{ color: '#2563eb' }}>{s.receiptNumber}</td>
+                          <td style={{ color: '#1e293b' }}>{s.driverName}</td>
+                          <td style={{ color: '#475569' }}>{s.unitsConsumed ? `${s.unitsConsumed.toFixed(1)} kWh` : '—'}</td>
+                          <td className="font-medium" style={{ color: '#0f172a' }}>{formatCurrency(s.totalAmount)}</td>
+                          <td className="text-xs" style={{ color: '#64748b' }}>{formatDate(s.createdAt)}</td>
                         </tr>
                       ))}
                     </tbody>
