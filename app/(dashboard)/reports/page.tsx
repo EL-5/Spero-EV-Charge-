@@ -229,13 +229,17 @@ export default function ReportsPage() {
                 </div>
               </div>
               <div className="flex gap-2 mt-4">
-                <button onClick={exportCSV} className="btn btn-primary gap-2" disabled={reportData.length === 0}>
+                <button 
+                  onClick={exportCSV} 
+                  className="btn btn-primary gap-2" 
+                  disabled={(selectedReport === 'shift' ? filteredPayments.length : reportData.length) === 0}
+                >
                   <Download size={15} /> Export CSV
                 </button>
                 <button 
                   onClick={exportPDF} 
                   className="btn btn-secondary gap-2" 
-                  disabled={reportData.length === 0 || isGeneratingPDF}
+                  disabled={(selectedReport === 'shift' ? filteredPayments.length : reportData.length) === 0 || isGeneratingPDF}
                 >
                   {isGeneratingPDF ? (
                     <Loader2 size={15} className="animate-spin" />
