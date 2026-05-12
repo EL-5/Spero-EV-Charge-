@@ -223,27 +223,14 @@ tbody tr:hover td { background: var(--muted); }
   }
   body {
     background: white !important;
+    visibility: hidden !important;
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
   }
-  /* Hide everything by default */
-  body > * {
-    display: none !important;
-  }
-  /* Show only the modal and its printable content */
-  body > .fixed, /* Usually the modal container */
-  body > div[role="dialog"] {
-    display: block !important;
-    background: transparent !important;
-  }
-  /* Hide all modal contents EXCEPT the receipt */
-  .fixed * {
-    visibility: hidden !important;
-  }
+  /* The receipt content must be visible */
   .print-visible,
   .print-visible * {
     visibility: visible !important;
-    display: block !important;
   }
   .print-visible {
     position: fixed !important;
@@ -251,14 +238,21 @@ tbody tr:hover td { background: var(--muted); }
     left: 50% !important;
     transform: translateX(-50%) !important;
     width: 340px !important;
+    display: block !important;
     margin: 0 !important;
     padding: 20px !important;
     background: white !important;
     box-shadow: none !important;
     border: none !important;
   }
-  /* Hide buttons in print */
-  .btn, button, .no-print {
+  /* Force modal containers to be layout-active but visually hidden except for the receipt */
+  .fixed, div[role="dialog"] {
+    visibility: hidden !important;
+    display: block !important;
+    background: transparent !important;
+  }
+  /* Hide specific UI elements that shouldn't take up space */
+  .btn, button, .no-print, nav, aside, header {
     display: none !important;
   }
 }
