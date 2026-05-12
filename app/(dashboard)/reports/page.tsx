@@ -2,8 +2,11 @@
 import { useState } from 'react';
 import { TopBar } from '@/components/layout/TopBar';
 import { formatCurrency, formatDate } from '@/lib/utils';
-import { FileText, Download, Filter, Calendar, TrendingUp, Zap, DollarSign } from 'lucide-react';
+import { FileText, Download, Filter, Calendar, TrendingUp, Zap, DollarSign, Loader2 } from 'lucide-react';
 import { useSessions, useDashboardStats, usePayments } from '@/hooks/use-database';
+import html2canvas from 'html2canvas';
+import jsPDF from 'jspdf';
+import { toast } from 'sonner';
 
 const reportTypes = [
   { id: 'daily', label: 'Daily Revenue Report', icon: DollarSign, desc: 'Revenue breakdown for a specific day' },
@@ -21,6 +24,7 @@ export default function ReportsPage() {
   const [selectedReport, setSelectedReport] = useState('daily');
   const [dateFrom, setDateFrom] = useState(new Date(Date.now() - 7 * 86400000).toISOString().split('T')[0]);
   const [dateTo, setDateTo] = useState(new Date().toISOString().split('T')[0]);
+  const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
 
   const stats = liveStats || { revenueToday: 0, totalSessions: 0 };
   const payments = allPayments || [];
@@ -102,8 +106,61 @@ export default function ReportsPage() {
     URL.revokeObjectURL(url); // Clean up
   };
 
-  const exportPDF = () => {
-    window.print();
+  const exportPDF = async () => {
+    const element = document.getElementById('report-preview-content');
+    if (!element) {
+      toast.error('Report content not found');
+      return;
+    }
+
+    try {
+      setIsGeneratingPDF(true);
+      const toastId = toast.loading('Generating professional report...', { id: 'report-pdf' });
+      
+      // Ensure all images/styles are painted
+      await new Promise(resolve => setTimeout(resolve, 200));
+
+      const canvas = await html2canvas(element, {
+        scale: 2,
+        useCORS: true,
+        logging: false,
+        backgroundColor: '#ffffff',
+        windowWidth: element.scrollWidth,
+        windowHeight: element.scrollHeight
+      });
+      
+      const imgData = canvas.toDataURL('image/jpeg', 0.95);
+      const imgProps = { width: canvas.width, height: canvas.height };
+      
+      const pdf = new jsPDF({
+        orientation: imgProps.width > imgProps.height ? 'l' : 'p',
+        unit: 'mm',
+        format: 'a4'
+      });
+
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
+      
+      // If report is multiple pages, jsPDF handles it better with addImage but we'll stick to a single long page for professional summary
+      // or standard A4 if it fits. For a summary, a single continuous page is often cleaner.
+      const finalPdf = new jsPDF({
+        orientation: pdfWidth > pdfHeight ? 'l' : 'p',
+        unit: 'mm',
+        format: [pdfWidth, pdfHeight + 10] // Dynamic height
+      });
+
+      finalPdf.addImage(imgData, 'JPEG', 0, 5, pdfWidth, pdfHeight);
+      
+      const filename = `SCMS_${selectedReport}_Report_${dateFrom}_to_${dateTo}.pdf`;
+      finalPdf.save(filename);
+      
+      toast.success('Report downloaded successfully!', { id: 'report-pdf' });
+    } catch (error) {
+      console.error('PDF Generation Error:', error);
+      toast.error('Failed to generate professional PDF', { id: 'report-pdf' });
+    } finally {
+      setIsGeneratingPDF(false);
+    }
   };
 
   return (
@@ -175,14 +232,23 @@ export default function ReportsPage() {
                 <button onClick={exportCSV} className="btn btn-primary gap-2" disabled={reportData.length === 0}>
                   <Download size={15} /> Export CSV
                 </button>
-                <button onClick={exportPDF} className="btn btn-secondary gap-2" disabled={reportData.length === 0}>
-                  <Download size={15} /> Export PDF
+                <button 
+                  onClick={exportPDF} 
+                  className="btn btn-secondary gap-2" 
+                  disabled={reportData.length === 0 || isGeneratingPDF}
+                >
+                  {isGeneratingPDF ? (
+                    <Loader2 size={15} className="animate-spin" />
+                  ) : (
+                    <FileText size={15} />
+                  )}
+                  {isGeneratingPDF ? 'Generating...' : 'Export PDF'}
                 </button>
               </div>
             </div>
 
             {/* Report preview */}
-            <div className="stat-card">
+            <div id="report-preview-content" className="stat-card print-visible">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="font-semibold" style={{ color: 'var(--foreground)' }}>Report Preview</h3>
                 <span className="text-xs px-2 py-1 rounded" style={{ background: 'var(--muted)', color: 'var(--muted-foreground)' }}>
