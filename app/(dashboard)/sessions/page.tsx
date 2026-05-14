@@ -7,7 +7,7 @@ import { Search, Plus, Zap, Clock, CheckCircle, XCircle, UserPlus, Car, AlertTri
 import type { Session } from '@/lib/types';
 import { useSessions, useDrivers, useVehicles, useShifts, usePricing } from '@/hooks/use-database';
 import { useAuthStore } from '@/store/auth';
-import { startSession, updateSessionStatus, completeSession, processPayment, initiateHubtelPayment, deleteSession } from '@/app/actions/sessions';
+import { startSession, updateSessionStatus, completeSession, processPayment, initiateHubtelPayment, verifyHubtelPayment, deleteSession } from '@/app/actions/sessions';
 import { addDriver } from '@/app/actions/drivers';
 import { addVehicle } from '@/app/actions/vehicles';
 import html2canvas from 'html2canvas';
@@ -266,6 +266,20 @@ export default function SessionsPage() {
     }
   };
   
+  const handleVerifyPayment = async () => {
+    if (!completedPayment?.reference) return;
+    setLoading(true);
+    const toastId = toast.loading('Verifying payment status...', { id: 'hubtel-verify' });
+    const res = await verifyHubtelPayment(completedPayment.reference);
+    setLoading(false);
+    if (res.success) {
+      toast.success('Payment Verified Successfully!', { id: 'hubtel-verify' });
+      setPaymentStatus('Verified');
+    } else {
+      toast.error(res.message || 'Payment not yet confirmed.', { id: 'hubtel-verify' });
+    }
+  };
+
   const handleDelete = async (id: string) => {
     if (!user || user.role !== 'super_admin') return;
     if (!window.confirm('PERMANENT DELETE: Are you sure you want to delete this session and all its records? This cannot be undone.')) return;
@@ -1070,18 +1084,29 @@ export default function SessionsPage() {
                 </div>
               </div>
 
-              <div className="p-4 bg-slate-50 flex gap-2 border-t border-slate-100">
+              <div className="p-4 bg-slate-50 flex flex-col gap-2 border-t border-slate-100">
+                <div className="flex gap-2">
+                  {['mtn', 'telecel', 'airteltigo'].includes(completedPayment.method) && (
+                    <button 
+                      onClick={handleVerifyPayment}
+                      className="flex-1 py-3 bg-emerald-600 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 hover:bg-emerald-700 shadow-lg shadow-emerald-200 transition-all active:scale-95"
+                      disabled={loading}
+                    >
+                      <CheckCircle size={14} /> {loading ? 'Verifying...' : 'Verify Payment'}
+                    </button>
+                  )}
+                  <button 
+                    onClick={() => handleShareWhatsApp(completedPayment)}
+                    className="flex-1 py-3 bg-blue-600 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 hover:bg-blue-700 shadow-lg shadow-blue-200 transition-all active:scale-95"
+                  >
+                    <Smartphone size={14} /> Send to WhatsApp
+                  </button>
+                </div>
                 <button 
-                  onClick={() => { setShowSuccess(false); setSelected(null); }}
-                  className="flex-1 py-3 text-xs font-bold text-slate-500 hover:bg-slate-100 rounded-xl transition-colors"
+                  onClick={() => { setShowSuccess(false); setSelected(null); setCompletedPayment(null); }}
+                  className="w-full py-2 text-xs font-bold text-slate-400 hover:text-slate-600 transition-colors"
                 >
-                  Done
-                </button>
-                <button 
-                  onClick={() => handleShareWhatsApp(completedPayment)}
-                  className="flex-[2] py-3 bg-blue-600 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 hover:bg-blue-700 shadow-lg shadow-blue-200 transition-all active:scale-95"
-                >
-                  <Smartphone size={14} /> Send to WhatsApp
+                  Close & Continue
                 </button>
               </div>
             </div>

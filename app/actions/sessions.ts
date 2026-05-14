@@ -3,7 +3,7 @@
 import { supabaseAdmin } from '@/lib/supabase-server';
 import { revalidatePath } from 'next/cache';
 import type { ChargingMode, UnitType } from '@/lib/types';
-import { initiateHubtelCharge as hubtelCharge } from '@/lib/hubtel';
+import { initiateHubtelCharge as hubtelCharge, checkHubtelStatus } from '@/lib/hubtel';
 
 export async function initiateHubtelPayment(data: {
   sessionId: string;
@@ -39,6 +39,27 @@ export async function initiateHubtelPayment(data: {
     return { success: false, error: result.message || 'Payment initiation failed' };
   } catch (error: any) {
     console.error('[HUBTEL] Server Error:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+export async function verifyHubtelPayment(clientReference: string) {
+  try {
+    const result = await checkHubtelStatus(clientReference);
+    console.log('[HUBTEL] Status Check:', result);
+    
+    // Hubtel returns a status field like 'Success', 'Failed', 'Pending'
+    if (result.status === 'Success' || (result.data && result.data[0]?.status === 'Success')) {
+      return { success: true, status: 'success', message: 'Payment confirmed!' };
+    }
+    
+    return { 
+      success: false, 
+      status: result.status || 'pending', 
+      message: result.message || 'Payment still pending or failed' 
+    };
+  } catch (error: any) {
+    console.error('[HUBTEL] Verify Error:', error);
     return { success: false, error: error.message };
   }
 }
