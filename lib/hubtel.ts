@@ -9,7 +9,10 @@ export async function initiateHubtelCharge(data: {
   const clientSecret = process.env.HUBTEL_CLIENT_SECRET;
 
   if (!clientId || !clientSecret) {
-    throw new Error('Hubtel credentials are not configured in .env.local');
+    const missing = [];
+    if (!clientId) missing.push('HUBTEL_CLIENT_ID');
+    if (!clientSecret) missing.push('HUBTEL_CLIENT_SECRET');
+    throw new Error(`Hubtel configuration error: Missing ${missing.join(' and ')} in .env.local`);
   }
 
   // Map providers to Hubtel channel codes
@@ -59,7 +62,10 @@ export async function checkHubtelStatus(clientReference: string) {
   const clientSecret = process.env.HUBTEL_CLIENT_SECRET;
 
   if (!clientId || !clientSecret) {
-    throw new Error('Hubtel credentials are not configured in .env.local');
+    const missing = [];
+    if (!clientId) missing.push('HUBTEL_CLIENT_ID');
+    if (!clientSecret) missing.push('HUBTEL_CLIENT_SECRET');
+    throw new Error(`Hubtel configuration error: Missing ${missing.join(' and ')} in .env.local`);
   }
 
   const auth = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
