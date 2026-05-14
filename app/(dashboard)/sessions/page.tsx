@@ -10,6 +10,8 @@ import { useAuthStore } from '@/store/auth';
 import { startSession, updateSessionStatus, completeSession, processPayment, initiateHubtelPayment, deleteSession } from '@/app/actions/sessions';
 import { addDriver } from '@/app/actions/drivers';
 import { addVehicle } from '@/app/actions/vehicles';
+import html2canvas from 'html2canvas';
+import jsPDF from 'jspdf';
 
 // Sub-step inside the Start Session modal
 type ModalStep = 'session' | 'register_new';
@@ -47,6 +49,8 @@ export default function SessionsPage() {
   const [paymentMethod, setPaymentMethod] = useState<'cash' | 'wallet' | 'mtn' | 'telecel' | 'airteltigo' | 'hubtel'>('mtn');
   const [paymentStatus, setPaymentStatus] = useState<string | null>(null);
   const [actualAmount, setActualAmount] = useState<number>(0);
+  const [showSuccess, setShowSuccess] = useState(false);
+  const [completedPayment, setCompletedPayment] = useState<any>(null);
 
   const [newMode, setNewMode] = useState<'prepaid' | 'postpaid'>('postpaid');
   const [formData, setFormData] = useState({
@@ -201,11 +205,64 @@ export default function SessionsPage() {
     
     if (res.success) {
       toast.success(`Payment processed via ${paymentMethod.toUpperCase()}`);
+      
+      // Prepare success data for immediate sharing
+      setCompletedPayment({
+        ...selected,
+        amount: actualAmount,
+        method: paymentMethod,
+        reference: reference,
+        createdAt: new Date().toISOString(),
+        receiptNumber: selected.receiptNumber || (selected as any).receipt_number,
+      });
+      
       setIsPaying(false);
-      setSelected(null);
+      setShowSuccess(true);
+      // We don't null selected yet, success modal needs it
       await refetchSessions();
     } else {
       toast.error('Payment recording failed: ' + res.error);
+    }
+  };
+
+  const generatePDFBlob = async (payment: any) => {
+    const element = document.getElementById('printable-receipt-success');
+    if (!element) return null;
+    try {
+      await new Promise(resolve => setTimeout(resolve, 150));
+      const canvas = await html2canvas(element, { scale: 3, useCORS: true, backgroundColor: '#ffffff' });
+      const imgData = canvas.toDataURL('image/jpeg', 1.0);
+      const pdfWidth = 80;
+      const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+      const pdf = new jsPDF({ unit: 'mm', format: [pdfWidth, pdfHeight] });
+      pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
+      return { blob: pdf.output('blob'), filename: `Receipt-${payment.receiptNumber}.pdf`, pdfObj: pdf };
+    } catch (error) {
+      console.error('PDF Generation Error:', error);
+      return null;
+    }
+  };
+
+  const handleShareWhatsApp = async (payment: any) => {
+    toast.loading('Preparing receipt...', { id: 'pdf-share-session' });
+    const result = await generatePDFBlob(payment);
+    if (!result) {
+      toast.error('Failed to generate PDF', { id: 'pdf-share-session' });
+      return;
+    }
+    const file = new File([result.blob], result.filename, { type: 'application/pdf' });
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      try {
+        await navigator.share({
+          files: [file],
+          title: `Receipt ${payment.receiptNumber}`,
+          text: `Hello ${payment.driverName || 'Driver'}, here is your charging receipt from Spero Fleet. Total: ${formatCurrency(payment.amount)}`,
+        });
+        toast.success('Shared successfully', { id: 'pdf-share-session' });
+      } catch (err) { console.error('Sharing failed', err); }
+    } else {
+      result.pdfObj.save(result.filename);
+      toast.info('Direct sharing not supported. PDF downloaded.', { id: 'pdf-share-session' });
     }
   };
   
@@ -980,6 +1037,70 @@ export default function SessionsPage() {
                     {loading ? 'Processing...' : paymentMethod === 'cash' ? 'Confirm Payment' : paymentMethod === 'wallet' ? 'Pay from Wallet' : paymentMethod === 'hubtel' ? 'Mark Payment' : 'Send Prompt'}
                   </button>
                 </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ─── PAYMENT SUCCESS & RECEIPT MODAL ─── */}
+        {showSuccess && completedPayment && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-[360px] overflow-hidden border border-slate-200 animate-in zoom-in-95 duration-300">
+              <div className="p-6 text-center bg-blue-600 text-white">
+                <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-4 animate-bounce">
+                  <CheckCircle size={40} className="text-white" />
+                </div>
+                <h2 className="text-xl font-black uppercase tracking-tight">Payment Success!</h2>
+                <p className="text-blue-100 text-xs mt-1">Transaction recorded and verified</p>
+              </div>
+
+              <div id="printable-receipt-success" className="p-6 bg-white">
+                <div className="text-center mb-6">
+                  <div className="font-black text-lg uppercase tracking-tight text-slate-900">SPERO ENERGY RESOURCES</div>
+                  <div className="text-[9px] uppercase font-bold tracking-widest text-slate-400">EV Charging Receipt</div>
+                </div>
+                
+                <div className="border-y border-dashed border-slate-200 py-4 mb-4 space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-slate-400 uppercase text-[10px] font-bold">Receipt #</span>
+                    <span className="font-mono font-bold text-blue-600">{completedPayment.receiptNumber}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-400 uppercase text-[10px] font-bold">Driver</span>
+                    <span className="font-bold text-slate-800">{completedPayment.driverName}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-400 uppercase text-[10px] font-bold">Vehicle</span>
+                    <span className="font-bold text-slate-800">{completedPayment.vehiclePlate}</span>
+                  </div>
+                  <div className="flex justify-between pt-2 border-t border-slate-50">
+                    <span className="text-slate-400 uppercase text-[10px] font-bold">Energy</span>
+                    <span className="font-bold text-slate-800">{completedPayment.unitsConsumed} {completedPayment.unitType}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-400 uppercase text-[10px] font-bold">Total Paid</span>
+                    <span className="font-black text-blue-600 text-lg">{formatCurrency(completedPayment.amount)}</span>
+                  </div>
+                </div>
+
+                <div className="text-center">
+                  <p className="text-[10px] italic text-slate-400">Powered by Spero Fleet SCMS</p>
+                </div>
+              </div>
+
+              <div className="p-4 bg-slate-50 flex gap-2 border-t border-slate-100">
+                <button 
+                  onClick={() => { setShowSuccess(false); setSelected(null); }}
+                  className="flex-1 py-3 text-xs font-bold text-slate-500 hover:bg-slate-100 rounded-xl transition-colors"
+                >
+                  Done
+                </button>
+                <button 
+                  onClick={() => handleShareWhatsApp(completedPayment)}
+                  className="flex-[2] py-3 bg-blue-600 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 hover:bg-blue-700 shadow-lg shadow-blue-200 transition-all active:scale-95"
+                >
+                  <Smartphone size={14} /> Send to WhatsApp
+                </button>
               </div>
             </div>
           </div>

@@ -124,7 +124,7 @@ export default function PaymentsPage() {
         await navigator.share({
           files: [file],
           title: `Receipt ${payment.receiptNumber}`,
-          text: `Charging Receipt from ${branding.company_name}`,
+          text: `Hello ${payment.driverName || 'Driver'}, here is your charging receipt from ${branding.company_name}. Total: ${formatCurrency(payment.amount)}`,
         });
         toast.success('Shared successfully', { id: 'pdf-share-pay' });
       } catch (err) {
