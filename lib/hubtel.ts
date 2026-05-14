@@ -1,7 +1,3 @@
-const HUBTEL_CLIENT_ID = process.env.HUBTEL_CLIENT_ID;
-const HUBTEL_CLIENT_SECRET = process.env.HUBTEL_CLIENT_SECRET;
-const HUBTEL_MERCHANT_ACCOUNT = process.env.HUBTEL_MERCHANT_ACCOUNT || 'HM2405230001'; // Default or from env
-
 export async function initiateHubtelCharge(data: {
   amount: number;
   phone: string;
@@ -9,7 +5,10 @@ export async function initiateHubtelCharge(data: {
   description: string;
   clientReference: string;
 }) {
-  if (!HUBTEL_CLIENT_ID || !HUBTEL_CLIENT_SECRET) {
+  const clientId = process.env.HUBTEL_CLIENT_ID;
+  const clientSecret = process.env.HUBTEL_CLIENT_SECRET;
+
+  if (!clientId || !clientSecret) {
     throw new Error('Hubtel credentials are not configured in .env.local');
   }
 
@@ -20,7 +19,7 @@ export async function initiateHubtelCharge(data: {
     airteltigo: 'airteltigo-gh',
   };
 
-  const auth = Buffer.from(`${HUBTEL_CLIENT_ID}:${HUBTEL_CLIENT_SECRET}`).toString('base64');
+  const auth = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
 
   try {
     console.log(`[HUBTEL] Initiating payment for ${data.phone} via ${data.provider} - GHS ${data.amount}`);
@@ -56,7 +55,14 @@ export async function initiateHubtelCharge(data: {
 }
 
 export async function checkHubtelStatus(clientReference: string) {
-  const auth = Buffer.from(`${HUBTEL_CLIENT_ID}:${HUBTEL_CLIENT_SECRET}`).toString('base64');
+  const clientId = process.env.HUBTEL_CLIENT_ID;
+  const clientSecret = process.env.HUBTEL_CLIENT_SECRET;
+
+  if (!clientId || !clientSecret) {
+    throw new Error('Hubtel credentials are not configured in .env.local');
+  }
+
+  const auth = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
   
   try {
     // Hubtel Status Check API
