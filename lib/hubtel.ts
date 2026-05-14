@@ -28,8 +28,8 @@ export async function initiateHubtelCharge(data: {
     console.log(`[HUBTEL] Initiating payment for ${data.phone} via ${data.provider} - GHS ${data.amount}`);
     
     // Hubtel Receive Money API (Direct Prompt)
-    // Endpoint: https://api-proxy.hubtel.com/v2/pos/receive/momo
-    const response = await fetch('https://api-proxy.hubtel.com/v2/pos/receive/momo', {
+    // Endpoint: https://api.hubtel.com/v2/pos/receive/momo
+    const response = await fetch('https://api.hubtel.com/v2/pos/receive/momo', {
       method: 'POST',
       headers: {
         'Authorization': `Basic ${auth}`,
@@ -72,7 +72,7 @@ export async function checkHubtelStatus(clientReference: string) {
   
   try {
     // Hubtel Status Check API
-    const response = await fetch(`https://api-proxy.hubtel.com/v2/pos/transaction/status?clientReference=${clientReference}`, {
+    const response = await fetch(`https://api.hubtel.com/v2/pos/transaction/status?clientReference=${clientReference}`, {
       method: 'GET',
       headers: {
         'Authorization': `Basic ${auth}`,
