@@ -3,9 +3,9 @@
 import { supabaseAdmin } from '@/lib/supabase-server';
 import { revalidatePath } from 'next/cache';
 import type { ChargingMode, UnitType } from '@/lib/types';
-import { chargeMobileMoney, verifyTransaction } from '@/lib/paystack';
+import { initiateHubtelCharge as hubtelCharge } from '@/lib/hubtel';
 
-export async function initiatePaystackCharge(data: {
+export async function initiateHubtelPayment(data: {
   sessionId: string;
   amount: number;
   phone: string;
@@ -13,51 +13,32 @@ export async function initiatePaystackCharge(data: {
   email: string;
 }) {
   try {
-    const reference = `PAY-${data.sessionId.substring(0, 8)}-${Date.now()}`;
+    const reference = `HUB-${data.sessionId.substring(0, 8)}-${Date.now()}`;
     
-    // Map providers to Paystack internal codes
-    const providerMap = {
-      mtn: 'mtn',
-      telecel: 'vod', // Telecel is formerly Vodafone
-      airteltigo: 'tgo',
-    };
-
-    const result = await chargeMobileMoney({
-      email: data.email,
+    const result = await hubtelCharge({
       amount: data.amount,
       phone: data.phone,
-      provider: (providerMap as any)[data.provider],
-      reference,
+      provider: data.provider,
+      description: `Charging Session Payment - ${data.sessionId}`,
+      clientReference: reference,
     });
 
-    console.log('[PAYSTACK] Charge result:', result);
+    console.log('[HUBTEL] Charge result:', result);
 
-    if (result.status) {
-      // Handle various success/pending states from Paystack
-      const payStatus = result.data?.status || 'pending';
-      const displayMsg = result.data?.display_text || result.message || 'Prompt sent to driver phone';
-      
-      return { 
-        success: true, 
-        status: payStatus, 
-        reference, 
-        message: displayMsg 
-      };
-    }
-
-    // Special case for Paystack returning message but status false in some edge cases
-    if (result.message === 'Charge attempted') {
+    // Hubtel Response Handling
+    // Success code is usually '000' or similar in ResponseCode
+    if (result.responseCode === '000' || result.status === 'Success' || result.status === 'Pending') {
       return { 
         success: true, 
         status: 'pending', 
         reference, 
-        message: 'Mobile Money prompt initiated' 
+        message: result.message || 'Mobile Money prompt initiated' 
       };
     }
 
     return { success: false, error: result.message || 'Payment initiation failed' };
   } catch (error: any) {
-    console.error('[PAYSTACK] Server Error:', error);
+    console.error('[HUBTEL] Server Error:', error);
     return { success: false, error: error.message };
   }
 }
@@ -185,7 +166,7 @@ export async function processPayment(data: {
     const shiftColumn = 
       data.method === 'cash' ? 'cash_collected' : 
       data.method === 'wallet' ? 'wallet_deductions' : 
-      ['mtn', 'telecel', 'airteltigo', 'hubtel'].includes(data.method) ? 'hubtel_collected' : 'paystack_collected';
+      'hubtel_collected'; 
 
     // 0. Handle Wallet Deduction
     if (data.method === 'wallet' && session.driver_id) {

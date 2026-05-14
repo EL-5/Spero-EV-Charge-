@@ -7,7 +7,7 @@ import { Search, Plus, Zap, Clock, CheckCircle, XCircle, UserPlus, Car, AlertTri
 import type { Session } from '@/lib/types';
 import { useSessions, useDrivers, useVehicles, useShifts, usePricing } from '@/hooks/use-database';
 import { useAuthStore } from '@/store/auth';
-import { startSession, updateSessionStatus, completeSession, processPayment, initiatePaystackCharge, deleteSession } from '@/app/actions/sessions';
+import { startSession, updateSessionStatus, completeSession, processPayment, initiateHubtelPayment, deleteSession } from '@/app/actions/sessions';
 import { addDriver } from '@/app/actions/drivers';
 import { addVehicle } from '@/app/actions/vehicles';
 
@@ -166,10 +166,10 @@ export default function SessionsPage() {
     setLoading(true);
     setPaymentStatus('Initiating payment...');
     
-    // 1. If Mobile Money (MTN, Telecel, etc), initiate Paystack Charge
+    // 1. If Mobile Money (MTN, Telecel, etc), initiate Hubtel Charge
     let reference = `${paymentMethod.toUpperCase()}-${Date.now()}`;
     if (!['cash', 'wallet', 'hubtel'].includes(paymentMethod)) {
-      const paystackRes = await initiatePaystackCharge({
+      const hubtelRes = await initiateHubtelPayment({
         sessionId: selected.id,
         amount: actualAmount,
         phone: paymentPhone,
@@ -177,13 +177,13 @@ export default function SessionsPage() {
         email: user?.email || 'attendant@spero.com',
       });
 
-      if (!paystackRes.success) {
+      if (!hubtelRes.success) {
         setLoading(false);
         setPaymentStatus(null);
-        return toast.error('Paystack Error: ' + paystackRes.error);
+        return toast.error('Hubtel Error: ' + hubtelRes.error);
       }
-      reference = paystackRes.reference || reference;
-      setPaymentStatus('Prompt sent! Waiting for driver authorization...');
+      reference = hubtelRes.reference || reference;
+      setPaymentStatus('Hubtel Prompt sent! Waiting for driver authorization...');
     }
 
     // 2. Process the payment record and update shift

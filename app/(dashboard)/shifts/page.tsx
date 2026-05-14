@@ -74,21 +74,17 @@ export default function ShiftsPage() {
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4">
               {[
                 { label: 'Cash', value: activeShift.cashCollected, icon: DollarSign },
-                { label: 'Hubtel', value: activeShift.hubtelCollected, icon: Smartphone },
-                { label: 'Paystack', value: activeShift.paystackCollected, icon: CreditCard },
+                { label: 'Digital (MoMo)', value: activeShift.hubtelCollected, icon: Smartphone },
                 { label: 'Wallet', value: activeShift.walletDeductions, icon: Wallet },
-              ].map(item => {
-                const Icon = item.icon;
-                return (
-                  <div key={item.label} className="bg-white rounded-lg p-3">
+              ].map(item => (
+                  <div key={item.label} className="bg-white rounded-lg p-3 shadow-sm border border-green-100 flex-1 min-w-[100px]">
                     <div className="flex items-center gap-1.5 mb-1">
-                      <Icon size={13} className="text-green-600" />
-                      <span className="text-xs text-green-600">{item.label}</span>
+                      <item.icon size={13} className="text-green-600" />
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-green-600/70">{item.label}</span>
                     </div>
-                    <div className="font-bold text-green-800">{formatCurrency(item.value)}</div>
+                    <div className="font-bold text-green-800 text-sm">{formatCurrency(item.value)}</div>
                   </div>
-                );
-              })}
+                ))}
             </div>
           </div>
         ) : (
@@ -120,8 +116,7 @@ export default function ShiftsPage() {
                   <th>Duration</th>
                   <th>Sessions</th>
                   <th>Cash</th>
-                  <th>Hubtel</th>
-                  <th>Paystack</th>
+                  <th>Digital (MoMo)</th>
                   <th>Wallet</th>
                   <th>Total</th>
                   <th>Status</th>
@@ -129,7 +124,6 @@ export default function ShiftsPage() {
               </thead>
               <tbody>
                 {allShifts.map((shift: any) => {
-                  const total = (shift.cashCollected || 0) + (shift.hubtelCollected || 0) + (shift.paystackCollected || 0) + (shift.walletDeductions || 0);
                   return (
                     <tr key={shift.id}>
                       <td className="font-medium whitespace-nowrap">{shift.attendantName || '—'}</td>
@@ -140,10 +134,9 @@ export default function ShiftsPage() {
                       <td className="text-[11px] whitespace-nowrap" style={{ color: 'var(--muted-foreground)' }}>{calcDuration(shift.startTime, shift.endTime)}</td>
                       <td className="text-center">{shift.totalSessions || 0}</td>
                       <td className="whitespace-nowrap">{formatCurrency(shift.cashCollected || 0)}</td>
-                      <td className="whitespace-nowrap">{formatCurrency(shift.hubtelCollected || 0)}</td>
-                      <td className="whitespace-nowrap">{formatCurrency(shift.paystackCollected || 0)}</td>
+                      <td className="whitespace-nowrap font-medium text-teal-600">{formatCurrency(shift.hubtelCollected || 0)}</td>
                       <td className="whitespace-nowrap">{formatCurrency(shift.walletDeductions || 0)}</td>
-                      <td className="font-bold whitespace-nowrap">{formatCurrency(total)}</td>
+                      <td className="font-bold whitespace-nowrap text-blue-600">{formatCurrency((shift.cashCollected || 0) + (shift.hubtelCollected || 0) + (shift.walletDeductions || 0))}</td>
                       <td>
                         <span className={`badge ${getStatusColor(shift.status)}`}>{getStatusLabel(shift.status)}</span>
                       </td>
@@ -207,8 +200,7 @@ export default function ShiftsPage() {
                 <div className="grid grid-cols-2 gap-3">
                   {[
                     { label: 'Cash Collected', value: formatCurrency(activeShift.cashCollected) },
-                    { label: 'Hubtel Collected', value: formatCurrency(activeShift.hubtelCollected) },
-                    { label: 'Paystack Collected', value: formatCurrency(activeShift.paystackCollected) },
+                    { label: 'Digital (Hubtel)', value: formatCurrency(activeShift.hubtelCollected) },
                     { label: 'Wallet Deductions', value: formatCurrency(activeShift.walletDeductions) },
                     { label: 'Total Sessions', value: activeShift.totalSessions.toString() },
                     { label: 'Duration', value: calcDuration(activeShift.startTime) },
