@@ -22,13 +22,15 @@ export async function initiateHubtelCharge(data: {
     airteltigo: 'airteltigo-gh',
   };
 
+  const merchantAccountNumber = process.env.HUBTEL_MERCHANT_ACCOUNT_NUMBER;
   const auth = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
 
     const endpoints = [
-      'https://api.hubtel.com/v2/pos/receive/momo',
       'https://api-proxy.hubtel.com/v2/pos/receive/momo',
-      'https://rmp.hubtel.com/v2/pos/receive/momo'
-    ];
+      'https://rmp.hubtel.com/v2/pos/receive/momo',
+      merchantAccountNumber ? `https://rmp.hubtel.com/merchantaccount/merchants/${merchantAccountNumber}/receive/mobilemoney` : null,
+      'https://api.hubtel.com/v2/pos/receive/momo',
+    ].filter(Boolean) as string[];
 
     let lastError = null;
     for (const endpoint of endpoints) {
@@ -52,13 +54,22 @@ export async function initiateHubtelCharge(data: {
           }),
         });
 
-        if (response.ok || response.status < 500) {
+        const contentType = response.headers.get('content-type');
+        if (contentType && contentType.includes('application/json')) {
           const result = await response.json();
-          console.log(`[HUBTEL] Success via ${endpoint}`);
-          return result;
+          if (response.ok) {
+            console.log(`[HUBTEL] Success via ${endpoint}`);
+            return result;
+          }
+          console.error(`[HUBTEL] ${endpoint} returned error:`, result);
+          lastError = new Error(result.message || `Hubtel Error: ${response.status}`);
+        } else {
+          const text = await response.text();
+          console.error(`[HUBTEL] ${endpoint} returned non-JSON response (${response.status}):`, text.slice(0, 100));
+          lastError = new Error(`Hubtel Error: ${response.status} (Non-JSON response)`);
         }
       } catch (err: any) {
-        console.error(`[HUBTEL] ${endpoint} failed:`, err.message);
+        console.error(`[HUBTEL] ${endpoint} request failed:`, err.message);
         lastError = err;
       }
     }
@@ -68,6 +79,7 @@ export async function initiateHubtelCharge(data: {
 export async function checkHubtelStatus(clientReference: string) {
   const clientId = process.env.HUBTEL_CLIENT_ID;
   const clientSecret = process.env.HUBTEL_CLIENT_SECRET;
+  const merchantAccountNumber = process.env.HUBTEL_MERCHANT_ACCOUNT_NUMBER;
 
   if (!clientId || !clientSecret) {
     const missing = [];
@@ -79,10 +91,11 @@ export async function checkHubtelStatus(clientReference: string) {
   const auth = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
   
   const endpoints = [
-    `https://api.hubtel.com/v2/pos/transaction/status?clientReference=${clientReference}`,
     `https://api-proxy.hubtel.com/v2/pos/transaction/status?clientReference=${clientReference}`,
-    `https://rmp.hubtel.com/v2/pos/transaction/status?clientReference=${clientReference}`
-  ];
+    `https://rmp.hubtel.com/v2/pos/transaction/status?clientReference=${clientReference}`,
+    merchantAccountNumber ? `https://rmp.hubtel.com/merchantaccount/merchants/${merchantAccountNumber}/transaction/status?clientReference=${clientReference}` : null,
+    `https://api.hubtel.com/v2/pos/transaction/status?clientReference=${clientReference}`
+  ].filter(Boolean) as string[];
 
   let lastError = null;
   for (const endpoint of endpoints) {
@@ -95,9 +108,15 @@ export async function checkHubtelStatus(clientReference: string) {
         },
       });
 
-      if (response.ok || response.status < 500) {
+      const contentType = response.headers.get('content-type');
+      if (contentType && contentType.includes('application/json')) {
         const result = await response.json();
-        return result;
+        if (response.ok) return result;
+        lastError = new Error(result.message || `Hubtel Status Error: ${response.status}`);
+      } else {
+        const text = await response.text();
+        console.error(`[HUBTEL-STATUS] ${endpoint} returned non-JSON (${response.status}):`, text.slice(0, 100));
+        lastError = new Error(`Hubtel Status Error: ${response.status} (Non-JSON)`);
       }
     } catch (err: any) {
       console.error(`[HUBTEL-STATUS] ${endpoint} failed:`, err.message);
