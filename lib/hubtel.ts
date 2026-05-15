@@ -24,37 +24,45 @@ export async function initiateHubtelCharge(data: {
 
   const auth = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
 
-  try {
-    console.log(`[HUBTEL] Initiating payment for ${data.phone} via ${data.provider} - GHS ${data.amount}`);
-    
-    // Hubtel Receive Money API (Direct Prompt)
-    // Endpoint: https://api.hubtel.com/v2/pos/receive/momo
-    const response = await fetch('https://api.hubtel.com/v2/pos/receive/momo', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Basic ${auth}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        CustomerName: 'Spero Driver', // Generic or from data
-        CustomerMsisdn: data.phone,
-        CustomerEmail: '',
-        Channel: (channelMap as any)[data.provider],
-        Amount: data.amount,
-        PrimaryCallbackUrl: `${process.env.NEXT_PUBLIC_APP_URL}/api/webhooks/hubtel`,
-        Description: data.description,
-        ClientReference: data.clientReference,
-      }),
-    });
+    const endpoints = [
+      'https://api.hubtel.com/v2/pos/receive/momo',
+      'https://api-proxy.hubtel.com/v2/pos/receive/momo',
+      'https://rmp.hubtel.com/v2/pos/receive/momo'
+    ];
 
-    const result = await response.json();
-    console.log('[HUBTEL] API Response:', JSON.stringify(result, null, 2));
+    let lastError = null;
+    for (const endpoint of endpoints) {
+      try {
+        console.log(`[HUBTEL] Attempting endpoint: ${endpoint}`);
+        const response = await fetch(endpoint, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Basic ${auth}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            CustomerName: 'Spero Driver',
+            CustomerMsisdn: data.phone,
+            CustomerEmail: '',
+            Channel: (channelMap as any)[data.provider],
+            Amount: data.amount,
+            PrimaryCallbackUrl: `${process.env.NEXT_PUBLIC_APP_URL}/api/webhooks/hubtel`,
+            Description: data.description,
+            ClientReference: data.clientReference,
+          }),
+        });
 
-    return result;
-  } catch (error) {
-    console.error('[HUBTEL] API Error:', error);
-    throw error;
-  }
+        if (response.ok || response.status < 500) {
+          const result = await response.json();
+          console.log(`[HUBTEL] Success via ${endpoint}`);
+          return result;
+        }
+      } catch (err: any) {
+        console.error(`[HUBTEL] ${endpoint} failed:`, err.message);
+        lastError = err;
+      }
+    }
+    throw lastError || new Error('All Hubtel gateways failed to respond');
 }
 
 export async function checkHubtelStatus(clientReference: string) {
@@ -70,20 +78,31 @@ export async function checkHubtelStatus(clientReference: string) {
 
   const auth = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
   
-  try {
-    // Hubtel Status Check API
-    const response = await fetch(`https://api.hubtel.com/v2/pos/transaction/status?clientReference=${clientReference}`, {
-      method: 'GET',
-      headers: {
-        'Authorization': `Basic ${auth}`,
-        'Content-Type': 'application/json',
-      },
-    });
+  const endpoints = [
+    `https://api.hubtel.com/v2/pos/transaction/status?clientReference=${clientReference}`,
+    `https://api-proxy.hubtel.com/v2/pos/transaction/status?clientReference=${clientReference}`,
+    `https://rmp.hubtel.com/v2/pos/transaction/status?clientReference=${clientReference}`
+  ];
 
-    const result = await response.json();
-    return result;
-  } catch (error) {
-    console.error('[HUBTEL] Status Check Error:', error);
-    throw error;
+  let lastError = null;
+  for (const endpoint of endpoints) {
+    try {
+      const response = await fetch(endpoint, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Basic ${auth}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (response.ok || response.status < 500) {
+        const result = await response.json();
+        return result;
+      }
+    } catch (err: any) {
+      console.error(`[HUBTEL-STATUS] ${endpoint} failed:`, err.message);
+      lastError = err;
+    }
   }
+  throw lastError || new Error('All Hubtel status gateways failed');
 }
