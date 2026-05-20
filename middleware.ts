@@ -13,7 +13,7 @@ import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 
 // Routes that do NOT require authentication
-const PUBLIC_PATHS = ['/login'];
+const PUBLIC_PATHS = ['/login', '/manifest.json'];
 // Routes that are completely public (static assets, webhooks, etc.)
 const PUBLIC_PREFIXES = ['/_next/', '/api/webhooks/', '/favicon', '/spero-logo'];
 
@@ -76,6 +76,6 @@ export const config = {
      * - favicon.ico, robots.txt, sitemap.xml (static metadata files)
      * - /login (public auth page)
      */
-    '/((?!_next/static|_next/image|favicon.ico|robots.txt|sitemap.xml).*)',
+    '/((?!_next/static|_next/image|favicon.ico|manifest.json|robots.txt|sitemap.xml).*)',
   ],
 };
