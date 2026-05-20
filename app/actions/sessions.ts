@@ -4,6 +4,12 @@ import { supabaseAdmin } from '@/lib/supabase-server';
 import { revalidatePath } from 'next/cache';
 import type { ChargingMode, UnitType } from '@/lib/types';
 import { initiateHubtelCharge as hubtelCharge, checkHubtelStatus } from '@/lib/hubtel';
+import { requireAuth } from '@/lib/auth-guard';
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FIX MED-01: requireAuth guards added to all mutating actions.
+// FIX LOW-01: Raw DB errors no longer returned to the client.
+// ─────────────────────────────────────────────────────────────────────────────
 
 export async function initiateHubtelPayment(data: {
   sessionId: string;
@@ -13,6 +19,12 @@ export async function initiateHubtelPayment(data: {
   email: string;
 }) {
   try {
+    await requireAuth(['super_admin', 'manager', 'attendant']);
+
+    if (data.amount <= 0) {
+      return { success: false, error: 'Payment amount must be greater than zero.' };
+    }
+
     const reference = `HUB-${data.sessionId.substring(0, 8)}-${Date.now()}`;
     
     const result = await hubtelCharge({
@@ -23,10 +35,7 @@ export async function initiateHubtelPayment(data: {
       clientReference: reference,
     });
 
-    console.log('[HUBTEL] Charge result:', result);
-
     // Hubtel Response Handling
-    // Success code is usually '000' or similar in ResponseCode
     if (result.responseCode === '000' || result.status === 'Success' || result.status === 'Pending') {
       return { 
         success: true, 
@@ -36,10 +45,13 @@ export async function initiateHubtelPayment(data: {
       };
     }
 
-    return { success: false, error: result.message || 'Payment initiation failed' };
+    return { success: false, error: 'Payment initiation failed. Please try again.' };
   } catch (error: any) {
     console.error('[HUBTEL] Server Error:', error);
-    return { success: false, error: error.message };
+    if (error.message?.startsWith('Unauthenticated') || error.message?.startsWith('Forbidden')) {
+      return { success: false, error: error.message };
+    }
+    return { success: false, error: 'Payment service error. Please try again.' };
   }
 }
 
@@ -76,6 +88,7 @@ export async function startSession(formData: {
   pricing_id?: string;
 }) {
   try {
+    await requireAuth(['super_admin', 'manager', 'attendant']);
     const [driverRes, vehicleRes] = await Promise.all([
       supabaseAdmin.from('drivers').select('name').eq('id', formData.driver_id).single(),
       supabaseAdmin.from('vehicles').select('plate_number, brand, model').eq('id', formData.vehicle_id).single(),
@@ -137,8 +150,11 @@ export async function startSession(formData: {
     revalidatePath('/dashboard');
     return { success: true };
   } catch (error: any) {
-    console.error('Error starting session:', error.message);
-    return { success: false, error: error.message };
+    console.error('[SESSIONS] startSession error:', error);
+    if (error.message?.startsWith('Unauthenticated') || error.message?.startsWith('Forbidden')) {
+      return { success: false, error: error.message };
+    }
+    return { success: false, error: 'Failed to start session. Please try again.' };
   }
 }
 
@@ -254,12 +270,22 @@ export async function processPayment(data: {
     revalidatePath('/dashboard');
     return { success: true };
   } catch (error: any) {
-    console.error('Payment processing error:', error);
-    return { success: false, error: error.message };
+    console.error('[SESSIONS] processPayment error:', error);
+    if (error.message?.startsWith('Unauthenticated') || error.message?.startsWith('Forbidden') || error.message?.startsWith('Insufficient')) {
+      return { success: false, error: error.message };
+    }
+    return { success: false, error: 'Payment processing failed. Please try again.' };
   }
 }
 export async function updateSessionStatus(id: string, status: string) {
   try {
+    await requireAuth(['super_admin', 'manager', 'attendant']);
+
+    const VALID_STATUSES = ['active', 'pending_payment', 'completed', 'cancelled'];
+    if (!VALID_STATUSES.includes(status)) {
+      return { success: false, error: `Invalid session status: ${status}` };
+    }
+
     const { error } = await supabaseAdmin
       .from('sessions')
       .update({ status })
@@ -270,8 +296,11 @@ export async function updateSessionStatus(id: string, status: string) {
     revalidatePath('/sessions');
     return { success: true };
   } catch (error: any) {
-    console.error('Error updating session status:', error.message);
-    return { success: false, error: error.message };
+    console.error('[SESSIONS] updateSessionStatus error:', error);
+    if (error.message?.startsWith('Unauthenticated') || error.message?.startsWith('Forbidden') || error.message?.startsWith('Invalid')) {
+      return { success: false, error: error.message };
+    }
+    return { success: false, error: 'Failed to update session status. Please try again.' };
   }
 }
 
@@ -295,8 +324,11 @@ export async function completeSession(id: string, data: {
     revalidatePath('/sessions');
     return { success: true };
   } catch (error: any) {
-    console.error('Error completing session:', error.message);
-    return { success: false, error: error.message };
+    console.error('[SESSIONS] completeSession error:', error);
+    if (error.message?.startsWith('Unauthenticated') || error.message?.startsWith('Forbidden')) {
+      return { success: false, error: error.message };
+    }
+    return { success: false, error: 'Failed to complete session. Please try again.' };
   }
 }
 
@@ -328,7 +360,10 @@ export async function deleteSession(id: string, adminId: string) {
     revalidatePath('/dashboard');
     return { success: true };
   } catch (error: any) {
-    console.error('Error deleting session:', error.message);
-    return { success: false, error: error.message };
+    console.error('[SESSIONS] deleteSession error:', error);
+    if (error.message?.startsWith('Unauthenticated') || error.message?.startsWith('Forbidden') || error.message?.startsWith('Unauthorized')) {
+      return { success: false, error: error.message };
+    }
+    return { success: false, error: 'Failed to delete session. Please try again.' };
   }
 }

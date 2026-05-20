@@ -37,11 +37,11 @@ export default function LoginPage() {
     e.preventDefault();
     setLoading(true);
     setError('');
-    const ok = await login(email, password);
-    if (ok) {
+    const result = await login(email, password);
+    if (result.ok) {
       router.push('/dashboard');
     } else {
-      setError('Invalid credentials. Please try again.');
+      setError(result.error || 'Invalid credentials. Please try again.');
     }
     setLoading(false);
   };

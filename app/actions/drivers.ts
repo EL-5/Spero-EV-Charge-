@@ -2,7 +2,13 @@
 
 import { supabaseAdmin } from '@/lib/supabase-server';
 import { revalidatePath } from 'next/cache';
+import { requireAuth } from '@/lib/auth-guard';
 import type { DriverType } from '@/lib/types';
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FIX MED-01: requireAuth guards added to all mutating actions.
+// FIX LOW-01: Raw DB errors no longer returned to the client.
+// ─────────────────────────────────────────────────────────────────────────────
 
 export async function addDriver(formData: {
   name: string;
@@ -11,40 +17,59 @@ export async function addDriver(formData: {
   type: DriverType;
 }) {
   try {
-    const { data, error } = await supabaseAdmin.from('drivers').insert([
-      {
-        name: formData.name,
-        phone: formData.phone,
-        email: formData.email,
-        type: formData.type,
-        wallet_balance: 0,
-        debt_balance: 0,
-        total_sessions: 0,
-      },
-    ]).select('id').single();
+    // Attendants, managers, and super_admins can register new drivers
+    await requireAuth(['super_admin', 'manager', 'attendant']);
 
-    if (error) throw error;
+    const { data, error } = await supabaseAdmin
+      .from('drivers')
+      .insert([
+        {
+          name: formData.name,
+          phone: formData.phone,
+          email: formData.email,
+          type: formData.type,
+          wallet_balance: 0,
+          debt_balance: 0,
+          total_sessions: 0,
+        },
+      ])
+      .select('id')
+      .single();
+
+    if (error) {
+      console.error('[DRIVERS] addDriver error:', error);
+      return { success: false, error: 'Failed to add driver. Please try again.' };
+    }
 
     revalidatePath('/drivers');
     return { success: true, id: data.id };
   } catch (error: any) {
-    console.error('Error adding driver:', error.message);
-    return { success: false, error: error.message };
+    console.error('[DRIVERS] addDriver error:', error);
+    if (error.message?.startsWith('Unauthenticated') || error.message?.startsWith('Forbidden')) {
+      return { success: false, error: error.message };
+    }
+    return { success: false, error: 'An unexpected error occurred.' };
   }
 }
 
-export async function updateDriver(id: string, formData: {
-  name: string;
-  phone: string;
-  email?: string;
-  type: DriverType;
-  vehicle?: {
-    brand: string;
-    model: string;
-    plate_number: string;
-  };
-}) {
+export async function updateDriver(
+  id: string,
+  formData: {
+    name: string;
+    phone: string;
+    email?: string;
+    type: DriverType;
+    vehicle?: {
+      brand: string;
+      model: string;
+      plate_number: string;
+    };
+  }
+) {
   try {
+    // Attendants and above can update driver info
+    await requireAuth(['super_admin', 'manager', 'attendant']);
+
     // 1. Update Driver
     const { error: dError } = await supabaseAdmin
       .from('drivers')
@@ -56,7 +81,10 @@ export async function updateDriver(id: string, formData: {
       })
       .eq('id', id);
 
-    if (dError) throw dError;
+    if (dError) {
+      console.error('[DRIVERS] updateDriver driver error:', dError);
+      return { success: false, error: 'Failed to update driver. Please try again.' };
+    }
 
     // 2. Update Vehicle if provided
     if (formData.vehicle) {
@@ -68,31 +96,38 @@ export async function updateDriver(id: string, formData: {
           plate_number: formData.vehicle.plate_number,
         })
         .eq('driver_id', id);
-      
-      if (vError) throw vError;
+
+      if (vError) {
+        console.error('[DRIVERS] updateDriver vehicle error:', vError);
+        return { success: false, error: 'Failed to update vehicle info. Please try again.' };
+      }
     }
 
     revalidatePath('/drivers');
     revalidatePath('/vehicles');
     return { success: true };
   } catch (error: any) {
-    console.error('Error updating driver:', error.message);
-    return { success: false, error: error.message };
+    console.error('[DRIVERS] updateDriver error:', error);
+    if (error.message?.startsWith('Unauthenticated') || error.message?.startsWith('Forbidden')) {
+      return { success: false, error: error.message };
+    }
+    return { success: false, error: 'An unexpected error occurred.' };
   }
 }
 
 export async function deleteDriver(id: string) {
   try {
-    // 1. Attempt to dissociate related records
-    // This preserves history if the schema allows NULLs
-    
+    // Only managers and super_admins can delete drivers
+    await requireAuth(['super_admin', 'manager']);
+
+    // 1. Attempt to dissociate related records (preserves history if schema allows NULLs)
+
     // Vehicles
     const { error: vError } = await supabaseAdmin
       .from('vehicles')
       .update({ driver_id: null })
       .eq('driver_id', id);
     if (vError) {
-      // If we can't set to NULL, we must delete to satisfy the clean start requirement
       await supabaseAdmin.from('vehicles').delete().eq('driver_id', id);
     }
 
@@ -124,22 +159,25 @@ export async function deleteDriver(id: string) {
     }
 
     // 2. Finally delete the driver
-    const { error: finalError } = await supabaseAdmin
-      .from('drivers')
-      .delete()
-      .eq('id', id);
+    const { error: finalError } = await supabaseAdmin.from('drivers').delete().eq('id', id);
 
-    if (finalError) throw finalError;
+    if (finalError) {
+      console.error('[DRIVERS] deleteDriver final error:', finalError);
+      return { success: false, error: 'Failed to delete driver. Please try again.' };
+    }
 
     revalidatePath('/drivers');
     revalidatePath('/vehicles');
     revalidatePath('/sessions');
     revalidatePath('/payments');
     revalidatePath('/wallets');
-    
+
     return { success: true };
   } catch (error: any) {
-    console.error('Error deleting driver:', error.message);
-    return { success: false, error: error.message };
+    console.error('[DRIVERS] deleteDriver error:', error);
+    if (error.message?.startsWith('Unauthenticated') || error.message?.startsWith('Forbidden')) {
+      return { success: false, error: error.message };
+    }
+    return { success: false, error: 'An unexpected error occurred.' };
   }
 }

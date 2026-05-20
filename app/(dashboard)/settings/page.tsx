@@ -899,7 +899,7 @@ export default function SettingsPage() {
                         onClick={async () => {
                           if (resetConfirm !== 'RESET SYSTEM') return;
                           setIsResetting(true);
-                          const res = await resetSystem(user.id);
+                          const res = await resetSystem();
                           setIsResetting(false);
                           if (res.success) {
                             toast.success('System reset successfully');
