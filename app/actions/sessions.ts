@@ -3,78 +3,14 @@
 import { supabaseAdmin } from '@/lib/supabase-server';
 import { revalidatePath } from 'next/cache';
 import type { ChargingMode, UnitType } from '@/lib/types';
-import { initiateHubtelCharge as hubtelCharge, checkHubtelStatus } from '@/lib/hubtel';
 import { requireAuth } from '@/lib/auth-guard';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// FIX MED-01: requireAuth guards added to all mutating actions.
-// FIX LOW-01: Raw DB errors no longer returned to the client.
+// NOTE: Hubtel API integration has been removed.
+// All payment methods (Cash, MTN MoMo, Telecel Cash, Tigo Cash, Wallet) are
+// recorded directly via processPayment — no external payment gateway calls.
 // ─────────────────────────────────────────────────────────────────────────────
 
-export async function initiateHubtelPayment(data: {
-  sessionId: string;
-  amount: number;
-  phone: string;
-  provider: 'mtn' | 'telecel' | 'airteltigo';
-  email: string;
-}) {
-  try {
-    await requireAuth(['super_admin', 'manager', 'attendant']);
-
-    if (data.amount <= 0) {
-      return { success: false, error: 'Payment amount must be greater than zero.' };
-    }
-
-    const reference = `HUB-${data.sessionId.substring(0, 8)}-${Date.now()}`;
-    
-    const result = await hubtelCharge({
-      amount: data.amount,
-      phone: data.phone,
-      provider: data.provider,
-      description: `Charging Session Payment - ${data.sessionId}`,
-      clientReference: reference,
-    });
-
-    // Hubtel Response Handling
-    if (result.responseCode === '000' || result.status === 'Success' || result.status === 'Pending') {
-      return { 
-        success: true, 
-        status: 'pending', 
-        reference, 
-        message: result.message || 'Mobile Money prompt initiated' 
-      };
-    }
-
-    return { success: false, error: 'Payment initiation failed. Please try again.' };
-  } catch (error: any) {
-    console.error('[HUBTEL] Server Error:', error);
-    if (error.message?.startsWith('Unauthenticated') || error.message?.startsWith('Forbidden')) {
-      return { success: false, error: error.message };
-    }
-    return { success: false, error: 'Payment service error. Please try again.' };
-  }
-}
-
-export async function verifyHubtelPayment(clientReference: string) {
-  try {
-    const result = await checkHubtelStatus(clientReference);
-    console.log('[HUBTEL] Status Check:', result);
-    
-    // Hubtel returns a status field like 'Success', 'Failed', 'Pending'
-    if (result.status === 'Success' || (result.data && result.data[0]?.status === 'Success')) {
-      return { success: true, status: 'success', message: 'Payment confirmed!' };
-    }
-    
-    return { 
-      success: false, 
-      status: result.status || 'pending', 
-      message: result.message || 'Payment still pending or failed' 
-    };
-  } catch (error: any) {
-    console.error('[HUBTEL] Verify Error:', error);
-    return { success: false, error: error.message };
-  }
-}
 
 export async function startSession(formData: {
   driver_id: string;

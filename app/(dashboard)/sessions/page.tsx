@@ -7,7 +7,7 @@ import { Search, Plus, Zap, Clock, CheckCircle, XCircle, UserPlus, Car, AlertTri
 import type { Session } from '@/lib/types';
 import { useSessions, useDrivers, useVehicles, useShifts, usePricing } from '@/hooks/use-database';
 import { useAuthStore } from '@/store/auth';
-import { startSession, updateSessionStatus, completeSession, processPayment, initiateHubtelPayment, verifyHubtelPayment, deleteSession } from '@/app/actions/sessions';
+import { startSession, updateSessionStatus, completeSession, processPayment, deleteSession } from '@/app/actions/sessions';
 import { addDriver } from '@/app/actions/drivers';
 import { addVehicle } from '@/app/actions/vehicles';
 import html2canvas from 'html2canvas';
@@ -45,8 +45,7 @@ export default function SessionsPage() {
   const [isCompleting, setIsCompleting] = useState(false);
   const [completeForm, setCompleteForm] = useState({ units: 0, amount: 0 });
   const [isPaying, setIsPaying] = useState(false);
-  const [paymentPhone, setPaymentPhone] = useState('');
-  const [paymentMethod, setPaymentMethod] = useState<'cash' | 'wallet' | 'mtn' | 'telecel' | 'airteltigo' | 'hubtel'>('mtn');
+  const [paymentMethod, setPaymentMethod] = useState<'cash' | 'wallet' | 'mtn' | 'telecel' | 'airteltigo'>('cash');
   const [paymentStatus, setPaymentStatus] = useState<string | null>(null);
   const [actualAmount, setActualAmount] = useState<number>(0);
   const [showSuccess, setShowSuccess] = useState(false);
@@ -149,9 +148,7 @@ export default function SessionsPage() {
       if (completeForm.amount > 0) {
         setIsPaying(true);
         setActualAmount(completeForm.amount || selected.totalAmount || 0);
-        // Pre-fill phone if driver exists
-        const driver = drivers?.find(d => d.id === selected.driverId);
-        if (driver) setPaymentPhone(driver.phone);
+        // Phone pre-fill removed (no longer needed without MoMo gateway prompts)
       } else {
         setSelected(null);
       }
@@ -168,57 +165,41 @@ export default function SessionsPage() {
     }
 
     setLoading(true);
-    setPaymentStatus('Initiating payment...');
-    
-    // 1. If Mobile Money (MTN, Telecel, etc), initiate Hubtel Charge
-    let reference = `${paymentMethod.toUpperCase()}-${Date.now()}`;
-    if (['mtn', 'telecel', 'airteltigo'].includes(paymentMethod)) {
-      const hubtelRes = await initiateHubtelPayment({
-        sessionId: selected.id,
-        amount: actualAmount,
-        phone: paymentPhone,
-        provider: paymentMethod as any,
-        email: user?.email || 'attendant@spero.com',
-      });
 
-      if (!hubtelRes.success) {
-        setLoading(false);
-        setPaymentStatus(null);
-        return toast.error('Hubtel Error: ' + hubtelRes.error);
-      }
-      reference = hubtelRes.reference || reference;
-      setPaymentStatus('Hubtel Prompt sent! Waiting for driver authorization...');
-    }
+    // Generate a local reference for all payment types
+    const reference = `${paymentMethod.toUpperCase()}-${Date.now()}`;
 
-    // 2. Process the payment record and update shift
+    // Directly record the payment — no external gateway calls
     const res = await processPayment({
       session_id: selected.id,
       shift_id: activeShift.id,
       amount: actualAmount,
       method: paymentMethod,
-      reference: reference,
+      reference,
       attendant_id: user?.id || '',
     });
 
     setLoading(false);
-    setPaymentStatus(null);
     
     if (res.success) {
-      toast.success(`Payment processed via ${paymentMethod.toUpperCase()}`);
+      const methodLabel = {
+        cash: 'Cash', wallet: 'Wallet', mtn: 'MTN MoMo',
+        telecel: 'Telecel Cash', airteltigo: 'Tigo Cash',
+      }[paymentMethod] || paymentMethod.toUpperCase();
+
+      toast.success(`Payment recorded — ${methodLabel}`);
       
-      // Prepare success data for immediate sharing
       setCompletedPayment({
         ...selected,
         amount: actualAmount,
         method: paymentMethod,
-        reference: reference,
+        reference,
         createdAt: new Date().toISOString(),
         receiptNumber: selected.receiptNumber || (selected as any).receipt_number,
       });
       
       setIsPaying(false);
       setShowSuccess(true);
-      // We don't null selected yet, success modal needs it
       await refetchSessions();
     } else {
       toast.error('Payment recording failed: ' + res.error);
@@ -975,9 +956,9 @@ export default function SessionsPage() {
                     {[
                       { id: 'cash', label: 'Cash', color: 'bg-emerald-500', icon: DollarSign },
                       { id: 'wallet', label: 'Wallet', color: 'bg-blue-600', icon: Wallet },
-                      { id: 'mtn', label: 'MTN MoMo', color: 'bg-yellow-400', icon: Smartphone },
-                      { id: 'telecel', label: 'Telecel', color: 'bg-red-600', icon: Smartphone },
-                      { id: 'airteltigo', label: 'AirtelTigo', color: 'bg-blue-500', icon: Smartphone },
+                      { id: 'mtn', label: 'MTN MoMo', color: 'bg-yellow-500', icon: Smartphone },
+                      { id: 'telecel', label: 'Telecel Cash', color: 'bg-red-600', icon: Smartphone },
+                      { id: 'airteltigo', label: 'Tigo Cash', color: 'bg-blue-500', icon: Smartphone },
                     ].map(m => (
                       <button 
                         key={m.id}
@@ -1004,33 +985,10 @@ export default function SessionsPage() {
                 </div>
 
 
-                {['mtn', 'telecel', 'airteltigo'].includes(paymentMethod) && (
-                  <div className="animate-in fade-in slide-in-from-top-2 duration-300">
-                    <label className="form-label">Mobile Money Number</label>
-                    <div className="relative">
-                      <input 
-                        className="form-input text-lg tracking-widest" 
-                        style={{ paddingLeft: '52px' }}
-                        placeholder="024XXXXXXX" 
-                        value={paymentPhone} 
-                        onChange={e => setPaymentPhone(e.target.value)} 
-                      />
-                      <Smartphone className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                    </div>
-                  </div>
-                )}
-
-                {paymentStatus && (
-                  <div className="p-3 rounded-lg bg-blue-50 text-blue-700 text-sm font-medium flex items-center gap-2 animate-pulse">
-                    <Clock size={16} />
-                    {paymentStatus}
-                  </div>
-                )}
-
                 <div className="flex gap-3 pt-2">
                   <button onClick={() => setIsPaying(false)} className="btn btn-secondary flex-1">Back</button>
-                  <button onClick={handleTriggerPayment} className="btn btn-primary flex-1 py-4" disabled={loading || (!['cash', 'wallet', 'hubtel'].includes(paymentMethod) && !paymentPhone)}>
-                    {loading ? 'Processing...' : paymentMethod === 'cash' ? 'Confirm Payment' : paymentMethod === 'wallet' ? 'Pay from Wallet' : paymentMethod === 'hubtel' ? 'Mark Payment' : 'Send Prompt'}
+                  <button onClick={handleTriggerPayment} className="btn btn-primary flex-1 py-4" disabled={loading}>
+                    {loading ? 'Processing...' : paymentMethod === 'wallet' ? 'Pay from Wallet' : 'Confirm & Record Payment'}
                   </button>
                 </div>
               </div>
