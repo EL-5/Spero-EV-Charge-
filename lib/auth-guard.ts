@@ -11,8 +11,7 @@
  *   const user = await requireAuth(['super_admin', 'manager']); // Role-restricted
  */
 
-import { supabaseAdmin } from '@/lib/supabase-server';
-import { supabase } from '@/lib/supabase';
+import { supabaseAdmin, getServerSupabase } from '@/lib/supabase-server';
 
 export interface AuthenticatedUser {
   id: string;
@@ -30,13 +29,14 @@ export interface AuthenticatedUser {
  * @returns The authenticated user's profile.
  */
 export async function requireAuth(allowedRoles?: string[]): Promise<AuthenticatedUser> {
-  // Get the current Supabase session (reads from auth cookie / JWT)
+  // Get the current Supabase user (authenticates from auth cookie / JWT via SSR client)
+  const supabase = await getServerSupabase();
   const {
-    data: { session },
-    error: sessionError,
-  } = await supabase.auth.getSession();
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser();
 
-  if (sessionError || !session?.user) {
+  if (userError || !user) {
     throw new Error('Unauthenticated: You must be signed in to perform this action.');
   }
 
@@ -44,7 +44,7 @@ export async function requireAuth(allowedRoles?: string[]): Promise<Authenticate
   const { data: profile, error: profileError } = await supabaseAdmin
     .from('profiles')
     .select('id, name, email, role, is_active')
-    .eq('id', session.user.id)
+    .eq('id', user.id)
     .single();
 
   if (profileError || !profile) {

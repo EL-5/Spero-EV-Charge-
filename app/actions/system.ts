@@ -1,7 +1,6 @@
 'use server';
 
-import { supabaseAdmin } from '@/lib/supabase-server';
-import { supabase } from '@/lib/supabase';
+import { supabaseAdmin, getServerSupabase } from '@/lib/supabase-server';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // FIX HIGH-02: resetSystem now derives identity from the real server session
@@ -16,12 +15,13 @@ import { supabase } from '@/lib/supabase';
 export async function resetSystem() {
   try {
     // 1. Derive identity from the real Supabase session — cannot be spoofed
+    const supabase = await getServerSupabase();
     const {
-      data: { session },
-      error: sessionError,
-    } = await supabase.auth.getSession();
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser();
 
-    if (sessionError || !session?.user) {
+    if (userError || !user) {
       return { success: false, error: 'Unauthenticated: You must be signed in.' };
     }
 
@@ -29,7 +29,7 @@ export async function resetSystem() {
     const { data: profile, error: profileError } = await supabaseAdmin
       .from('profiles')
       .select('role, name')
-      .eq('id', session.user.id)
+      .eq('id', user.id)
       .single();
 
     if (profileError || !profile) {
@@ -54,12 +54,12 @@ export async function resetSystem() {
 
     // 4. Audit log — record the reset with actor identity server-side
     console.log(
-      `[AUDIT] System reset triggered by ${profile.name} (${session.user.id}) at ${new Date().toISOString()}`
+      `[AUDIT] System reset triggered by ${profile.name} (${user.id}) at ${new Date().toISOString()}`
     );
 
     // 5. Write audit record to database
     await supabaseAdmin.from('audit_logs').insert({
-      actor_id: session.user.id,
+      actor_id: user.id,
       actor_name: profile.name,
       action: 'system.reset',
       resource_type: 'system',
