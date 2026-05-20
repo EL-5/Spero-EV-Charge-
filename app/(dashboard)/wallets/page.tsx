@@ -46,10 +46,7 @@ export default function WalletsPage() {
 
   const handleTopUp = async () => {
     setLoading(true);
-    const res = await topUpWallet({
-      ...formData,
-      createdBy: user?.id || '00000000-0000-0000-0000-000000000000',
-    });
+    const res = await topUpWallet(formData);
     setLoading(false);
     if (res.success) {
       setShowTopUp(false);

@@ -1,6 +1,7 @@
 'use server';
 import { supabaseAdmin } from '@/lib/supabase-server';
 import { revalidatePath } from 'next/cache';
+import { requireAuth } from '@/lib/auth-guard';
 
 export async function createNotification(payload: {
   user_id: string;
@@ -28,10 +29,13 @@ export async function createNotification(payload: {
 
 export async function markAsRead(id: string) {
   try {
+    const user = await requireAuth();
+
     const { error } = await supabaseAdmin
       .from('notifications')
       .update({ is_read: true })
-      .eq('id', id);
+      .eq('id', id)
+      .eq('user_id', user.id);
 
     if (error) throw error;
     revalidatePath('/');
@@ -41,12 +45,14 @@ export async function markAsRead(id: string) {
   }
 }
 
-export async function markAllRead(userId: string) {
+export async function markAllRead() {
   try {
+    const user = await requireAuth();
+
     const { error } = await supabaseAdmin
       .from('notifications')
       .update({ is_read: true })
-      .eq('user_id', userId);
+      .eq('user_id', user.id);
 
     if (error) throw error;
     revalidatePath('/');

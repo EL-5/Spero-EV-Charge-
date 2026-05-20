@@ -1,6 +1,7 @@
 'use server';
 import { supabaseAdmin } from '@/lib/supabase-server';
 import { revalidatePath } from 'next/cache';
+import { requireAuth } from '@/lib/auth-guard';
 
 /**
  * Records a debt repayment:
@@ -11,10 +12,11 @@ export async function recordDebtPayment(payload: {
   driverId: string;
   amount: number;
   method: string;
-  createdBy: string;
 }) {
   try {
-    const { driverId, amount, method, createdBy } = payload;
+    // 1. Authenticate and authorize caller
+    const user = await requireAuth(['super_admin', 'manager']);
+    const { driverId, amount, method } = payload;
 
     // Fetch current driver state
     const { data: driver, error: fetchErr } = await supabaseAdmin
@@ -35,8 +37,8 @@ export async function recordDebtPayment(payload: {
 
     if (updateErr) return { success: false, error: updateErr.message };
 
-    // Get staff name for notification
-    const { data: staff } = await supabaseAdmin.from('profiles').select('name').eq('id', createdBy).single();
+    // Get staff name for notification (using verified user id)
+    const { data: staff } = await supabaseAdmin.from('profiles').select('name').eq('id', user.id).single();
     const { data: driverInfo } = await supabaseAdmin.from('drivers').select('name').eq('id', driverId).single();
 
     // Log payment in wallet_transactions
@@ -47,7 +49,7 @@ export async function recordDebtPayment(payload: {
       balance_before: driver.wallet_balance,
       balance_after: driver.wallet_balance,
       description: `Debt repayment via ${method} — GHS ${amount.toFixed(2)}`,
-      created_by: createdBy,
+      created_by: user.id,
     });
 
     // Also log in payments table
@@ -63,7 +65,7 @@ export async function recordDebtPayment(payload: {
     const { data: admins } = await supabaseAdmin
       .from('profiles')
       .select('id')
-      .eq('role', 'superadmin');
+      .eq('role', 'super_admin');
 
     if (admins) {
       const { createNotification } = await import('@/app/actions/notifications');

@@ -15,11 +15,10 @@ export async function topUpWallet(formData: {
   amount: number;
   type: 'top_up' | 'bonus' | 'credit';
   description: string;
-  createdBy: string;
 }) {
   try {
     // Wallet top-ups are high-trust operations — managers and above only
-    await requireAuth(['super_admin', 'manager']);
+    const user = await requireAuth(['super_admin', 'manager']);
 
     // Input validation — prevent negative or zero amounts
     if (formData.amount <= 0) {
@@ -67,7 +66,7 @@ export async function topUpWallet(formData: {
         balance_before: balanceBefore,
         balance_after: balanceAfter,
         description: formData.description,
-        created_by: formData.createdBy,
+        created_by: user.id,
       },
     ]);
 

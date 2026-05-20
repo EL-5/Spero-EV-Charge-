@@ -13,7 +13,14 @@ import { requireAuth } from '@/lib/auth-guard';
 export async function startShift(attendantId: string) {
   try {
     // Any authenticated station staff can start a shift
-    await requireAuth(['super_admin', 'manager', 'accountant', 'attendant']);
+    const user = await requireAuth(['super_admin', 'manager', 'accountant', 'attendant']);
+
+    // Prevent regular attendants from starting shifts on behalf of other users
+    // Managers and super_admins may start shifts on behalf of anyone
+    const isElevated = user.role === 'super_admin' || user.role === 'manager';
+    if (!isElevated && attendantId !== user.id) {
+      return { success: false, error: 'Forbidden: You can only start shifts for yourself.' };
+    }
 
     // Prevent an attendant from having more than one active shift simultaneously
     const { data: existingShift } = await supabaseAdmin

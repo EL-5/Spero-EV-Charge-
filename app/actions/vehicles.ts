@@ -2,6 +2,7 @@
 
 import { supabaseAdmin } from '@/lib/supabase-server';
 import { revalidatePath } from 'next/cache';
+import { requireAuth } from '@/lib/auth-guard';
 
 export async function addVehicle(formData: {
   brand: string;
@@ -11,6 +12,8 @@ export async function addVehicle(formData: {
   corporate_account_id?: string;
 }) {
   try {
+    await requireAuth(['super_admin', 'manager', 'attendant']);
+
     const { error } = await supabaseAdmin.from('vehicles').insert([
       {
         brand: formData.brand,
@@ -38,6 +41,8 @@ export async function updateVehicle(id: string, formData: {
   driver_id?: string;
 }) {
   try {
+    await requireAuth(['super_admin', 'manager', 'attendant']);
+
     const { error } = await supabaseAdmin
       .from('vehicles')
       .update({
@@ -60,6 +65,8 @@ export async function updateVehicle(id: string, formData: {
 
 export async function deleteVehicle(id: string) {
   try {
+    await requireAuth(['super_admin', 'manager']);
+
     const { error } = await supabaseAdmin
       .from('vehicles')
       .delete()

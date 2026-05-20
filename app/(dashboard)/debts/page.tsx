@@ -23,14 +23,13 @@ export default function DebtsPage() {
   const totalDebt = debtors.reduce((sum: number, d: Driver) => sum + d.debtBalance, 0);
 
   const handleMarkPaid = async () => {
-    if (!selectedDriver || !payAmount || !user) return;
+    if (!selectedDriver || !payAmount) return;
     setLoading(true);
     try {
       const res = await recordDebtPayment({
         driverId: selectedDriver.id,
         amount: payAmount,
         method: payMethod,
-        createdBy: user.id
       });
       
       if (res.success) {

@@ -167,6 +167,8 @@ export async function processPayment(data: {
   attendant_id: string;
 }) {
   try {
+    await requireAuth(['super_admin', 'manager', 'attendant']);
+
     // Fetch session details for the payment record
     const { data: session } = await supabaseAdmin
       .from('sessions')
@@ -309,6 +311,8 @@ export async function completeSession(id: string, data: {
   total_amount: number;
 }) {
   try {
+    await requireAuth(['super_admin', 'manager', 'attendant']);
+
     const { error } = await supabaseAdmin
       .from('sessions')
       .update({
@@ -332,23 +336,15 @@ export async function completeSession(id: string, data: {
   }
 }
 
-export async function deleteSession(id: string, adminId: string) {
+export async function deleteSession(id: string) {
   try {
-    // 1. Verify caller is super_admin
-    const { data: profile } = await supabaseAdmin
-      .from('profiles')
-      .select('role')
-      .eq('id', adminId)
-      .single();
+    // Derive identity from the server-verified token — client-supplied IDs cannot be trusted
+    await requireAuth(['super_admin']);
 
-    if (!profile || profile.role !== 'super_admin') {
-      throw new Error('Unauthorized: Only Super Admins can delete sessions.');
-    }
-
-    // 2. Delete associated payments first (if any)
+    // 1. Delete associated payments first (if any)
     await supabaseAdmin.from('payments').delete().eq('session_id', id);
     
-    // 3. Delete the session
+    // 2. Delete the session
     const { error } = await supabaseAdmin
       .from('sessions')
       .delete()

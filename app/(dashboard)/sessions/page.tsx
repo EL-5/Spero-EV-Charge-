@@ -285,7 +285,7 @@ export default function SessionsPage() {
     if (!window.confirm('PERMANENT DELETE: Are you sure you want to delete this session and all its records? This cannot be undone.')) return;
     
     setLoading(true);
-    const res = await deleteSession(id, user.id);
+    const res = await deleteSession(id);
     setLoading(false);
     
     if (res.success) {

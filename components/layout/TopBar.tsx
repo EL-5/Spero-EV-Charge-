@@ -5,7 +5,7 @@ import { useAuthStore } from '@/store/auth';
 import { getRoleLabel, formatDateTime } from '@/lib/utils';
 import { useNotifications, useSettings } from '@/hooks/use-database';
 import { useState, useRef, useEffect } from 'react';
-import { supabase } from '@/lib/supabase';
+import { markAsRead as markAsReadAction, markAllRead as markAllReadAction } from '@/app/actions/notifications';
 
 interface TopBarProps {
   title: string;
@@ -35,12 +35,11 @@ export function TopBar({ title, subtitle }: TopBarProps) {
   }, []);
 
   const markAsRead = async (id: string) => {
-    await supabase.from('notifications').update({ is_read: true }).eq('id', id);
+    await markAsReadAction(id);
   };
 
   const markAllAsRead = async () => {
-    if (!user) return;
-    await supabase.from('notifications').update({ is_read: true }).eq('user_id', user.id);
+    await markAllReadAction();
   };
 
   const [isOnline, setIsOnline] = useState(true);
