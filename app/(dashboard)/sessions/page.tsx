@@ -45,6 +45,7 @@ export default function SessionsPage() {
   const [isCompleting, setIsCompleting] = useState(false);
   const [completeForm, setCompleteForm] = useState({ units: 0, amount: 0 });
   const [isPaying, setIsPaying] = useState(false);
+  const [paymentPhone, setPaymentPhone] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<'cash' | 'wallet' | 'mtn' | 'telecel' | 'airteltigo'>('cash');
   const [paymentStatus, setPaymentStatus] = useState<string | null>(null);
   const [actualAmount, setActualAmount] = useState<number>(0);
@@ -148,7 +149,9 @@ export default function SessionsPage() {
       if (completeForm.amount > 0) {
         setIsPaying(true);
         setActualAmount(completeForm.amount || selected.totalAmount || 0);
-        // Phone pre-fill removed (no longer needed without MoMo gateway prompts)
+        // Pre-fill phone from driver record for payment tracking
+        const driver = drivers?.find(d => d.id === selected.driverId);
+        if (driver) setPaymentPhone(driver.phone);
       } else {
         setSelected(null);
       }
@@ -247,19 +250,6 @@ export default function SessionsPage() {
     }
   };
   
-  const handleVerifyPayment = async () => {
-    if (!completedPayment?.reference) return;
-    setLoading(true);
-    const toastId = toast.loading('Verifying payment status...', { id: 'hubtel-verify' });
-    const res = await verifyHubtelPayment(completedPayment.reference);
-    setLoading(false);
-    if (res.success) {
-      toast.success('Payment Verified Successfully!', { id: 'hubtel-verify' });
-      setPaymentStatus('Verified');
-    } else {
-      toast.error(res.message || 'Payment not yet confirmed.', { id: 'hubtel-verify' });
-    }
-  };
 
   const handleDelete = async (id: string) => {
     if (!user || user.role !== 'super_admin') return;
@@ -984,11 +974,29 @@ export default function SessionsPage() {
                   </div>
                 </div>
 
+                {['mtn', 'telecel', 'airteltigo'].includes(paymentMethod) && (
+                  <div className="animate-in fade-in slide-in-from-top-2 duration-300">
+                    <label className="form-label">MoMo Number <span className="text-slate-400 font-normal">(for records)</span></label>
+                    <div className="relative">
+                      <input 
+                        className="form-input text-base tracking-widest" 
+                        style={{ paddingLeft: '52px' }}
+                        placeholder="024XXXXXXX" 
+                        value={paymentPhone} 
+                        onChange={e => setPaymentPhone(e.target.value)} 
+                      />
+                      <Smartphone className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                    </div>
+                    <p className="text-[10px] mt-1" style={{ color: 'var(--muted-foreground)' }}>
+                      Saved for financial records — no MoMo prompt is sent
+                    </p>
+                  </div>
+                )}
 
                 <div className="flex gap-3 pt-2">
                   <button onClick={() => setIsPaying(false)} className="btn btn-secondary flex-1">Back</button>
                   <button onClick={handleTriggerPayment} className="btn btn-primary flex-1 py-4" disabled={loading}>
-                    {loading ? 'Processing...' : paymentMethod === 'wallet' ? 'Pay from Wallet' : 'Confirm & Record Payment'}
+                    {loading ? 'Processing...' : paymentMethod === 'wallet' ? 'Pay from Wallet' : 'Record Payment'}
                   </button>
                 </div>
               </div>
@@ -1044,15 +1052,6 @@ export default function SessionsPage() {
 
               <div className="p-4 bg-slate-50 flex flex-col gap-2 border-t border-slate-100">
                 <div className="flex gap-2">
-                  {['mtn', 'telecel', 'airteltigo'].includes(completedPayment.method) && (
-                    <button 
-                      onClick={handleVerifyPayment}
-                      className="flex-1 py-3 bg-emerald-600 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 hover:bg-emerald-700 shadow-lg shadow-emerald-200 transition-all active:scale-95"
-                      disabled={loading}
-                    >
-                      <CheckCircle size={14} /> {loading ? 'Verifying...' : 'Verify Payment'}
-                    </button>
-                  )}
                   <button 
                     onClick={() => handleShareWhatsApp(completedPayment)}
                     className="flex-1 py-3 bg-blue-600 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 hover:bg-blue-700 shadow-lg shadow-blue-200 transition-all active:scale-95"
