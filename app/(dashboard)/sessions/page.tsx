@@ -777,7 +777,11 @@ export default function SessionsPage() {
                   )}
                   
                   {selected.status === 'pending_payment' && (
-                    <button onClick={() => { setIsPaying(true); setPaymentPhone(''); }} className="btn btn-primary w-full py-4 gap-2 text-base shadow-lg shadow-blue-200">
+                    <button onClick={() => { 
+                      setIsPaying(true); 
+                      const driver = drivers?.find(d => d.id === selected.driverId);
+                      if (driver) setPaymentPhone(driver.phone);
+                    }} className="btn btn-primary w-full py-4 gap-2 text-base shadow-lg shadow-blue-200">
                       <DollarSign size={18} /> Record & Collect Payment
                     </button>
                   )}
