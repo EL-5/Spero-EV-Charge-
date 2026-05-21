@@ -160,8 +160,9 @@ export function useSessions(options: { limit?: number; attendantId?: string } = 
         targetUnits: s.target_units,
         totalAmount: s.total_amount,
         paymentMethod: s.payment_method,
+        paymentStatus: s.payment_status || 'unpaid',
         createdAt: s.created_at,
-      })) as Session[];
+      })) as any[];
     },
   });
 }
@@ -185,9 +186,10 @@ export function useVehicles() {
         model: v.model,
         plateNumber: v.plate_number,
         driverId: v.driver_id,
+        batteryCapacity: Number(v.battery_capacity || 40.0),
         totalSessions: (v as any).sessions?.[0]?.count || 0,
         createdAt: v.created_at,
-      })) as Vehicle[];
+      })) as any[];
     },
   });
 }
@@ -407,5 +409,92 @@ export function useNotifications(userId?: string) {
       }));
     },
     enabled: !!userId,
+  });
+}
+
+// --- Chargers ---
+export function useChargers() {
+  useRealtimeSync('chargers', [['chargers']]);
+  useRealtimeSync('connectors', [['chargers']]); // Refresh if connectors update
+
+  return useQuery({
+    queryKey: ['chargers'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('chargers')
+        .select('*')
+        .order('charge_point_id');
+      if (error) throw error;
+      return (data || []).map(c => ({
+        id: c.id,
+        chargePointId: c.charge_point_id,
+        name: c.name,
+        vendor: c.vendor,
+        model: c.model,
+        serialNumber: c.serial_number,
+        location: c.location,
+        status: c.status,
+        lastHeartbeat: c.last_heartbeat,
+        createdAt: c.created_at,
+      }));
+    },
+  });
+}
+
+// --- Connectors ---
+export function useConnectors() {
+  useRealtimeSync('connectors', [['connectors']]);
+  useRealtimeSync('sessions', [['connectors']]); // Refresh if session links change
+
+  return useQuery({
+    queryKey: ['connectors'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('connectors')
+        .select('*')
+        .order('connector_number');
+      if (error) throw error;
+      return (data || []).map(c => ({
+        id: c.id,
+        chargerId: c.charger_id,
+        connectorNumber: c.connector_number,
+        status: c.status,
+        powerType: c.power_type,
+        maxPower: Number(c.max_power || 22.0),
+        currentSessionId: c.current_session_id,
+        lastStatusNotification: c.last_status_notification,
+      }));
+    },
+  });
+}
+
+// --- OCPP Logs ---
+export function useOcppLogs(chargePointId?: string) {
+  useRealtimeSync('ocpp_logs', [['ocpp_logs', chargePointId]]);
+
+  return useQuery({
+    queryKey: ['ocpp_logs', chargePointId],
+    queryFn: async () => {
+      let query = supabase
+        .from('ocpp_logs')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(50);
+      
+      if (chargePointId) {
+        query = query.eq('charge_point_id', chargePointId);
+      }
+
+      const { data, error } = await query;
+      if (error) throw error;
+      return (data || []).map(l => ({
+        id: l.id,
+        chargePointId: l.charge_point_id,
+        direction: l.direction,
+        messageType: l.message_type,
+        payload: l.payload,
+        createdAt: l.created_at,
+      }));
+    },
   });
 }

@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation';
 import {
   LayoutDashboard, Users, Car, Zap, CreditCard, Wallet,
   AlertTriangle, Clock, BarChart3, FileText, UserCog,
-  Settings, ChevronLeft, ChevronRight, LogOut, Bolt
+  Settings, ChevronLeft, ChevronRight, LogOut, Bolt, Smartphone
 } from 'lucide-react';
 import { useUIStore } from '@/store/ui';
 import { useAuthStore } from '@/store/auth';
@@ -13,6 +13,7 @@ import { useSettings } from '@/hooks/use-database';
 
 const navItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ['super_admin', 'manager', 'accountant', 'finance', 'attendant'] },
+  { href: '/chargers', label: 'Chargers', icon: Bolt, roles: ['super_admin', 'manager', 'attendant'] },
   { href: '/drivers', label: 'Drivers', icon: Users, roles: ['super_admin', 'manager', 'attendant'] },
   { href: '/vehicles', label: 'Vehicles', icon: Car, roles: ['super_admin', 'manager', 'attendant'] },
   { href: '/sessions', label: 'Sessions', icon: Zap, roles: ['super_admin', 'manager', 'attendant'] },
@@ -24,6 +25,7 @@ const navItems = [
   { href: '/analytics', label: 'Analytics', icon: BarChart3, roles: ['super_admin', 'manager', 'finance', 'accountant'] },
   { href: '/reports', label: 'Reports', icon: FileText, roles: ['super_admin', 'manager', 'accountant', 'finance'] },
   { href: '/users', label: 'Users', icon: UserCog, roles: ['super_admin'] },
+  { href: '/driver-portal', label: 'Driver Portal', icon: Smartphone, roles: ['super_admin', 'manager', 'attendant'] },
   { href: '/settings', label: 'Settings', icon: Settings, roles: ['super_admin'] },
 ];
 

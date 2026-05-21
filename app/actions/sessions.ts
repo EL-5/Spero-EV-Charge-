@@ -249,6 +249,18 @@ export async function completeSession(id: string, data: {
   try {
     await requireAuth(['super_admin', 'manager', 'attendant']);
 
+    // 1. Fetch current session details to check payment status
+    const { data: session } = await supabaseAdmin
+      .from('sessions')
+      .select('payment_status, prepaid_amount, rate_at_time, driver_id, receipt_number, attendant_id')
+      .eq('id', id)
+      .single();
+
+    if (session && session.payment_status === 'paid') {
+      // If it's a prepaid session that has been paid, delegate directly to the refund stop flow
+      return await stopSessionWithRefund(id, data.units_consumed);
+    }
+
     const { error } = await supabaseAdmin
       .from('sessions')
       .update({
@@ -297,5 +309,186 @@ export async function deleteSession(id: string) {
       return { success: false, error: error.message };
     }
     return { success: false, error: 'Failed to delete session. Please try again.' };
+  }
+}
+
+export async function initiatePrepaidSession(data: {
+  driver_id: string;
+  vehicle_id: string;
+  mode: 'charge_to_full' | 'fixed_budget';
+  start_soc?: number;
+  budget_amount?: number;
+  attendant_id?: string;
+  shift_id?: string;
+}) {
+  try {
+    const authUser = await requireAuth(['super_admin', 'manager', 'attendant']);
+    const isAttendantMode = !!data.attendant_id;
+
+    // Fetch vehicle capacity & driver details
+    const [driverRes, vehicleRes] = await Promise.all([
+      supabaseAdmin.from('drivers').select('name').eq('id', data.driver_id).single(),
+      supabaseAdmin.from('vehicles').select('plate_number, brand, model, battery_capacity').eq('id', data.vehicle_id).single(),
+    ]);
+
+    if (vehicleRes.error) throw new Error('Vehicle not found');
+
+    const batteryCapacity = Number(vehicleRes.data?.battery_capacity || 40.0);
+    
+    // Fetch active pricing rate for kWh
+    const { data: rateData } = await supabaseAdmin
+      .from('pricing')
+      .select('rate, unit_quantity')
+      .eq('unit_type', 'kwh')
+      .eq('is_active', true)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .single();
+
+    if (!rateData) throw new Error('No active kWh pricing configured. Please set pricing in settings.');
+
+    const ratePerKwh = Number(rateData.rate) / Number(rateData.unit_quantity || 1);
+
+    let targetUnits = 0;
+    let prepaidAmount = 0;
+
+    if (data.mode === 'charge_to_full') {
+      const currentSoc = data.start_soc ?? 20;
+      const percentNeeded = 100 - currentSoc;
+      targetUnits = batteryCapacity * (percentNeeded / 100);
+      prepaidAmount = targetUnits * ratePerKwh;
+    } else {
+      prepaidAmount = data.budget_amount ?? 50.0;
+      targetUnits = prepaidAmount / ratePerKwh;
+    }
+
+    const receiptNumber = `RCP-${Math.floor(100000 + Math.random() * 900000)}`;
+
+    const insertData: any = {
+      receipt_number: receiptNumber,
+      driver_id: data.driver_id,
+      vehicle_id: data.vehicle_id,
+      driver_name: driverRes.data?.name || 'Unknown',
+      vehicle_plate: vehicleRes.data?.plate_number || 'Unknown',
+      vehicle_details: `${vehicleRes.data?.brand} ${vehicleRes.data?.model}`,
+      mode: 'prepaid',
+      unit_type: 'kwh',
+      status: 'pending_payment',
+      payment_status: 'unpaid',
+      rate_at_time: ratePerKwh,
+      prepaid_amount: prepaidAmount,
+      target_units: targetUnits,
+      start_time: new Date().toISOString(),
+      start_battery_percentage: data.mode === 'charge_to_full' ? data.start_soc : null,
+      target_percentage: data.mode === 'charge_to_full' ? 100 : null,
+    };
+
+    if (isAttendantMode) {
+      insertData.attendant_id = data.attendant_id;
+      insertData.shift_id = data.shift_id;
+    } else {
+      // Driver self charging — associate with driver's system login ID
+      insertData.attendant_id = authUser.id;
+    }
+
+    const { data: newSession, error: insertError } = await supabaseAdmin
+      .from('sessions')
+      .insert([insertData])
+      .select()
+      .single();
+
+    if (insertError) throw insertError;
+
+    revalidatePath('/sessions');
+    return { success: true, session: newSession };
+  } catch (error: any) {
+    console.error('[SESSIONS] initiatePrepaidSession error:', error);
+    return { success: false, error: error.message || 'Failed to initiate prepayment' };
+  }
+}
+
+export async function stopSessionWithRefund(sessionId: string, actualUnitsConsumed: number) {
+  try {
+    await requireAuth(['super_admin', 'manager', 'attendant']);
+
+    // 1. Fetch current session details
+    const { data: session, error } = await supabaseAdmin
+      .from('sessions')
+      .select('*')
+      .eq('id', sessionId)
+      .single();
+
+    if (error || !session) throw new Error('Session not found');
+
+    if (session.status === 'completed') {
+      return { success: true, refundAmount: 0 };
+    }
+
+    const prepaidAmount = Number(session.prepaid_amount || 0);
+    const rateAtTime = Number(session.rate_at_time || 0);
+    const actualCost = actualUnitsConsumed * rateAtTime;
+    const refundAmount = prepaidAmount - actualCost;
+
+    console.log(`[REFUND] Session: ${session.receipt_number}. Paid: GHS ${prepaidAmount}. Consumed: ${actualUnitsConsumed} kWh. Cost: GHS ${actualCost}. Refund: GHS ${refundAmount}`);
+
+    const updatePayload: any = {
+      status: 'completed',
+      units_consumed: actualUnitsConsumed,
+      total_amount: actualCost,
+      end_time: new Date().toISOString(),
+    };
+
+    // If there is an unused balance to refund
+    if (session.payment_status === 'paid' && refundAmount > 0.01 && session.driver_id) {
+      // 1. Fetch current driver wallet balance
+      const { data: driver } = await supabaseAdmin
+        .from('drivers')
+        .select('wallet_balance')
+        .eq('id', session.driver_id)
+        .single();
+
+      if (driver) {
+        const currentBalance = Number(driver.wallet_balance || 0);
+        const newBalance = currentBalance + refundAmount;
+
+        // 2. Perform the credit update
+        const { error: walletUpdateError } = await supabaseAdmin
+          .from('drivers')
+          .update({ wallet_balance: newBalance })
+          .eq('id', session.driver_id);
+
+        if (walletUpdateError) {
+          console.error('[REFUND] Failed to update wallet:', walletUpdateError);
+        } else {
+          // 3. Log wallet transaction
+          await supabaseAdmin.from('wallet_transactions').insert([{
+            driver_id: session.driver_id,
+            type: 'credit',
+            amount: refundAmount,
+            balance_before: currentBalance,
+            balance_after: newBalance,
+            description: `Refund of unused charging balance from Session ${session.receipt_number}`,
+            session_id: session.id,
+            created_by: session.attendant_id,
+          }]);
+          
+          updatePayload.payment_status = 'refunded';
+        }
+      }
+    }
+
+    const { error: updateError } = await supabaseAdmin
+      .from('sessions')
+      .update(updatePayload)
+      .eq('id', sessionId);
+
+    if (updateError) throw updateError;
+
+    revalidatePath('/sessions');
+    revalidatePath('/dashboard');
+    return { success: true, refundAmount: Math.max(0, refundAmount) };
+  } catch (error: any) {
+    console.error('[SESSIONS] stopSessionWithRefund error:', error);
+    return { success: false, error: error.message || 'Failed to complete session with refund' };
   }
 }

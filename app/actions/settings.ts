@@ -26,6 +26,7 @@ const ALLOWED_SETTINGS_KEYS = [
   'sms_notifications_enabled',
   'receipt_footer_text',
   'logo_url',
+  'ocpp_mode',
 ] as const;
 
 type AllowedSettingKey = (typeof ALLOWED_SETTINGS_KEYS)[number];
