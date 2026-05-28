@@ -14,6 +14,7 @@ import { useSettings } from '@/hooks/use-database';
 const navItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ['super_admin', 'manager', 'accountant', 'finance', 'attendant'] },
   { href: '/chargers', label: 'Chargers', icon: Bolt, roles: ['super_admin', 'manager', 'attendant'] },
+  { href: '/chargers/setup-guide', label: 'OCPP Setup Guide', icon: FileText, roles: ['super_admin', 'manager', 'attendant'] },
   { href: '/drivers', label: 'Drivers', icon: Users, roles: ['super_admin', 'manager', 'attendant'] },
   { href: '/vehicles', label: 'Vehicles', icon: Car, roles: ['super_admin', 'manager', 'attendant'] },
   { href: '/sessions', label: 'Sessions', icon: Zap, roles: ['super_admin', 'manager', 'attendant'] },
