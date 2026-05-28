@@ -173,6 +173,23 @@ export default function ChargersPage() {
     }
   };
 
+  const handleDeleteActiveCharger = async () => {
+    if (!activeCharger) return;
+    const confirmDelete = confirm(`Are you sure you want to permanently delete charger "${activeCharger.chargePointId}"? This will remove all its configured connectors.`);
+    if (!confirmDelete) return;
+
+    const loadingToast = toast.loading(`Deleting charger ${activeCharger.chargePointId}...`);
+    try {
+      const res = await deleteCharger(activeCharger.id);
+      if (!res.success) throw new Error(res.error);
+      toast.success(`Charger deleted successfully`, { id: loadingToast });
+      setSelectedChargerId(null);
+      queryClient.invalidateQueries({ queryKey: ['chargers'] });
+    } catch (err: any) {
+      toast.error(err.message, { id: loadingToast });
+    }
+  };
+
   const handleRemoteCommand = async (command: string, payload: any = {}) => {
     if (!activeCharger) return;
     const loadingToast = toast.loading(`Sending OCPP ${command} command...`);
@@ -552,6 +569,13 @@ export default function ChargersPage() {
                         className="px-4 py-2 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5"
                       >
                         <HeartbeatIcon className="w-3.5 h-3.5 text-rose-500 animate-pulse" /> Ping Node
+                      </button>
+                      <button 
+                        onClick={handleDeleteActiveCharger}
+                        className="px-4 py-2 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 text-rose-600 dark:text-rose-400 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 active:scale-95"
+                        title="Delete Charger Node"
+                      >
+                        <Trash2 size={13} /> Delete
                       </button>
                     </div>
                   </div>
