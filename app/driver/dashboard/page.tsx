@@ -14,14 +14,16 @@ import {
 import { initiatePrepaidSession, processPayment, stopSessionWithRefund } from '@/app/actions/sessions';
 import { supabase } from '@/lib/supabase';
 import { 
-  Smartphone, User, Zap, CreditCard, Play, Square, 
-  BatteryCharging, Wallet, UserPlus, Info, Clock, 
-  Signal, ShieldCheck, CheckCircle
+  User, Zap, Play, Square, 
+  BatteryCharging, CheckCircle, 
+  Signal, ShieldCheck, Battery, ZapOff, ArrowRight
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { useRouter } from 'next/navigation';
 
 export default function DriverPortalPage() {
   const queryClient = useQueryClient();
+  const router = useRouter();
 
   // Data Hooks
   const { data: drivers } = useDrivers();
@@ -29,8 +31,6 @@ export default function DriverPortalPage() {
   const { data: chargers } = useChargers();
   const { data: connectors } = useConnectors();
 
-  const router = import('next/navigation').then(m => m.useRouter());
-  const routerInstance = typeof window !== 'undefined' ? require('next/navigation').useRouter() : null;
   // Top level tab
   const [activeTab, setActiveTab] = useState<'registered'|'guest'>('registered');
 
@@ -40,12 +40,12 @@ export default function DriverPortalPage() {
   useEffect(() => {
     supabase.auth.getUser().then(({ data, error }) => {
       if (error || !data.user) {
-        if (routerInstance) routerInstance.push('/driver-login');
+         router.push('/driver-login');
       } else {
         setActiveDriverId(data.user.id);
       }
     });
-  }, [routerInstance]);
+  }, [router]);
 
   const currentDriver = drivers?.find(d => d.id === activeDriverId);
   const currentVehicle = vehicles?.find(v => v.driverId === activeDriverId);
@@ -146,7 +146,6 @@ export default function DriverPortalPage() {
     toast.loading('Initiating session & dispatching start command...', { id: 'start' });
 
     try {
-      // 1. Create Session
       const initRes = await initiatePrepaidSession({
         charger_id: selectedChargerId,
         connector_number: selectedGun,
@@ -166,13 +165,12 @@ export default function DriverPortalPage() {
 
       const sessionId = initRes.session.id;
 
-      // 2. Process Payment (Wallet for registered, Manual for guest)
       const payRes = await processPayment({
         session_id: sessionId,
-        shift_id: '', // Empty since it's app driven, not attendant driven
+        shift_id: '',
         amount: cost,
         method: activeTab === 'registered' ? 'wallet' : guestPaymentMethod,
-        attendant_id: 'system', // or the authenticated user's ID
+        attendant_id: 'system',
       });
 
       if (!payRes.success) throw new Error(payRes.error || 'Payment failed');
@@ -188,13 +186,8 @@ export default function DriverPortalPage() {
     if (!activeSessionId || !liveSession) return;
     toast.loading('Sending Stop command...', { id: 'stop' });
     try {
-      // If we had automated stopping over OCPP, we would send a RemoteStopTransaction here.
-      // But we also need to refund via stopSessionWithRefund.
-      // For now, in a physical setup, we can just trigger stopSessionWithRefund. 
-      // In a real physical setup, we'd also send RemoteStopTransaction.
       await stopSessionWithRefund(activeSessionId, Number(liveSession.units_consumed || 0));
       
-      // Also manually reset connector status if gateway doesn't do it instantly
       if (activeCharger) {
         await supabase.from('connectors').update({ status: 'Available', current_session_id: null })
           .eq('charge_point_id', activeCharger.chargePointId)
@@ -211,122 +204,154 @@ export default function DriverPortalPage() {
   };
 
   return (
-    <div className="w-full text-[#f8fafc]">
-      <div className="mb-6 border-b border-[#334155] pb-4">
-        <h1 className="text-2xl font-black text-white">Start Charge</h1>
-        <p className="text-xs text-[#94a3b8]">Live App-Driven Charging</p>
+    <div className="w-full animate-fade-in space-y-6">
+      
+      {/* Header */}
+      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-slate-900 to-black border border-slate-800 p-6 shadow-2xl">
+        <div className="absolute top-0 right-0 -mr-16 -mt-16 w-48 h-48 rounded-full bg-cyan-500/10 blur-3xl"></div>
+        <div className="relative z-10">
+          <h1 className="text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-500 mb-1">Charge</h1>
+          <p className="text-slate-400 text-xs">Live Telemetry & Control</p>
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         
         {/* LEFT COLUMN: SETUP */}
-        <div className="space-y-6">
-          <div className="flex bg-[#1e293b] p-1 rounded-xl">
+        <div className="lg:col-span-5 space-y-6">
+          
+          {/* Tabs */}
+          <div className="flex bg-slate-900/50 backdrop-blur-md p-1.5 rounded-2xl border border-slate-800">
             <button 
-              className={`flex-1 py-2 text-xs font-bold rounded-lg ${activeTab === 'registered' ? 'bg-[#3b82f6] text-white' : 'text-[#94a3b8]'}`}
+              className={`flex-1 py-3 text-xs font-black rounded-xl transition-all duration-300 ${activeTab === 'registered' ? 'bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-lg shadow-cyan-500/20' : 'text-slate-500 hover:text-slate-300'}`}
               onClick={() => setActiveTab('registered')}
-            >Registered Driver</button>
+            >
+              Registered
+            </button>
             <button 
-              className={`flex-1 py-2 text-xs font-bold rounded-lg ${activeTab === 'guest' ? 'bg-[#3b82f6] text-white' : 'text-[#94a3b8]'}`}
+              className={`flex-1 py-3 text-xs font-black rounded-xl transition-all duration-300 ${activeTab === 'guest' ? 'bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-lg shadow-cyan-500/20' : 'text-slate-500 hover:text-slate-300'}`}
               onClick={() => setActiveTab('guest')}
-            >Guest Quick Charge</button>
+            >
+              Guest
+            </button>
           </div>
 
-          <div className="stat-card bg-[#1e293b] border-[#334155] p-5 space-y-4">
+          <div className="bg-slate-900/40 backdrop-blur-md border border-slate-800 rounded-3xl p-6 space-y-6">
+            
+            {/* User Info Section */}
             {activeTab === 'registered' ? (
               <div className="space-y-4">
-                <div>
-                  <label className="text-[10px] text-[#94a3b8] font-bold">LOGGED IN AS</label>
-                  <div className="w-full bg-[#0f172a] border border-[#334155] rounded p-3 text-sm text-white font-bold flex items-center gap-2">
-                    <User size={16} className="text-blue-400" />
-                    {currentDriver ? currentDriver.name : 'Loading profile...'}
+                <div className="bg-slate-900/80 p-4 rounded-2xl border border-slate-800 flex items-center gap-4">
+                  <div className="w-12 h-12 bg-blue-500/10 rounded-full border border-blue-500/20 flex items-center justify-center">
+                    <User size={20} className="text-blue-400" />
                   </div>
-                  {currentVehicle && (
-                    <div className="text-xs text-[#94a3b8] mt-2 ml-1">
-                      Vehicle: {currentVehicle.brand} {currentVehicle.model} ({currentVehicle.plateNumber})
-                    </div>
-                  )}
+                  <div>
+                    <div className="text-xs text-slate-500 font-bold uppercase tracking-widest mb-0.5">Driver</div>
+                    <div className="text-sm text-white font-bold">{currentDriver ? currentDriver.name : 'Loading profile...'}</div>
+                    {currentVehicle && (
+                      <div className="text-[10px] text-cyan-400 mt-1">
+                        {currentVehicle.brand} {currentVehicle.model} • {currentVehicle.plateNumber}
+                      </div>
+                    )}
+                  </div>
                 </div>
+
                 {currentDriver && (
-                  <div className="p-3 bg-gradient-to-r from-blue-900/20 to-transparent border border-blue-900/50 rounded-lg flex justify-between items-center">
-                    <div>
-                      <div className="text-[10px] text-blue-400 font-bold uppercase tracking-wider">Wallet Balance</div>
-                      <div className="text-xl font-black">GHS {Number(currentDriver.walletBalance || 0).toFixed(2)}</div>
+                  <div className="p-5 bg-gradient-to-r from-blue-900/40 to-slate-900 border border-blue-500/30 rounded-2xl shadow-[0_0_20px_rgba(59,130,246,0.1)]">
+                    <div className="flex justify-between items-center mb-4">
+                      <div>
+                        <div className="text-[10px] text-blue-400 font-bold uppercase tracking-widest mb-1">Wallet Balance</div>
+                        <div className="text-2xl font-black text-white">GHS {Number(currentDriver.walletBalance || 0).toFixed(2)}</div>
+                      </div>
                     </div>
                     <div className="flex gap-2">
-                      <input type="number" className="w-16 bg-[#090d16] border border-[#334155] rounded px-2 text-xs text-white" value={topUpAmount} onChange={e => setTopUpAmount(e.target.value)} />
-                      <button onClick={handleWalletTopUp} className="bg-blue-600 hover:bg-blue-500 text-white text-[10px] font-bold px-3 rounded">Top Up</button>
+                      <div className="relative flex-1">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs font-bold">GHS</span>
+                        <input type="number" className="w-full bg-black/50 border border-slate-700 rounded-xl py-2.5 pl-10 pr-3 text-sm text-white outline-none focus:border-blue-500 transition-colors" value={topUpAmount} onChange={e => setTopUpAmount(e.target.value)} />
+                      </div>
+                      <button onClick={handleWalletTopUp} className="bg-white text-blue-900 hover:bg-slate-200 text-xs font-bold px-4 rounded-xl transition-colors shadow-lg shadow-white/10">Top Up</button>
                     </div>
                   </div>
                 )}
               </div>
             ) : (
-              <div className="space-y-3">
-                <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="text-[10px] text-[#94a3b8] font-bold">FULL NAME</label>
-                    <input className="w-full bg-[#0f172a] border border-[#334155] rounded p-2 text-xs text-white" value={guestName} onChange={e => setGuestName(e.target.value)} placeholder="e.g. Kwame Osei" />
+                    <label className="text-[10px] text-slate-500 font-bold tracking-widest uppercase mb-2 block">Full Name</label>
+                    <input className="w-full bg-black/50 border border-slate-800 focus:border-cyan-500 rounded-xl p-3 text-xs text-white outline-none transition-colors" value={guestName} onChange={e => setGuestName(e.target.value)} placeholder="e.g. Kwame Osei" />
                   </div>
                   <div>
-                    <label className="text-[10px] text-[#94a3b8] font-bold">PHONE</label>
-                    <input className="w-full bg-[#0f172a] border border-[#334155] rounded p-2 text-xs text-white" value={guestPhone} onChange={e => setGuestPhone(e.target.value)} placeholder="054..." />
+                    <label className="text-[10px] text-slate-500 font-bold tracking-widest uppercase mb-2 block">Phone</label>
+                    <input className="w-full bg-black/50 border border-slate-800 focus:border-cyan-500 rounded-xl p-3 text-xs text-white outline-none transition-colors" value={guestPhone} onChange={e => setGuestPhone(e.target.value)} placeholder="054..." />
                   </div>
                 </div>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="text-[10px] text-[#94a3b8] font-bold">PLATE NUMBER</label>
-                    <input className="w-full bg-[#0f172a] border border-[#334155] rounded p-2 text-xs text-white" value={guestPlate} onChange={e => setGuestPlate(e.target.value)} placeholder="GR-1234-24" />
+                    <label className="text-[10px] text-slate-500 font-bold tracking-widest uppercase mb-2 block">Plate</label>
+                    <input className="w-full bg-black/50 border border-slate-800 focus:border-cyan-500 rounded-xl p-3 text-xs text-white outline-none transition-colors" value={guestPlate} onChange={e => setGuestPlate(e.target.value)} placeholder="GR-1234-24" />
                   </div>
                   <div>
-                    <label className="text-[10px] text-[#94a3b8] font-bold">BATTERY CAPACITY (kWh)</label>
-                    <input type="number" className="w-full bg-[#0f172a] border border-[#334155] rounded p-2 text-xs text-white" value={guestCapacity} onChange={e => setGuestCapacity(e.target.value)} />
+                    <label className="text-[10px] text-slate-500 font-bold tracking-widest uppercase mb-2 block">Capacity (kWh)</label>
+                    <input type="number" className="w-full bg-black/50 border border-slate-800 focus:border-cyan-500 rounded-xl p-3 text-xs text-white outline-none transition-colors" value={guestCapacity} onChange={e => setGuestCapacity(e.target.value)} />
                   </div>
                 </div>
               </div>
             )}
           </div>
 
-          <div className="stat-card bg-[#1e293b] border-[#334155] p-5 space-y-4">
-            <h3 className="text-xs font-bold text-white uppercase tracking-wider">Session Setup</h3>
+          {/* Session Setup */}
+          <div className="bg-slate-900/40 backdrop-blur-md border border-slate-800 rounded-3xl p-6 space-y-6">
+            <h3 className="text-xs font-black text-white uppercase tracking-widest flex items-center gap-2">
+              <Zap size={14} className="text-cyan-400"/> Configure Charge
+            </h3>
             
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="text-[10px] text-[#94a3b8] font-bold">SELECT CHARGER</label>
-                <select className="w-full bg-[#0f172a] border border-[#334155] rounded p-2 text-xs text-white" value={selectedChargerId} onChange={e => setSelectedChargerId(e.target.value)}>
+                <label className="text-[10px] text-slate-500 font-bold tracking-widest uppercase mb-2 block">Charger</label>
+                <select className="w-full bg-black/50 border border-slate-800 focus:border-cyan-500 rounded-xl p-3 text-xs text-white outline-none transition-colors appearance-none" value={selectedChargerId} onChange={e => setSelectedChargerId(e.target.value)}>
                   <option value="">-- Select --</option>
-                  {chargers?.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  {chargers?.map(c => <option key={c.id} value={c.id}>{c.chargePointId}</option>)}
                 </select>
               </div>
               <div>
-                <label className="text-[10px] text-[#94a3b8] font-bold">SELECT GUN</label>
-                <select className="w-full bg-[#0f172a] border border-[#334155] rounded p-2 text-xs text-white" value={selectedGun} onChange={e => setSelectedGun(Number(e.target.value))}>
+                <label className="text-[10px] text-slate-500 font-bold tracking-widest uppercase mb-2 block">Gun</label>
+                <select className="w-full bg-black/50 border border-slate-800 focus:border-cyan-500 rounded-xl p-3 text-xs text-white outline-none transition-colors appearance-none" value={selectedGun} onChange={e => setSelectedGun(Number(e.target.value))}>
                   <option value={1}>Gun 1</option>
                   <option value={2}>Gun 2</option>
                 </select>
               </div>
             </div>
 
-            <div className="flex bg-[#0f172a] p-1 rounded-md">
-              <button onClick={() => setPrepMode('charge_to_full')} className={`flex-1 py-1.5 text-[10px] font-bold rounded ${prepMode === 'charge_to_full' ? 'bg-[#334155] text-white' : 'text-[#94a3b8]'}`}>Charge to Full</button>
-              <button onClick={() => setPrepMode('fixed_budget')} className={`flex-1 py-1.5 text-[10px] font-bold rounded ${prepMode === 'fixed_budget' ? 'bg-[#334155] text-white' : 'text-[#94a3b8]'}`}>Fixed Budget</button>
+            <div className="flex bg-black/30 p-1.5 rounded-2xl border border-slate-800">
+              <button onClick={() => setPrepMode('charge_to_full')} className={`flex-1 py-2 text-[10px] font-black uppercase tracking-wider rounded-xl transition-all ${prepMode === 'charge_to_full' ? 'bg-slate-800 text-white shadow-md' : 'text-slate-500 hover:text-slate-300'}`}>Full Charge</button>
+              <button onClick={() => setPrepMode('fixed_budget')} className={`flex-1 py-2 text-[10px] font-black uppercase tracking-wider rounded-xl transition-all ${prepMode === 'fixed_budget' ? 'bg-slate-800 text-white shadow-md' : 'text-slate-500 hover:text-slate-300'}`}>Fixed Budget</button>
             </div>
 
-            {prepMode === 'charge_to_full' ? (
-              <div>
-                <label className="text-[10px] text-[#94a3b8] font-bold">CURRENT BATTERY SOC: {prepStartSoc}%</label>
-                <input type="range" min="0" max="90" value={prepStartSoc} onChange={e => setPrepStartSoc(e.target.value)} className="w-full accent-blue-500" />
-              </div>
-            ) : (
-              <div>
-                <label className="text-[10px] text-[#94a3b8] font-bold">BUDGET AMOUNT (GHS)</label>
-                <input type="number" value={prepBudgetAmount} onChange={e => setPrepBudgetAmount(e.target.value)} className="w-full bg-[#0f172a] border border-[#334155] rounded p-2 text-xs text-white" />
-              </div>
-            )}
+            <div className="p-4 bg-slate-900/80 rounded-2xl border border-slate-800">
+              {prepMode === 'charge_to_full' ? (
+                <div>
+                  <div className="flex justify-between items-center mb-3">
+                    <label className="text-[10px] text-slate-500 font-bold tracking-widest uppercase block">Current Battery</label>
+                    <span className="text-sm font-black text-cyan-400">{prepStartSoc}%</span>
+                  </div>
+                  <input type="range" min="0" max="90" value={prepStartSoc} onChange={e => setPrepStartSoc(e.target.value)} className="w-full h-2 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-cyan-500" />
+                </div>
+              ) : (
+                <div>
+                  <label className="text-[10px] text-slate-500 font-bold tracking-widest uppercase mb-2 block">Budget Amount (GHS)</label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs font-bold">GHS</span>
+                    <input type="number" value={prepBudgetAmount} onChange={e => setPrepBudgetAmount(e.target.value)} className="w-full bg-black/50 border border-slate-700 rounded-xl py-3 pl-10 pr-3 text-sm font-bold text-white outline-none focus:border-cyan-500 transition-colors" />
+                  </div>
+                </div>
+              )}
+            </div>
 
             {activeTab === 'guest' && (
               <div>
-                <label className="text-[10px] text-[#94a3b8] font-bold">PAYMENT METHOD</label>
-                <select className="w-full bg-[#0f172a] border border-[#334155] rounded p-2 text-xs text-white" value={guestPaymentMethod} onChange={e => setGuestPaymentMethod(e.target.value)}>
+                <label className="text-[10px] text-slate-500 font-bold tracking-widest uppercase mb-2 block">Payment Method</label>
+                <select className="w-full bg-black/50 border border-slate-800 focus:border-cyan-500 rounded-xl p-3 text-xs text-white outline-none transition-colors appearance-none" value={guestPaymentMethod} onChange={e => setGuestPaymentMethod(e.target.value)}>
                   <option value="momo">MTN MoMo</option>
                   <option value="telecel">Telecel Cash</option>
                   <option value="tigo">Tigo Cash</option>
@@ -339,79 +364,139 @@ export default function DriverPortalPage() {
         </div>
 
         {/* RIGHT COLUMN: STATUS & TELEMETRY */}
-        <div className="space-y-6">
+        <div className="lg:col-span-7 space-y-6">
           
           {/* Pre-flight Check */}
           {!activeSessionId && (
-            <div className={`p-6 rounded-2xl border ${isGunPluggedIn ? 'bg-green-900/20 border-green-500/50' : 'bg-[#1e293b] border-[#334155]'} flex flex-col items-center justify-center text-center space-y-4 h-64`}>
-              {isGunPluggedIn ? (
-                <>
-                  <CheckCircle className="text-green-400 w-12 h-12 mb-2" />
-                  <h3 className="text-lg font-bold text-white">✅ Gun Connected Successfully and Ready</h3>
-                  <div className="text-xs text-green-200 bg-green-900/40 px-3 py-1.5 rounded-lg border border-green-500/30">
-                    Est. Cost: <strong>GHS {getEstimatedCost().toFixed(2)}</strong> ({getEstimatedUnits().toFixed(2)} kWh)
-                  </div>
-                  <button onClick={handleInitiateCharge} className="w-full max-w-xs mt-4 py-3 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl flex items-center justify-center gap-2 shadow-lg">
-                    <Play size={16} /> {activeTab === 'registered' ? 'Start Charge (Deduct Wallet)' : 'Confirm Payment & Start'}
-                  </button>
-                </>
-              ) : (
-                <>
-                  <ShieldCheck className="text-[#475569] w-12 h-12 mb-2" />
-                  <h3 className="text-sm font-bold text-white">Waiting for connection...</h3>
-                  <p className="text-xs text-[#94a3b8]">Select a charger and gun, then physically plug the cable into your vehicle. The system will detect it instantly.</p>
-                  <div className="w-full max-w-xs p-3 mt-4 bg-[#0f172a] border border-[#334155] rounded-lg text-xs font-mono text-[#94a3b8] space-y-1">
-                    <div className="flex justify-between"><span>Selected Charger:</span> <span className="text-white">{activeCharger?.name || 'None'}</span></div>
-                    <div className="flex justify-between"><span>Selected Gun:</span> <span className="text-white">Gun {selectedGun}</span></div>
-                    <div className="flex justify-between"><span>Status:</span> <span className="text-yellow-400">{activeConnector?.status || 'Unknown'}</span></div>
-                  </div>
-                </>
+            <div className={`relative overflow-hidden p-8 rounded-3xl border transition-all duration-500 h-[500px] flex flex-col items-center justify-center text-center shadow-2xl ${isGunPluggedIn ? 'bg-emerald-950/20 border-emerald-500/50 shadow-[0_0_50px_rgba(16,185,129,0.1)]' : 'bg-slate-900/40 border-slate-800'}`}>
+              
+              {isGunPluggedIn && (
+                <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-emerald-500/10 via-transparent to-transparent opacity-50"></div>
               )}
+
+              <div className="relative z-10 w-full max-w-sm flex flex-col items-center">
+                {isGunPluggedIn ? (
+                  <>
+                    <div className="w-20 h-20 bg-emerald-500/10 rounded-full border border-emerald-500/30 flex items-center justify-center mb-6">
+                      <CheckCircle className="text-emerald-400 w-10 h-10" />
+                    </div>
+                    <h3 className="text-xl font-black text-white mb-2">Gun Connected & Ready</h3>
+                    
+                    <div className="w-full bg-slate-900/80 backdrop-blur-md rounded-2xl p-5 border border-slate-800 mb-8 mt-4">
+                      <div className="flex justify-between items-center mb-3">
+                        <span className="text-xs text-slate-400 font-bold uppercase tracking-widest">Est. Cost</span>
+                        <span className="text-lg font-black text-emerald-400">GHS {getEstimatedCost().toFixed(2)}</span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-xs text-slate-400 font-bold uppercase tracking-widest">Energy</span>
+                        <span className="text-sm font-bold text-white">{getEstimatedUnits().toFixed(2)} kWh</span>
+                      </div>
+                    </div>
+
+                    <button onClick={handleInitiateCharge} className="w-full py-4 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-white font-black uppercase tracking-widest text-sm rounded-2xl flex items-center justify-center gap-3 shadow-lg shadow-emerald-500/20 transition-all">
+                      <Play size={18} /> {activeTab === 'registered' ? 'Start Charge (Deduct)' : 'Pay & Start'}
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <div className="w-24 h-24 bg-slate-800/50 rounded-full border border-slate-700 border-dashed flex items-center justify-center mb-6">
+                      <ZapOff className="text-slate-500 w-10 h-10" />
+                    </div>
+                    <h3 className="text-lg font-bold text-white mb-3">Awaiting Connection</h3>
+                    <p className="text-xs text-slate-400 leading-relaxed mb-8 px-4">
+                      Please select a charger and gun from the settings, then physically plug the cable into your vehicle.
+                    </p>
+                    
+                    <div className="w-full bg-black/40 border border-slate-800 rounded-2xl p-4 text-xs font-mono text-slate-400 space-y-3">
+                      <div className="flex justify-between items-center">
+                        <span>Target:</span> 
+                        <span className="text-white font-sans font-bold bg-slate-800 px-2 py-1 rounded">{activeCharger?.chargePointId || 'None'}</span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span>Interface:</span> 
+                        <span className="text-white font-sans font-bold bg-slate-800 px-2 py-1 rounded">Gun {selectedGun}</span>
+                      </div>
+                      <div className="flex justify-between items-center border-t border-slate-800 pt-3">
+                        <span>Status:</span> 
+                        <span className="text-amber-400 font-sans font-bold flex items-center gap-1">
+                          <span className="relative flex h-2 w-2">
+                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                            <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
+                          </span>
+                          {activeConnector?.status || 'Unknown'}
+                        </span>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
             </div>
           )}
 
           {/* Active Session Telemetry */}
           {activeSessionId && liveSession && (
-            <div className="p-6 rounded-2xl bg-gradient-to-b from-[#0f172a] to-[#080b12] border border-[#1e293b] flex flex-col items-center justify-center text-center space-y-6 shadow-2xl relative overflow-hidden h-[500px]">
+            <div className="relative overflow-hidden p-8 rounded-3xl bg-[#0a0a0a] border border-slate-800 flex flex-col items-center justify-center text-center shadow-2xl h-[500px]">
               
-              <div className="absolute top-4 left-4 right-4 flex justify-between items-center text-[10px] font-bold text-[#94a3b8] uppercase tracking-widest">
-                <span>{liveSession.receipt_number}</span>
-                <span className="flex items-center gap-1"><Signal size={12} className="text-green-400" /> LIVE</span>
+              {/* Background Glow */}
+              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 bg-cyan-500/10 rounded-full blur-[80px]"></div>
+
+              <div className="absolute top-5 left-6 right-6 flex justify-between items-center z-10">
+                <span className="text-[10px] font-bold text-slate-500 font-mono bg-slate-900 px-2.5 py-1 rounded-md border border-slate-800">
+                  {liveSession.receipt_number}
+                </span>
+                <span className="flex items-center gap-1.5 text-[10px] font-black text-emerald-400 uppercase tracking-widest bg-emerald-950/30 px-2.5 py-1 rounded-md border border-emerald-500/20 backdrop-blur-md">
+                  <Signal size={12} className="animate-pulse" /> LIVE
+                </span>
               </div>
 
-              {isCharging ? (
-                 <div className="relative w-48 h-48 flex items-center justify-center">
-                    <div className="absolute inset-0 rounded-full border-4 border-cyan-500/10" />
-                    <div className="absolute inset-0 rounded-full border-4 border-t-cyan-400 animate-spin" />
-                    <div className="text-center space-y-1 z-10">
-                      <BatteryCharging className="text-[#06b6d4] mx-auto animate-pulse" size={28} />
-                      <div className="text-3xl font-black text-white leading-none">
-                        {Number(liveSession.units_consumed || 0).toFixed(2)}
+              <div className="relative z-10 flex flex-col items-center justify-center w-full mt-4">
+                {isCharging ? (
+                   <div className="relative w-56 h-56 flex items-center justify-center mb-8">
+                      {/* Outer spinning ring */}
+                      <div className="absolute inset-0 rounded-full border border-slate-800" />
+                      <div className="absolute inset-0 rounded-full border-[3px] border-transparent border-t-cyan-400 border-r-blue-500 animate-[spin_3s_linear_infinite]" />
+                      
+                      {/* Inner pulsing ring */}
+                      <div className="absolute inset-4 rounded-full bg-cyan-500/5 border border-cyan-500/20 animate-pulse" />
+
+                      <div className="text-center space-y-2 z-10 flex flex-col items-center">
+                        <BatteryCharging className="text-cyan-400 mb-1" size={24} />
+                        <div className="text-5xl font-black text-transparent bg-clip-text bg-gradient-to-br from-white to-slate-400 leading-none">
+                          {Number(liveSession.units_consumed || 0).toFixed(2)}
+                        </div>
+                        <span className="text-[10px] font-black text-cyan-500/70 uppercase tracking-widest block">kWh Delivered</span>
                       </div>
-                      <span className="text-[10px] font-bold text-[#94a3b8] uppercase tracking-wider block">kWh Consumed</span>
+                   </div>
+                ) : (
+                  <div className="w-56 h-56 flex items-center justify-center flex-col space-y-6 rounded-full border border-slate-800 mb-8 bg-slate-900/50">
+                    <div className="relative">
+                      <div className="absolute inset-0 bg-blue-500/20 rounded-full blur-xl animate-pulse"></div>
+                      <div className="w-12 h-12 rounded-full border-2 border-blue-500 border-t-transparent animate-spin relative z-10"></div>
                     </div>
-                 </div>
-              ) : (
-                <div className="w-48 h-48 flex items-center justify-center flex-col space-y-4 rounded-full border-4 border-[#334155] border-dashed">
-                  <div className="animate-pulse w-8 h-8 rounded-full bg-blue-500/20" />
-                  <span className="text-xs text-[#94a3b8]">Initializing Charge...</span>
+                    <span className="text-xs font-bold text-blue-400 uppercase tracking-widest">Handshake...</span>
+                  </div>
+                )}
+
+                <div className="w-full max-w-sm bg-slate-900/60 backdrop-blur-md p-5 rounded-2xl border border-slate-800 text-left space-y-4 shadow-xl mb-6">
+                  <div className="flex justify-between items-center">
+                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Budget Limit</span> 
+                    <strong className="text-sm text-white font-mono">GHS {Number(liveSession.prepaid_amount || 0).toFixed(2)}</strong>
+                  </div>
+                  <div className="h-px w-full bg-gradient-to-r from-transparent via-slate-700 to-transparent"></div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Current Cost</span> 
+                    <strong className="text-lg font-black text-cyan-400 font-mono">GHS {Number(liveSession.total_amount || 0).toFixed(2)}</strong>
+                  </div>
                 </div>
-              )}
 
-              <div className="w-full bg-[#1e293b]/50 p-4 rounded-xl border border-[#334155] text-left text-xs text-[#94a3b8] space-y-2 backdrop-blur-sm">
-                <div className="flex justify-between"><span>Prepaid Amount:</span> <strong className="text-white">GHS {Number(liveSession.prepaid_amount || 0).toFixed(2)}</strong></div>
-                <div className="flex justify-between"><span>Current Cost:</span> <strong className="text-cyan-400">GHS {Number(liveSession.total_amount || 0).toFixed(2)}</strong></div>
-                <div className="flex justify-between"><span>Target kWh limit:</span> <strong className="text-white">{Number(liveSession.target_units || 0).toFixed(2)}</strong></div>
+                <button onClick={handleStopCharge} className="w-full max-w-sm py-4 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-400 font-black uppercase tracking-widest text-xs rounded-xl flex items-center justify-center gap-2 transition-all group">
+                  <Square size={14} className="group-hover:scale-90 transition-transform" /> Terminate Session
+                </button>
               </div>
-
-              <button onClick={handleStopCharge} className="w-full py-3 bg-red-900/50 hover:bg-red-900/80 border border-red-500/30 text-red-200 font-bold rounded-xl flex items-center justify-center gap-2 transition-all">
-                <Square size={14} /> Stop Charging
-              </button>
             </div>
           )}
 
         </div>
-
       </div>
     </div>
   );
