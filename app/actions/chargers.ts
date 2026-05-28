@@ -9,6 +9,13 @@ export async function addCharger(formData: {
   vendor?: string;
   model?: string;
   station_id?: string;
+  ocpp_version?: string;
+  security_profile?: number;
+  auth_password?: string;
+  heartbeat_interval?: number;
+  guns_count?: number;
+  connector_type?: string;
+  max_power?: number;
 }) {
   try {
     await requireAuth(['super_admin', 'manager']);
@@ -21,12 +28,16 @@ export async function addCharger(formData: {
         model: formData.model || null,
         station_id: formData.station_id || null,
         status: 'offline',
+        ocpp_version: formData.ocpp_version || '1.6-J',
+        security_profile: Number(formData.security_profile !== undefined ? formData.security_profile : 1),
+        auth_password: formData.auth_password || null,
+        heartbeat_interval: Number(formData.heartbeat_interval || 60),
       },
     ]);
 
     if (error) throw error;
 
-    // By default, let's create a single connector for the new charger
+    // Fetch the newly created charger
     const { data: charger } = await supabaseAdmin
       .from('chargers')
       .select('id')
@@ -34,15 +45,22 @@ export async function addCharger(formData: {
       .single();
 
     if (charger) {
-      await supabaseAdmin.from('connectors').insert([
-        {
-          charger_id: charger.id,
-          connector_number: 1,
-          status: 'Available',
-          power_type: 'AC',
-          max_power: 22.0,
-        },
-      ]);
+      const gunsCount = Number(formData.guns_count || 2);
+      const isAC = formData.connector_type?.toLowerCase().includes('ac') || formData.connector_type === 'Type 2';
+      
+      const connectorsToInsert = Array.from({ length: gunsCount }, (_, i) => ({
+        charger_id: charger.id,
+        connector_number: i + 1,
+        status: 'Available',
+        power_type: isAC ? 'AC' : 'DC',
+        max_power: Number(formData.max_power || 22.0),
+      }));
+
+      const { error: connectorError } = await supabaseAdmin
+        .from('connectors')
+        .insert(connectorsToInsert);
+      
+      if (connectorError) throw connectorError;
     }
 
     revalidatePath('/chargers');

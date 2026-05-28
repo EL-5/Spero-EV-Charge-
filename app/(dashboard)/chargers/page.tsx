@@ -49,7 +49,14 @@ export default function ChargersPage() {
     charge_point_id: '', 
     vendor: 'Generic', 
     model: 'SmartCharge',
-    station_id: ''
+    station_id: '',
+    ocpp_version: '1.6-J',
+    security_profile: 1,
+    auth_password: 'SPERO-SEC-' + Math.random().toString(36).substring(2, 8).toUpperCase(),
+    heartbeat_interval: 60,
+    guns_count: 2,
+    connector_type: 'CCS2 (DC)',
+    max_power: 22
   });
 
   // Settings
@@ -145,9 +152,21 @@ export default function ChargersPage() {
     try {
       const res = await addCharger(newCharger);
       if (!res.success) throw new Error(res.error);
-      toast.success('Charger registered successfully');
+      toast.success('Charger registered successfully via OCPP!');
       setIsAddChargerOpen(false);
-      setNewCharger({ charge_point_id: '', vendor: 'Generic', model: 'SmartCharge', station_id: '' });
+      setNewCharger({ 
+        charge_point_id: '', 
+        vendor: 'Generic', 
+        model: 'SmartCharge', 
+        station_id: '',
+        ocpp_version: '1.6-J',
+        security_profile: 1,
+        auth_password: 'SPERO-SEC-' + Math.random().toString(36).substring(2, 8).toUpperCase(),
+        heartbeat_interval: 60,
+        guns_count: 2,
+        connector_type: 'CCS2 (DC)',
+        max_power: 22
+      });
       queryClient.invalidateQueries({ queryKey: ['chargers'] });
     } catch (err: any) {
       toast.error(err.message);
@@ -885,9 +904,12 @@ export default function ChargersPage() {
       {/* Modal: Add Charger */}
       {isAddChargerOpen && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-300">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl w-full max-w-md p-6 shadow-2xl animate-in zoom-in-95 duration-200">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl w-full max-w-xl p-6 shadow-2xl animate-in zoom-in-95 duration-200 overflow-y-auto max-h-[90vh]">
             <div className="flex justify-between items-center mb-6">
-              <h3 className="text-lg font-black text-slate-900 dark:text-white">Register Charger</h3>
+              <div>
+                <h3 className="text-lg font-black text-slate-900 dark:text-white">Register Charger via OCPP</h3>
+                <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">Configure hardware nodes and WebSocket protocols.</p>
+              </div>
               <button 
                 onClick={() => setIsAddChargerOpen(false)} 
                 className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-sm font-bold bg-slate-100 dark:bg-slate-800 rounded-lg p-1.5 transition-colors"
@@ -895,55 +917,178 @@ export default function ChargersPage() {
                 Cancel
               </button>
             </div>
-            <form onSubmit={handleAddCharger} className="space-y-4">
-              <div>
-                <label className="text-[10px] text-slate-400 dark:text-slate-500 font-extrabold tracking-wider uppercase mb-1.5 block">Charge Point ID (OCPP Ident)</label>
-                <input 
-                  required 
-                  value={newCharger.charge_point_id} 
-                  onChange={e => setNewCharger({...newCharger, charge_point_id: e.target.value.toUpperCase()})} 
-                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded-xl p-3 text-sm font-mono text-blue-600 dark:text-cyan-400 outline-none transition-all uppercase" 
-                  placeholder="SPERO-EV-004" 
-                />
-              </div>
-              <div>
-                <label className="text-[10px] text-slate-400 dark:text-slate-500 font-extrabold tracking-wider uppercase mb-1.5 block">Assign Hub Station</label>
-                <select 
-                  required 
-                  value={newCharger.station_id} 
-                  onChange={e => setNewCharger({...newCharger, station_id: e.target.value})} 
-                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded-xl p-3 text-sm text-slate-700 dark:text-slate-300 outline-none transition-all appearance-none cursor-pointer"
-                >
-                  <option value="">-- Choose Hub Station --</option>
-                  {stations?.map(st => <option key={st.id} value={st.id}>{st.name}</option>)}
-                </select>
-              </div>
-              <div className="grid grid-cols-2 gap-3.5">
-                <div>
-                  <label className="text-[10px] text-slate-400 dark:text-slate-500 font-extrabold tracking-wider uppercase mb-1.5 block">Vendor</label>
-                  <input 
-                    required 
-                    value={newCharger.vendor} 
-                    onChange={e => setNewCharger({...newCharger, vendor: e.target.value})} 
-                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded-xl p-3 text-sm text-slate-900 dark:text-white outline-none transition-all" 
-                  />
+            <form onSubmit={handleAddCharger} className="space-y-6">
+              
+              {/* Section 1: Basic Identifiers */}
+              <div className="space-y-4">
+                <h4 className="text-xs font-bold text-blue-600 dark:text-cyan-400 uppercase tracking-widest border-b pb-1 border-slate-100 dark:border-slate-800">1. Basic Hardware Identifiers</h4>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-[10px] text-slate-400 dark:text-slate-500 font-extrabold tracking-wider uppercase mb-1.5 block">Charge Point ID (OCPP Ident)</label>
+                    <input 
+                      required 
+                      value={newCharger.charge_point_id} 
+                      onChange={e => setNewCharger({...newCharger, charge_point_id: e.target.value.toUpperCase()})} 
+                      className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded-xl p-3 text-xs font-mono text-blue-600 dark:text-cyan-400 outline-none transition-all uppercase" 
+                      placeholder="e.g. SPERO-EV-004" 
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-slate-400 dark:text-slate-500 font-extrabold tracking-wider uppercase mb-1.5 block">Assign Hub Station</label>
+                    <select 
+                      required 
+                      value={newCharger.station_id} 
+                      onChange={e => setNewCharger({...newCharger, station_id: e.target.value})} 
+                      className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded-xl p-3 text-xs text-slate-700 dark:text-slate-300 outline-none transition-all appearance-none cursor-pointer"
+                    >
+                      <option value="">-- Choose Hub Station --</option>
+                      {stations?.map(st => <option key={st.id} value={st.id}>{st.name}</option>)}
+                    </select>
+                  </div>
                 </div>
-                <div>
-                  <label className="text-[10px] text-slate-400 dark:text-slate-500 font-extrabold tracking-wider uppercase mb-1.5 block">Model</label>
-                  <input 
-                    required 
-                    value={newCharger.model} 
-                    onChange={e => setNewCharger({...newCharger, model: e.target.value})} 
-                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded-xl p-3 text-sm text-slate-900 dark:text-white outline-none transition-all" 
-                  />
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-[10px] text-slate-400 dark:text-slate-500 font-extrabold tracking-wider uppercase mb-1.5 block">Vendor</label>
+                    <input 
+                      required 
+                      value={newCharger.vendor} 
+                      onChange={e => setNewCharger({...newCharger, vendor: e.target.value})} 
+                      className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded-xl p-3 text-xs text-slate-900 dark:text-white outline-none transition-all" 
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-slate-400 dark:text-slate-500 font-extrabold tracking-wider uppercase mb-1.5 block">Model</label>
+                    <input 
+                      required 
+                      value={newCharger.model} 
+                      onChange={e => setNewCharger({...newCharger, model: e.target.value})} 
+                      className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded-xl p-3 text-xs text-slate-900 dark:text-white outline-none transition-all" 
+                    />
+                  </div>
                 </div>
               </div>
-              <div className="pt-2 flex gap-3">
+
+              {/* Section 2: OCPP Protocols */}
+              <div className="space-y-4">
+                <h4 className="text-xs font-bold text-blue-600 dark:text-cyan-400 uppercase tracking-widest border-b pb-1 border-slate-100 dark:border-slate-800">2. OCPP Protocols Configuration</h4>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-[10px] text-slate-400 dark:text-slate-500 font-extrabold tracking-wider uppercase mb-1.5 block">OCPP Version</label>
+                    <select 
+                      value={newCharger.ocpp_version} 
+                      onChange={e => setNewCharger({...newCharger, ocpp_version: e.target.value})} 
+                      className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl p-3 text-xs text-slate-700 dark:text-slate-300 outline-none cursor-pointer"
+                    >
+                      <option value="1.6-J">OCPP 1.6-J (JSON)</option>
+                      <option value="2.0.1">OCPP 2.0.1</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-slate-400 dark:text-slate-500 font-extrabold tracking-wider uppercase mb-1.5 block">Heartbeat Interval (Secs)</label>
+                    <input 
+                      type="number"
+                      required
+                      value={newCharger.heartbeat_interval} 
+                      onChange={e => setNewCharger({...newCharger, heartbeat_interval: Number(e.target.value)})} 
+                      className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded-xl p-3 text-xs text-slate-900 dark:text-white outline-none transition-all" 
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-[10px] text-slate-400 dark:text-slate-500 font-extrabold tracking-wider uppercase mb-1.5 block">Security Profile</label>
+                    <select 
+                      value={newCharger.security_profile} 
+                      onChange={e => setNewCharger({...newCharger, security_profile: Number(e.target.value)})} 
+                      className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl p-3 text-xs text-slate-700 dark:text-slate-300 outline-none cursor-pointer"
+                    >
+                      <option value={0}>Profile 0: Unsecured (WS)</option>
+                      <option value={1}>Profile 1: Basic Authentication (WSS)</option>
+                      <option value={2}>Profile 2: TLS Client Certificate</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-slate-400 dark:text-slate-500 font-extrabold tracking-wider uppercase mb-1.5 block">Basic Auth Password / Token</label>
+                    <div className="relative">
+                      <input 
+                        type="text"
+                        disabled={newCharger.security_profile === 0}
+                        value={newCharger.security_profile === 0 ? 'Not Required' : newCharger.auth_password} 
+                        onChange={e => setNewCharger({...newCharger, auth_password: e.target.value})} 
+                        className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded-xl p-3 pr-14 text-xs font-mono text-slate-800 dark:text-slate-200 outline-none transition-all" 
+                      />
+                      {newCharger.security_profile > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => setNewCharger({
+                            ...newCharger,
+                            auth_password: 'SPERO-SEC-' + Math.random().toString(36).substring(2, 8).toUpperCase()
+                          })}
+                          className="absolute right-2 top-1.5 px-2 py-1.5 rounded-lg bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 text-[10px] font-bold text-slate-700 dark:text-slate-300 transition-colors"
+                        >
+                          Gen
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Section 3: Connector Configuration */}
+              <div className="space-y-4">
+                <h4 className="text-xs font-bold text-blue-600 dark:text-cyan-400 uppercase tracking-widest border-b pb-1 border-slate-100 dark:border-slate-800">3. Connectors & Guns Configurations</h4>
+                <div className="grid grid-cols-3 gap-3">
+                  <div>
+                    <label className="text-[10px] text-slate-400 dark:text-slate-500 font-extrabold tracking-wider uppercase mb-1.5 block">Number of Guns</label>
+                    <select 
+                      value={newCharger.guns_count} 
+                      onChange={e => setNewCharger({...newCharger, guns_count: Number(e.target.value)})} 
+                      className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl p-3 text-xs text-slate-700 dark:text-slate-300 outline-none cursor-pointer"
+                    >
+                      <option value={1}>1 Gun</option>
+                      <option value={2}>2 Guns</option>
+                      <option value={4}>4 Guns</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-slate-400 dark:text-slate-500 font-extrabold tracking-wider uppercase mb-1.5 block">Gun Port Type</label>
+                    <select 
+                      value={newCharger.connector_type} 
+                      onChange={e => setNewCharger({...newCharger, connector_type: e.target.value})} 
+                      className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl p-3 text-xs text-slate-700 dark:text-slate-300 outline-none cursor-pointer"
+                    >
+                      <option value="CCS2 (DC)">CCS2 (DC)</option>
+                      <option value="Type 2 (AC)">Type 2 (AC)</option>
+                      <option value="GBT (DC)">GBT (DC)</option>
+                      <option value="CHAdeMO (DC)">CHAdeMO (DC)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-slate-400 dark:text-slate-500 font-extrabold tracking-wider uppercase mb-1.5 block">Max Power (kW)</label>
+                    <select 
+                      value={newCharger.max_power} 
+                      onChange={e => setNewCharger({...newCharger, max_power: Number(e.target.value)})} 
+                      className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl p-3 text-xs text-slate-700 dark:text-slate-300 outline-none cursor-pointer"
+                    >
+                      <option value={7.4}>7.4 kW (AC)</option>
+                      <option value={11.0}>11 kW (AC)</option>
+                      <option value={22.0}>22 kW (AC)</option>
+                      <option value={50.0}>50 kW (Fast DC)</option>
+                      <option value={150.0}>150 kW (Super DC)</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              {/* Submit Buttons */}
+              <div className="pt-4 border-t border-slate-100 dark:border-slate-800 flex gap-3">
                 <button 
                   type="submit" 
-                  className="w-full py-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold rounded-xl transition-all shadow-md active:scale-95 text-sm"
+                  className="w-full py-3.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold rounded-xl transition-all shadow-md active:scale-95 text-sm"
                 >
-                  Register Node
+                  Register Node & Auto-Configure OCPP
                 </button>
               </div>
             </form>
@@ -954,9 +1099,12 @@ export default function ChargersPage() {
       {/* Modal: Gateway Settings */}
       {isSettingsOpen && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-300">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl w-full max-w-md p-6 shadow-2xl animate-in zoom-in-95 duration-200">
-            <div className="flex justify-between items-center mb-6">
-              <h3 className="text-lg font-black text-slate-900 dark:text-white">OCPP Gateway Settings</h3>
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl w-full max-w-xl p-6 shadow-2xl animate-in zoom-in-95 duration-200 overflow-y-auto max-h-[90vh]">
+            <div className="flex justify-between items-center mb-6 border-b border-slate-100 dark:border-slate-800 pb-3">
+              <div>
+                <h3 className="text-lg font-black text-slate-900 dark:text-white">OCPP Network Operations Center</h3>
+                <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">Configure WebSocket ports and diagnose connectivity.</p>
+              </div>
               <button 
                 onClick={() => setIsSettingsOpen(false)} 
                 className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-sm font-bold bg-slate-100 dark:bg-slate-800 rounded-lg p-1.5 transition-colors"
@@ -964,6 +1112,7 @@ export default function ChargersPage() {
                 Cancel
               </button>
             </div>
+            
             <form onSubmit={async (e) => {
               e.preventDefault();
               try {
@@ -975,37 +1124,88 @@ export default function ChargersPage() {
               } catch (err: any) {
                 toast.error(err.message);
               }
-            }} className="space-y-4">
-              <div>
-                <label className="text-[10px] text-slate-400 dark:text-slate-500 font-extrabold tracking-wider uppercase mb-1.5 block">Gateway Host IP / DNS</label>
-                <input 
-                  required 
-                  value={gatewayHost} 
-                  onChange={e => setGatewayHost(e.target.value)} 
-                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded-xl p-3 text-sm font-mono text-slate-900 dark:text-white outline-none transition-all" 
-                  placeholder="127.0.0.1" 
-                />
+            }} className="space-y-6">
+              
+              {/* Grid configuration */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-[10px] text-slate-400 dark:text-slate-500 font-extrabold tracking-wider uppercase mb-1.5 block">Gateway Host IP / DNS</label>
+                  <input 
+                    required 
+                    value={gatewayHost} 
+                    onChange={e => setGatewayHost(e.target.value)} 
+                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded-xl p-3 text-xs font-mono text-slate-900 dark:text-white outline-none transition-all" 
+                    placeholder="127.0.0.1" 
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] text-slate-400 dark:text-slate-500 font-extrabold tracking-wider uppercase mb-1.5 block">Gateway Port</label>
+                  <input 
+                    required 
+                    value={gatewayPort} 
+                    onChange={e => setGatewayPort(e.target.value)} 
+                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded-xl p-3 text-xs font-mono text-slate-900 dark:text-white outline-none transition-all" 
+                    placeholder="8080" 
+                  />
+                </div>
               </div>
-              <div>
-                <label className="text-[10px] text-slate-400 dark:text-slate-500 font-extrabold tracking-wider uppercase mb-1.5 block">Gateway Port</label>
-                <input 
-                  required 
-                  value={gatewayPort} 
-                  onChange={e => setGatewayPort(e.target.value)} 
-                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded-xl p-3 text-sm font-mono text-slate-900 dark:text-white outline-none transition-all" 
-                  placeholder="8080" 
-                />
+
+              {/* Dynamic Connection Insights */}
+              <div className="space-y-3">
+                <h4 className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">WebSocket Endpoint Insights</h4>
+                <div className="p-4 bg-slate-950 text-slate-300 rounded-xl border border-slate-800 font-mono text-[10px] space-y-3">
+                  <div>
+                    <span className="text-slate-505">// Configure your physical chargers to connect to the active URL:</span>
+                    <div className="flex items-center justify-between bg-black/40 p-2.5 rounded-lg border border-slate-850 mt-1 select-all">
+                      <span className="text-cyan-400 font-mono">ws://{gatewayHost}:{gatewayPort}/ocpp/<span className="text-amber-300">[ChargePointId]</span></span>
+                      <button 
+                        type="button" 
+                        onClick={() => copyToClipboard(`ws://${gatewayHost}:${gatewayPort}/ocpp/`)}
+                        className="text-[9px] text-slate-500 hover:text-white font-bold bg-[#141b2c] px-2 py-1 rounded"
+                      >
+                        Copy URL
+                      </button>
+                    </div>
+                  </div>
+                  <div>
+                    <span className="text-slate-505">// Example connection path for a registered node (e.g. SPERO-EV-001):</span>
+                    <div className="text-slate-400 bg-black/20 p-2 rounded border border-slate-900 mt-1">
+                      ws://{gatewayHost}:{gatewayPort}/ocpp/SPERO-EV-001
+                    </div>
+                  </div>
+                </div>
               </div>
-              <div className="p-3 bg-blue-500/5 border border-blue-500/10 rounded-xl text-[10px] text-blue-600 dark:text-cyan-400 leading-normal flex items-start gap-2.5">
-                <AlertCircle size={14} className="shrink-0 mt-0.5" />
-                <span>The OCPP Gateway handles live WebSocket traffic from hardware nodes and translates it to standard SQL operation schemas in real time. Modify only under operations advice.</span>
+
+              {/* Setup Diagnostics guidelines */}
+              <div className="space-y-3">
+                <h4 className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">OCPP Setup Diagnostics Guide</h4>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-[10px] leading-relaxed">
+                  <div className="p-3 bg-slate-50 dark:bg-slate-950/40 rounded-xl border border-slate-200/50 dark:border-slate-900/60">
+                    <span className="font-extrabold text-blue-600 dark:text-cyan-400 block mb-1">1. SUBPROTOCOL HEADERS</span>
+                    Make sure the charger specifies `ocpp1.6` or `ocpp2.0.1` WebSocket headers, otherwise the Gateway server will reject the handshake.
+                  </div>
+                  <div className="p-3 bg-slate-50 dark:bg-slate-950/40 rounded-xl border border-slate-200/50 dark:border-slate-900/60">
+                    <span className="font-extrabold text-blue-600 dark:text-cyan-400 block mb-1">2. SECURITY CREDENTIALS</span>
+                    For Security Profile 1, configure the charger to use the generated basic authorization password matching the registered token.
+                  </div>
+                  <div className="p-3 bg-slate-50 dark:bg-slate-950/40 rounded-xl border border-slate-200/50 dark:border-slate-900/60">
+                    <span className="font-extrabold text-blue-600 dark:text-cyan-400 block mb-1">3. HEARTBEAT KEEP-ALIVE</span>
+                    Ensure the heartbeat interval is set to 60s. Any node failing to ping within its heartbeat frame is flagged OFFLINE.
+                  </div>
+                  <div className="p-3 bg-slate-50 dark:bg-slate-950/40 rounded-xl border border-slate-200/50 dark:border-slate-900/60">
+                    <span className="font-extrabold text-blue-600 dark:text-cyan-400 block mb-1">4. STATUS NOTIFICATIONS</span>
+                    Guns are initialized to \'Available\'. Status updates like \'Preparing\' or \'Charging\' automatically update dashboard telemetry.
+                  </div>
+                </div>
               </div>
-              <div className="pt-2 flex gap-3">
+
+              {/* Submit Action */}
+              <div className="pt-2 flex gap-3 border-t border-slate-100 dark:border-slate-800">
                 <button 
                   type="submit" 
                   className="w-full py-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold rounded-xl transition-all shadow-md active:scale-95 text-sm"
                 >
-                  Save Configuration
+                  Save NOC Configuration
                 </button>
               </div>
             </form>
