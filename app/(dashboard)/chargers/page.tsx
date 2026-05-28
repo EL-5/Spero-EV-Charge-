@@ -41,7 +41,16 @@ import {
   Cpu,
   Monitor,
   User,
-  Activity
+  Activity,
+  Wifi,
+  WifiOff,
+  Copy,
+  ExternalLink,
+  Clock,
+  Info,
+  ChevronDown,
+  ChevronUp,
+  Radio
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -80,6 +89,28 @@ export default function ChargersPage() {
 
   // Derive connection state
   const isActiveOcpp = settingsRow?.ocpp_mode ?? false;
+
+  // Connection guide UI state
+  const [showConnectionGuide, setShowConnectionGuide] = useState(false);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  const ocppBase = process.env.NEXT_PUBLIC_OCPP_WS_BASE_URL || 'ws://localhost:8080';
+
+  const copyToClipboard = (text: string, label: string) => {
+    navigator.clipboard.writeText(text).then(() => {
+      setCopiedId(label);
+      toast.success('Copied to clipboard!');
+      setTimeout(() => setCopiedId(null), 2000);
+    });
+  };
+
+  const getHeartbeatAge = (lastHeartbeat: string | null) => {
+    if (!lastHeartbeat) return null;
+    const secs = Math.floor((Date.now() - new Date(lastHeartbeat).getTime()) / 1000);
+    if (secs < 90) return { label: `${secs}s ago`, ok: true };
+    if (secs < 300) return { label: `${Math.floor(secs / 60)}m ago`, ok: false };
+    return { label: `${Math.floor(secs / 60)}m ago — stale`, ok: false };
+  };
 
   // Sync RFID tag selection with selected driver
   useEffect(() => {
@@ -654,8 +685,140 @@ export default function ChargersPage() {
         </div>
 
         {/* =====================================================================
-            SANDBOX SIMULATOR TOOLBAR
+            REAL CHARGER CONNECTION GUIDE
             ===================================================================== */}
+        <div className={`stat-card border transition-all ${
+          showConnectionGuide 
+            ? 'bg-[#0c1a14] border-[#16a34a]/50 shadow-lg shadow-green-500/5' 
+            : 'bg-[#1e293b] border-[#334155] hover:border-[#475569]'
+        }`}>
+          <button
+            onClick={() => setShowConnectionGuide(v => !v)}
+            className="w-full flex items-center justify-between text-left"
+          >
+            <div className="flex items-center gap-2">
+              <div className={`w-7 h-7 rounded-lg flex items-center justify-center ${
+                showConnectionGuide ? 'bg-[#16a34a]/20 text-[#4ade80]' : 'bg-[#334155] text-[#94a3b8]'
+              }`}>
+                <Wifi size={14} />
+              </div>
+              <div>
+                <span className="font-bold text-sm text-white">Physical Charger Connection Guide</span>
+                <span className="text-[10px] text-[#94a3b8] ml-2">— How to connect a real OCPP 1.6-J EVSE to this system</span>
+              </div>
+            </div>
+            {showConnectionGuide ? <ChevronUp size={16} className="text-[#94a3b8]" /> : <ChevronDown size={16} className="text-[#94a3b8]" />}
+          </button>
+
+          {showConnectionGuide && (
+            <div className="mt-5 space-y-6 animate-in fade-in slide-in-from-top-2 duration-300">
+
+              {/* Protocol Info */}
+              <div className="p-4 rounded-xl bg-[#1e293b]/60 border border-[#334155] flex items-start gap-3">
+                <Info size={16} className="text-[#3b82f6] mt-0.5 flex-shrink-0" />
+                <div className="text-xs text-[#94a3b8] leading-relaxed space-y-1">
+                  <p><strong className="text-white">Protocol:</strong> OCPP 1.6-J (JSON over WebSocket). Your charger's firmware must support OCPP 1.6-J mode — check the manufacturer's configuration menu.</p>
+                  <p><strong className="text-white">Transport:</strong> The OCPP gateway runs as a standalone WebSocket server (port <code className="text-cyan-400 bg-[#0f172a] px-1 rounded">8080</code>). It must be reachable from the charger's network — either on the same LAN, or exposed via port-forwarding / a public IP.</p>
+                  <p><strong className="text-white">Security note:</strong> For production deployments, wrap the gateway behind a reverse proxy (nginx / Caddy) with a TLS certificate and use <code className="text-cyan-400 bg-[#0f172a] px-1 rounded">wss://</code> instead of <code className="text-yellow-400 bg-[#0f172a] px-1 rounded">ws://</code>.</p>
+                </div>
+              </div>
+
+              {/* Step-by-step */}
+              <div>
+                <h4 className="text-xs font-bold uppercase tracking-wider text-[#94a3b8] mb-3">Step-by-step setup</h4>
+                <ol className="space-y-3">
+                  {[
+                    { step: '1', title: 'Start the OCPP Gateway', body: (<>From the project root run <code className="bg-[#0f172a] text-cyan-400 px-1.5 py-0.5 rounded font-mono">node ocpp-gateway/server.js</code> (or <code className="bg-[#0f172a] text-cyan-400 px-1.5 py-0.5 rounded font-mono">npm run gateway</code>). Confirm the console prints <span className="text-green-400 font-bold">"OCPP Central System listening on port 8080"</span>. Keep this process running.</>) },
+                    { step: '2', title: 'Register the charger here first', body: (<>Click <strong className="text-white">"Add Station"</strong> above and enter a <strong className="text-white">Charge Point ID</strong> — this is the identity string your physical charger will send in its BootNotification. The ID must match <em>exactly</em>, including casing. Common format: <code className="bg-[#0f172a] text-yellow-400 px-1.5 py-0.5 rounded font-mono">SPERO-EV-001</code>.</>) },
+                    { step: '3', title: "Configure the charger's CSMS URL", body: (<>In the charger's configuration panel (web interface, local display, or config file) set the <strong className="text-white">Central System URL</strong> / <strong className="text-white">CSMS URL</strong> to the WebSocket address shown in the table below for that charger. The charger will connect to this URL on startup and send a BootNotification. The field is sometimes called "Backend URL", "Server URL" or "OCPP Server".</>) },
+                    { step: '4', title: 'Set Heartbeat Interval', body: <>Set the charger's heartbeat interval to <strong className="text-white">60 seconds</strong>. The gateway responds with the server time on every heartbeat so the charger's internal clock stays synced.</> },
+                    { step: '5', title: 'Verify connection', body: <>Power cycle the charger (or trigger a reboot from its menu). Within 30 seconds the charger card above should turn <span className="text-green-400 font-bold">ONLINE</span> and the Diagnostics Terminal will show an incoming <code className="bg-[#0f172a] text-cyan-400 px-1.5 py-0.5 rounded font-mono">BootNotification</code> packet followed by the gateway's <code className="bg-[#0f172a] text-pink-400 px-1.5 py-0.5 rounded font-mono">Accepted</code> response.</> },
+                  ].map(({ step, title, body }) => (
+                    <li key={step} className="flex gap-3">
+                      <div className="w-6 h-6 rounded-full bg-[#1e3a8a]/40 border border-[#3b82f6]/30 flex items-center justify-center text-[#3b82f6] font-black text-[10px] flex-shrink-0 mt-0.5">{step}</div>
+                      <div>
+                        <div className="font-bold text-xs text-white mb-0.5">{title}</div>
+                        <div className="text-[11px] text-[#94a3b8] leading-relaxed">{body}</div>
+                      </div>
+                    </li>
+                  ))}
+                </ol>
+              </div>
+
+              {/* Per-charger URL table */}
+              {chargers && chargers.length > 0 && (
+                <div>
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-[#94a3b8] mb-3">WebSocket URLs — copy into your charger's CSMS URL field</h4>
+                  <div className="space-y-2">
+                    {chargers.map(c => {
+                      const url = `${ocppBase}/${c.chargePointId}`;
+                      const hb = getHeartbeatAge(c.lastHeartbeat);
+                      return (
+                        <div key={c.id} className="p-3 rounded-xl bg-[#0f172a]/80 border border-[#334155] flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <div className={`w-2 h-2 rounded-full flex-shrink-0 ${
+                              c.status === 'online' ? 'bg-green-400 animate-ping' : 'bg-[#475569]'
+                            }`} />
+                            <div className="min-w-0">
+                              <div className="font-bold text-xs text-white truncate">{c.name}</div>
+                              <div className="font-mono text-[10px] text-cyan-300 truncate mt-0.5">{url}</div>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2 flex-shrink-0">
+                            {hb && (
+                              <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${
+                                hb.ok ? 'bg-green-500/10 text-green-400' : 'bg-yellow-500/10 text-yellow-400'
+                              }`}>
+                                <Clock size={8} className="inline mr-0.5" />{hb.label}
+                              </span>
+                            )}
+                            <button
+                              onClick={() => copyToClipboard(url, c.id)}
+                              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-bold border transition-all ${
+                                copiedId === c.id
+                                  ? 'bg-green-500/20 border-green-500/40 text-green-400'
+                                  : 'bg-[#1e293b] border-[#334155] text-[#94a3b8] hover:text-white hover:border-[#475569]'
+                              }`}
+                            >
+                              {copiedId === c.id ? <CheckCircle size={10} /> : <Copy size={10} />}
+                              {copiedId === c.id ? 'Copied!' : 'Copy URL'}
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <p className="text-[10px] text-[#64748b] mt-2 italic">
+                    ⚙️ Update <code className="text-[#94a3b8]">NEXT_PUBLIC_OCPP_WS_BASE_URL</code> in <code className="text-[#94a3b8]">.env.local</code> to your server's public IP or hostname before going live.
+                  </p>
+                </div>
+              )}
+
+              {/* Common issues */}
+              <div className="p-4 rounded-xl bg-[#1e293b]/60 border border-[#334155]">
+                <h4 className="text-xs font-bold text-[#94a3b8] uppercase tracking-wider mb-3">Common connection issues</h4>
+                <div className="space-y-2">
+                  {[
+                    { icon: WifiOff, color: 'text-red-400', issue: 'Charger stays OFFLINE after reboot', fix: 'Check the gateway process is running. Verify port 8080 is open in your firewall. Confirm the charger can reach the server IP (ping test from charger network).' },
+                    { icon: AlertCircle, color: 'text-yellow-400', issue: 'BootNotification rejected (status: Rejected)', fix: 'The Charge Point ID sent by the charger does not match any registered charger in this system. Add the charger using the exact same ID string the charger sends.' },
+                    { icon: Radio, color: 'text-blue-400', issue: "Charger connects but sessions don't start", fix: 'Check that an RFID tag is registered in the ocpp_tags table for the driver. If using RemoteStart, trigger it from the remote commands panel and check the Diagnostics Terminal for the response.' },
+                    { icon: Activity, color: 'text-cyan-400', issue: 'Heartbeat stops / charger goes OFFLINE unexpectedly', fix: 'Network instability. The gateway marks chargers offline if no heartbeat is received for 120 seconds. Set the charger heartbeat interval to 60s. Consider a wired Ethernet connection instead of Wi-Fi.' },
+                  ].map(({ icon: Icon, color, issue, fix }) => (
+                    <div key={issue} className="flex gap-2.5">
+                      <Icon size={13} className={`${color} flex-shrink-0 mt-0.5`} />
+                      <div>
+                        <div className="text-xs font-bold text-white">{issue}</div>
+                        <div className="text-[10px] text-[#94a3b8] leading-relaxed">{fix}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+            </div>
+          )}
+        </div>
+
         {!isActiveOcpp && (
           <div className="stat-card bg-gradient-to-r from-[#1e293b] to-[#0f172a] border-[#3b82f6] border-2 shadow-lg shadow-blue-500/10">
             <div className="flex items-center gap-2 mb-4 pb-2 border-b border-[#334155]">

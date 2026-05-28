@@ -215,93 +215,50 @@ async function handleOcppCall(chargePointId, ws, messageId, action, payload) {
         const startWh = Number(payload.meterStart || 0);
         const transactionId = Math.floor(100000 + Math.random() * 900000);
 
-        // Find driver linked to the RFID tag
-        const { data: tag } = await supabase
-          .from('ocpp_tags')
-          .select('driver_id')
-          .eq('id', idTag)
-          .single();
-
         let activeSession = null;
 
-        if (tag) {
-          // A. Try to associate with a pre-paid, fully funded session that is pending activation
-          const { data: prepaid } = await supabase
-            .from('sessions')
-            .select('*')
-            .eq('driver_id', tag.driver_id)
-            .eq('status', 'pending_payment')
-            .eq('payment_status', 'paid')
-            .order('created_at', { ascending: false })
-            .limit(1)
-            .maybeSingle();
-            
-          activeSession = prepaid;
-        }
+        // 1. App-Driven Flow: The idTag is the session's receipt_number injected via RemoteStartTransaction
+        const { data: sessionByReceipt } = await supabase
+          .from('sessions')
+          .select('*')
+          .eq('receipt_number', idTag)
+          .single();
 
-        // B. If no prepaid session exists, check if there is an active session
-        if (!activeSession && tag) {
-          const { data: active } = await supabase
-            .from('sessions')
-            .select('*')
-            .eq('driver_id', tag.driver_id)
-            .eq('status', 'active')
-            .order('created_at', { ascending: false })
-            .limit(1)
-            .maybeSingle();
-
-          activeSession = active;
-        }
-
-        // C. If no session is found at all, create a standard postpaid/manual ad-hoc session
-        if (!activeSession && tag) {
-          // Fetch active kWh rate from pricing table — never use a hardcoded fallback
-          const { data: rateData, error: rateError } = await supabase
-            .from('pricing')
-            .select('rate, unit_quantity')
-            .eq('unit_type', 'kwh')
-            .eq('is_active', true)
-            .order('created_at', { ascending: false })
-            .limit(1)
+        if (sessionByReceipt) {
+          activeSession = sessionByReceipt;
+        } else {
+          // 2. Fallback Admin RFID Flow (if master cards are used)
+          const { data: tag } = await supabase
+            .from('ocpp_tags')
+            .select('driver_id')
+            .eq('id', idTag)
             .single();
 
-          if (rateError || !rateData) {
-            console.error(`[OCPP-CSMS] StartTransaction BLOCKED: No active kWh pricing found. Configure pricing in Settings before charging.`);
-            sendCallResult(ws, messageId, {
-              transactionId: 0,
-              idTagInfo: { status: 'Blocked' }
-            });
-            break;
+          if (tag) {
+            // Find an active session for this driver
+            const { data: active } = await supabase
+              .from('sessions')
+              .select('*')
+              .eq('driver_id', tag.driver_id)
+              .eq('status', 'active')
+              .order('created_at', { ascending: false })
+              .limit(1)
+              .maybeSingle();
+            
+            if (active) activeSession = active;
           }
-
-          const ratePerKwh = Number(rateData.rate) / Number(rateData.unit_quantity || 1);
-          const { data: driver } = await supabase.from('drivers').select('name').eq('id', tag.driver_id).single();
-          const { data: vehicle } = await supabase.from('vehicles').select('id, plate_number, brand, model').eq('driver_id', tag.driver_id).limit(1).maybeSingle();
-          const receiptNumber = `RCP-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`;
-
-          const { data: adhoc } = await supabase.from('sessions').insert([{
-            receipt_number: receiptNumber,
-            driver_id: tag.driver_id,
-            driver_name: driver?.name || 'Unknown',
-            vehicle_id: vehicle?.id || null,
-            vehicle_plate: vehicle?.plate_number || 'Unknown',
-            vehicle_details: vehicle ? `${vehicle.brand} ${vehicle.model}` : '—',
-            mode: 'postpaid',
-            status: 'active',
-            unit_type: 'kwh',
-            rate_at_time: ratePerKwh,
-            start_time: new Date().toISOString()
-          }]).select().single();
-
-          activeSession = adhoc;
         }
 
         if (activeSession) {
+          // Ensure we have a helper to get charger internal UUID
+          const { data: charger } = await supabase.from('chargers').select('id').eq('charge_point_id', chargePointId).single();
+          const chargerUuid = charger ? charger.id : null;
+
           // Link charger details and activate session
           await supabase.from('sessions').update({
             status: 'active',
             start_time: new Date().toISOString(),
-            charger_id: await getChargerUuid(chargePointId),
+            charger_id: chargerUuid,
             connector_number: connectorId
           }).eq('id', activeSession.id);
 
@@ -326,7 +283,7 @@ async function handleOcppCall(chargePointId, ws, messageId, action, payload) {
             idTagInfo: { status: 'Accepted' }
           });
         } else {
-          console.warn(`[OCPP-CSMS] StartTransaction Rejected: No driver linked to tag: ${idTag}`);
+          console.warn(`[OCPP-CSMS] StartTransaction Rejected: No session found for idTag (receipt): ${idTag}`);
           sendCallResult(ws, messageId, {
             transactionId: 0,
             idTagInfo: { status: 'Blocked' }

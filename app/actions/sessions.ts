@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache';
 import type { ChargingMode, UnitType } from '@/lib/types';
 import { requireAuth } from '@/lib/auth-guard';
 import { generateReceiptNumber } from '@/lib/utils';
+import { sendOcppCommand } from './chargers';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // NOTE: Hubtel API integration has been removed.
@@ -104,12 +105,13 @@ export async function processPayment(data: {
   attendant_id: string;
 }) {
   try {
-    await requireAuth(['super_admin', 'manager', 'attendant']);
+    const authUser = await requireAuth(['super_admin', 'manager', 'attendant']);
+    const attendantId = data.attendant_id === 'system' ? authUser.id : data.attendant_id;
 
     // Fetch session details for the payment record
     const { data: session } = await supabaseAdmin
       .from('sessions')
-      .select('receipt_number, driver_id, driver_name, total_amount')
+      .select('receipt_number, driver_id, driver_name, total_amount, charger_id, connector_number, mode, chargers(charge_point_id)')
       .eq('id', data.session_id)
       .single();
 
@@ -118,33 +120,7 @@ export async function processPayment(data: {
     const sessionCost = session.total_amount || 0;
     const excessAmount = Math.max(0, data.amount - sessionCost);
 
-    // 1. Create payment record
-    const { error: payError } = await supabaseAdmin.from('payments').insert([{
-      session_id: data.session_id,
-      receipt_number: session.receipt_number,
-      driver_id: session.driver_id,
-      amount: data.amount, // Record the actual total paid
-      method: data.method,
-      reference: data.reference,
-      status: 'completed',
-      attendant_id: data.attendant_id,
-    }]);
-    if (payError) throw payError;
-
-    // 2. Update session status
-    await supabaseAdmin.from('sessions').update({ 
-      status: 'completed',
-      payment_method: data.method,
-      total_amount: sessionCost // Keep the session cost as the total_amount for the session
-    }).eq('id', data.session_id);
-
-    // 3. Update shift totals
-    const shiftColumn = 
-      data.method === 'cash' ? 'cash_collected' : 
-      data.method === 'wallet' ? 'wallet_deductions' : 
-      'hubtel_collected'; 
-
-    // 0. Handle Wallet Deduction
+    // 0. Handle Wallet Deduction for registered drivers using wallet
     if (data.method === 'wallet' && session.driver_id) {
       const { data: driver } = await supabaseAdmin.from('drivers').select('wallet_balance').eq('id', session.driver_id).single();
       const currentBalance = driver?.wallet_balance || 0;
@@ -167,22 +143,57 @@ export async function processPayment(data: {
       }]);
     }
 
-    const { data: shift, error: fetchShiftError } = await supabaseAdmin
-      .from('shifts')
-      .select('cash_collected, hubtel_collected, paystack_collected, wallet_deductions, total_sessions')
-      .eq('id', data.shift_id)
-      .single();
+    // 1. Create payment record
+    const { error: payError } = await supabaseAdmin.from('payments').insert([{
+      session_id: data.session_id,
+      receipt_number: session.receipt_number,
+      driver_id: session.driver_id,
+      amount: data.amount, // Record the actual total paid
+      method: data.method,
+      reference: data.reference,
+      status: 'completed',
+      attendant_id: attendantId,
+    }]);
+    if (payError) throw payError;
 
-    if (fetchShiftError) throw new Error('Could not find active shift to update totals');
+    // 2. Update session status
+    let nextStatus = 'completed';
+    // If it's a prepaid session that was just paid for, it should transition to active to allow charging
+    if (session.mode === 'prepaid') {
+      nextStatus = 'active';
+    }
 
-    if (shift) {
-      const s = shift as any;
-      const { error: shiftUpdateError } = await supabaseAdmin.from('shifts').update({
-        [shiftColumn]: (s[shiftColumn] || 0) + data.amount,
-        total_sessions: (s.total_sessions || 0) + 1
-      }).eq('id', data.shift_id);
+    await supabaseAdmin.from('sessions').update({ 
+      status: nextStatus,
+      payment_status: 'paid',
+      payment_method: data.method,
+      total_amount: sessionCost // Keep the session cost as the total_amount for the session
+    }).eq('id', data.session_id);
 
-      if (shiftUpdateError) throw shiftUpdateError;
+    // 3. Update shift totals
+    if (data.shift_id) {
+      const shiftColumn = 
+        data.method === 'cash' ? 'cash_collected' : 
+        data.method === 'wallet' ? 'wallet_deductions' : 
+        'hubtel_collected'; 
+
+      const { data: shift, error: fetchShiftError } = await supabaseAdmin
+        .from('shifts')
+        .select('cash_collected, hubtel_collected, paystack_collected, wallet_deductions, total_sessions')
+        .eq('id', data.shift_id)
+        .single();
+
+      if (fetchShiftError) throw new Error('Could not find active shift to update totals');
+
+      if (shift) {
+        const s = shift as any;
+        const { error: shiftUpdateError } = await supabaseAdmin.from('shifts').update({
+          [shiftColumn]: (s[shiftColumn] || 0) + data.amount,
+          total_sessions: (s.total_sessions || 0) + 1
+        }).eq('id', data.shift_id);
+
+        if (shiftUpdateError) throw shiftUpdateError;
+      }
     }
 
     // 4. Handle Excess Payment (Credit to Wallet)
@@ -202,6 +213,25 @@ export async function processPayment(data: {
         balance_after: newBalance,
         description: `Overpayment for Session ${session.receipt_number}`,
       }]);
+    }
+
+    // 5. Trigger RemoteStartTransaction if a charger is mapped to this session
+    // (This replaces the physical RFID authorization flow)
+    if (session.charger_id && (session.chargers as any)?.charge_point_id) {
+      const chargePointId = (session.chargers as any).charge_point_id;
+      const connectorId = session.connector_number || 1;
+      const idTag = session.receipt_number;
+
+      console.log(`[SESSIONS] Session Paid. Triggering RemoteStartTransaction for ${chargePointId} (Connector ${connectorId}) with idTag ${idTag}`);
+      
+      await sendOcppCommand({
+        chargePointId: chargePointId,
+        command: 'RemoteStartTransaction',
+        payload: {
+          connectorId: connectorId,
+          idTag: idTag
+        }
+      });
     }
 
     revalidatePath('/sessions');
@@ -314,27 +344,45 @@ export async function deleteSession(id: string) {
 }
 
 export async function initiatePrepaidSession(data: {
-  driver_id: string;
-  vehicle_id: string;
+  driver_id?: string;
+  vehicle_id?: string;
+  charger_id?: string;
+  connector_number?: number;
   mode: 'charge_to_full' | 'fixed_budget';
   start_soc?: number;
   budget_amount?: number;
   attendant_id?: string;
   shift_id?: string;
+  is_guest?: boolean;
+  guest_name?: string;
+  guest_phone?: string;
+  guest_plate?: string;
 }) {
   try {
     const authUser = await requireAuth(['super_admin', 'manager', 'attendant']);
     const isAttendantMode = !!data.attendant_id;
 
-    // Fetch vehicle capacity & driver details
-    const [driverRes, vehicleRes] = await Promise.all([
-      supabaseAdmin.from('drivers').select('name').eq('id', data.driver_id).single(),
-      supabaseAdmin.from('vehicles').select('plate_number, brand, model, battery_capacity').eq('id', data.vehicle_id).single(),
-    ]);
+    let driverName = data.guest_name || 'Guest Driver';
+    let vehiclePlate = data.guest_plate || 'Unknown Plate';
+    let vehicleDetails = 'Guest Vehicle';
+    let batteryCapacity = 40.0; // Default fallback for guests
+    let walletBalance = 0;
 
-    if (vehicleRes.error) throw new Error('Vehicle not found');
+    // Fetch vehicle capacity & driver details if registered
+    if (!data.is_guest && data.driver_id && data.vehicle_id) {
+      const [driverRes, vehicleRes] = await Promise.all([
+        supabaseAdmin.from('drivers').select('name, wallet_balance').eq('id', data.driver_id).single(),
+        supabaseAdmin.from('vehicles').select('plate_number, brand, model, battery_capacity').eq('id', data.vehicle_id).single(),
+      ]);
 
-    const batteryCapacity = Number(vehicleRes.data?.battery_capacity || 40.0);
+      if (vehicleRes.error) throw new Error('Vehicle not found');
+
+      driverName = driverRes.data?.name || 'Unknown';
+      walletBalance = Number(driverRes.data?.wallet_balance || 0);
+      vehiclePlate = vehicleRes.data?.plate_number || 'Unknown';
+      vehicleDetails = `${vehicleRes.data?.brand} ${vehicleRes.data?.model}`;
+      batteryCapacity = Number(vehicleRes.data?.battery_capacity || 40.0);
+    }
     
     // Fetch active pricing rate for kWh
     const { data: rateData } = await supabaseAdmin
@@ -356,8 +404,19 @@ export async function initiatePrepaidSession(data: {
     if (data.mode === 'charge_to_full') {
       const currentSoc = data.start_soc ?? 20;
       const percentNeeded = 100 - currentSoc;
-      targetUnits = batteryCapacity * (percentNeeded / 100);
-      prepaidAmount = targetUnits * ratePerKwh;
+      const fullChargeUnits = batteryCapacity * (percentNeeded / 100);
+      const fullChargeCost = fullChargeUnits * ratePerKwh;
+
+      // Dynamic Wallet Budgeting
+      // If a registered driver doesn't have enough wallet balance for a full charge,
+      // cap the charge to whatever they currently have in their wallet.
+      if (!data.is_guest && walletBalance < fullChargeCost) {
+        prepaidAmount = walletBalance;
+        targetUnits = walletBalance / ratePerKwh;
+      } else {
+        prepaidAmount = fullChargeCost;
+        targetUnits = fullChargeUnits;
+      }
     } else {
       prepaidAmount = data.budget_amount ?? 50.0;
       targetUnits = prepaidAmount / ratePerKwh;
@@ -367,16 +426,19 @@ export async function initiatePrepaidSession(data: {
 
     const insertData: any = {
       receipt_number: receiptNumber,
-      driver_id: data.driver_id,
-      vehicle_id: data.vehicle_id,
-      driver_name: driverRes.data?.name || 'Unknown',
-      vehicle_plate: vehicleRes.data?.plate_number || 'Unknown',
-      vehicle_details: `${vehicleRes.data?.brand} ${vehicleRes.data?.model}`,
+      driver_id: data.is_guest ? null : data.driver_id,
+      vehicle_id: data.is_guest ? null : data.vehicle_id,
+      charger_id: data.charger_id || null,
+      connector_number: data.connector_number || null,
+      driver_name: driverName,
+      vehicle_plate: vehiclePlate,
+      vehicle_details: vehicleDetails,
       mode: 'prepaid',
       unit_type: 'kwh',
       status: 'pending_payment',
       payment_status: 'unpaid',
       rate_at_time: ratePerKwh,
+      total_amount: prepaidAmount, // this tracks the exact cost they committed to
       prepaid_amount: prepaidAmount,
       target_units: targetUnits,
       start_time: new Date().toISOString(),
@@ -386,7 +448,7 @@ export async function initiatePrepaidSession(data: {
 
     if (isAttendantMode) {
       insertData.attendant_id = data.attendant_id;
-      insertData.shift_id = data.shift_id;
+      insertData.shift_id = data.shift_id || null;
     } else {
       // Driver self charging — associate with driver's system login ID
       insertData.attendant_id = authUser.id;
