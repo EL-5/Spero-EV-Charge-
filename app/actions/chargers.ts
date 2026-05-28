@@ -171,3 +171,32 @@ export async function clearOcppLogs(chargePointId?: string) {
     return { success: false, error: 'Failed to clear logs. Please try again.' };
   }
 }
+
+export async function addStation(formData: {
+  name: string;
+  location: string;
+}) {
+  try {
+    await requireAuth(['super_admin', 'manager']);
+
+    const { error } = await supabaseAdmin.from('stations').insert([
+      {
+        name: formData.name,
+        location: formData.location,
+        status: 'active',
+      },
+    ]);
+
+    if (error) throw error;
+
+    revalidatePath('/chargers');
+    return { success: true };
+  } catch (error: any) {
+    console.error('[STATIONS] addStation error:', error.message);
+    if (error.message?.startsWith('Unauthenticated') || error.message?.startsWith('Forbidden')) {
+      return { success: false, error: error.message };
+    }
+    return { success: false, error: 'Failed to add station. Please try again.' };
+  }
+}
+

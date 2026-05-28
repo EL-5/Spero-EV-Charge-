@@ -14,7 +14,8 @@ import {
   addCharger, 
   deleteCharger, 
   sendOcppCommand, 
-  clearOcppLogs 
+  clearOcppLogs,
+  addStation
 } from '@/app/actions/chargers';
 import { saveSettings } from '@/app/actions/settings';
 import { supabase } from '@/lib/supabase';
@@ -127,8 +128,8 @@ export default function ChargersPage() {
   const handleAddStation = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const { error } = await supabase.from('stations').insert([newStation]);
-      if (error) throw error;
+      const res = await addStation(newStation);
+      if (!res.success) throw new Error(res.error);
       toast.success('Station added successfully');
       setIsAddStationOpen(false);
       setNewStation({ name: '', location: '' });
