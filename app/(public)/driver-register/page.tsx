@@ -69,28 +69,18 @@ export default function DriverRegisterPage() {
   };
 
   return (
-    <div className="min-h-screen bg-black text-slate-100 flex items-center justify-center p-4 relative overflow-hidden font-sans select-none">
+    <div className="min-h-screen bg-[#0B0F17] text-slate-100 flex items-center justify-center p-4 relative font-sans select-none bg-[radial-gradient(#1e293b_1px,transparent_1px)] [background-size:16px_16px]">
       
-      {/* High-fidelity background glow */}
-      <div className="absolute inset-0 pointer-events-none z-0">
-        <div className="absolute top-1/4 left-1/4 w-[600px] h-[600px] bg-cyan-500/[0.04] rounded-full blur-[140px] mix-blend-screen"></div>
-        <div className="absolute bottom-1/4 right-1/4 w-[600px] h-[600px] bg-blue-500/[0.04] rounded-full blur-[140px] mix-blend-screen"></div>
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-transparent via-transparent to-black"></div>
-      </div>
-
       {/* Registration Card */}
-      <div className="w-full max-w-md bg-slate-900/60 backdrop-blur-2xl border border-white/10 rounded-[2.5rem] p-8 shadow-[0_30px_60px_-15px_rgba(0,0,0,0.8)] shadow-cyan-500/[0.02] relative z-10 animate-in fade-in zoom-in-95 duration-300 overflow-y-auto max-h-[95vh] scrollbar-thin">
+      <div className="w-full max-w-md bg-[#151E2E] border border-slate-800 rounded-2xl p-8 shadow-2xl shadow-black/40 relative z-10 animate-in fade-in zoom-in-95 duration-200 overflow-y-auto max-h-[95vh] scrollbar-thin">
         
-        {/* Glowing border top bar */}
-        <div className="absolute top-0 left-0 w-full h-[3px] bg-gradient-to-r from-cyan-400 via-blue-500 to-indigo-600"></div>
-
         {/* Brand Header */}
         <div className="flex flex-col items-center mb-6 text-center">
-          <div className="w-14 h-14 bg-gradient-to-br from-cyan-400 to-blue-600 rounded-2xl flex items-center justify-center mb-3 shadow-[0_0_30px_rgba(34,211,238,0.25)] border border-cyan-400/20 active:scale-95 transition-transform duration-300">
-            <Zap className="text-white fill-white/15" size={26} />
+          <div className="w-12 h-12 bg-blue-600/10 border border-blue-500/20 rounded-xl flex items-center justify-center mb-3 transition-transform duration-300">
+            <Zap className="text-blue-500 fill-blue-500/10" size={24} />
           </div>
-          <h1 className="text-xl font-black tracking-tight text-white leading-none">Register EV Account</h1>
-          <p className="text-[10px] text-slate-400 font-medium tracking-widest mt-2 uppercase">Create Spero Driver Account</p>
+          <h1 className="text-xl font-bold tracking-tight text-white leading-none">Register EV Account</h1>
+          <p className="text-[10px] text-slate-400 font-semibold tracking-wider mt-2 uppercase">Create Spero Driver Account</p>
         </div>
 
         {/* Register Form */}
@@ -98,7 +88,7 @@ export default function DriverRegisterPage() {
           
           {/* Section 1: Personal Details */}
           <div className="space-y-3.5">
-            <h2 className="text-[10px] font-extrabold text-cyan-400 uppercase tracking-widest border-b border-white/5 pb-1 flex items-center gap-1.5 pl-0.5"><User size={12}/> Personal Details</h2>
+            <h2 className="text-[10px] font-bold text-slate-300 uppercase tracking-widest border-b border-slate-800 pb-1.5 flex items-center gap-1.5 pl-0.5"><User size={12} className="text-slate-500" /> Personal Details</h2>
             
             <div>
               <label className="text-[9px] text-slate-400 font-bold mb-1.5 block">FULL NAME</label>
@@ -106,7 +96,7 @@ export default function DriverRegisterPage() {
                 name="fullName" 
                 value={formData.fullName} 
                 onChange={handleChange} 
-                className="w-full bg-slate-950/60 border border-white/5 focus:border-cyan-400/80 focus:ring-1 focus:ring-cyan-500/20 rounded-2xl p-3 text-xs font-semibold text-white outline-none transition-all placeholder-slate-600" 
+                className="w-full bg-[#0D131F] border border-slate-800 focus:border-blue-500 rounded-xl p-3 text-xs font-semibold text-white outline-none transition-colors placeholder-slate-600" 
                 placeholder="Kwame Osei" 
                 required 
               />
@@ -119,7 +109,7 @@ export default function DriverRegisterPage() {
                 type="tel" 
                 value={formData.phone} 
                 onChange={handleChange} 
-                className="w-full bg-slate-950/60 border border-white/5 focus:border-cyan-400/80 focus:ring-1 focus:ring-cyan-500/20 rounded-2xl p-3 text-xs font-semibold text-white outline-none transition-all placeholder-slate-600" 
+                className="w-full bg-[#0D131F] border border-slate-800 focus:border-blue-500 rounded-xl p-3 text-xs font-semibold text-white outline-none transition-colors placeholder-slate-600" 
                 placeholder="e.g. 054 123 4567" 
                 required 
               />
@@ -128,7 +118,7 @@ export default function DriverRegisterPage() {
 
           {/* Section 2: Vehicle details */}
           <div className="space-y-3.5 pt-1">
-            <h2 className="text-[10px] font-extrabold text-cyan-400 uppercase tracking-widest border-b border-white/5 pb-1 flex items-center gap-1.5 pl-0.5"><Car size={12}/> Vehicle Details</h2>
+            <h2 className="text-[10px] font-bold text-slate-300 uppercase tracking-widest border-b border-slate-800 pb-1.5 flex items-center gap-1.5 pl-0.5"><Car size={12} className="text-slate-500" /> Vehicle Details</h2>
             
             <div className="grid grid-cols-2 gap-3">
               <div>
@@ -137,7 +127,7 @@ export default function DriverRegisterPage() {
                   name="brand" 
                   value={formData.brand} 
                   onChange={handleChange} 
-                  className="w-full bg-slate-950/60 border border-white/5 focus:border-cyan-400/80 focus:ring-1 focus:ring-cyan-500/20 rounded-2xl p-3 text-xs font-semibold text-white outline-none transition-all placeholder-slate-600" 
+                  className="w-full bg-[#0D131F] border border-slate-800 focus:border-blue-500 rounded-xl p-3 text-xs font-semibold text-white outline-none transition-colors placeholder-slate-600" 
                   placeholder="e.g. Nissan" 
                   required 
                 />
@@ -148,7 +138,7 @@ export default function DriverRegisterPage() {
                   name="model" 
                   value={formData.model} 
                   onChange={handleChange} 
-                  className="w-full bg-slate-950/60 border border-white/5 focus:border-cyan-400/80 focus:ring-1 focus:ring-cyan-500/20 rounded-2xl p-3 text-xs font-semibold text-white outline-none transition-all placeholder-slate-600" 
+                  className="w-full bg-[#0D131F] border border-slate-800 focus:border-blue-500 rounded-xl p-3 text-xs font-semibold text-white outline-none transition-colors placeholder-slate-600" 
                   placeholder="e.g. Leaf" 
                   required 
                 />
@@ -161,7 +151,7 @@ export default function DriverRegisterPage() {
                 name="plate" 
                 value={formData.plate} 
                 onChange={handleChange} 
-                className="w-full bg-slate-950/60 border border-white/5 focus:border-cyan-400/80 focus:ring-1 focus:ring-cyan-500/20 rounded-2xl p-3 text-xs font-semibold text-white outline-none transition-all placeholder-slate-600 uppercase" 
+                className="w-full bg-[#0D131F] border border-slate-800 focus:border-blue-500 rounded-xl p-3 text-xs font-semibold text-white outline-none transition-colors placeholder-slate-600 uppercase" 
                 placeholder="GR-1234-26" 
                 required 
               />
@@ -170,7 +160,7 @@ export default function DriverRegisterPage() {
 
           {/* Section 3: PIN credentials */}
           <div className="space-y-3.5 pt-1">
-            <h2 className="text-[10px] font-extrabold text-cyan-400 uppercase tracking-widest border-b border-white/5 pb-1 flex items-center gap-1.5 pl-0.5"><ShieldCheck size={12}/> Security PIN</h2>
+            <h2 className="text-[10px] font-bold text-slate-300 uppercase tracking-widest border-b border-slate-800 pb-1.5 flex items-center gap-1.5 pl-0.5"><ShieldCheck size={12} className="text-slate-500" /> Security PIN</h2>
             
             <div className="grid grid-cols-2 gap-3">
               <div>
@@ -181,7 +171,7 @@ export default function DriverRegisterPage() {
                   maxLength={4} 
                   value={formData.pin} 
                   onChange={handleChange} 
-                  className="w-full bg-slate-950/60 border border-white/5 focus:border-cyan-400/80 focus:ring-1 focus:ring-cyan-500/20 rounded-2xl p-3 text-center tracking-[0.3em] font-mono text-base text-white outline-none transition-all placeholder-slate-700" 
+                  className="w-full bg-[#0D131F] border border-slate-800 focus:border-blue-500 rounded-xl p-3 text-center tracking-[0.2em] font-mono text-sm text-white outline-none transition-colors placeholder-slate-700" 
                   placeholder="••••" 
                   required 
                 />
@@ -194,7 +184,7 @@ export default function DriverRegisterPage() {
                   maxLength={4} 
                   value={formData.confirmPin} 
                   onChange={handleChange} 
-                  className="w-full bg-slate-950/60 border border-white/5 focus:border-cyan-400/80 focus:ring-1 focus:ring-cyan-500/20 rounded-2xl p-3 text-center tracking-[0.3em] font-mono text-base text-white outline-none transition-all placeholder-slate-700" 
+                  className="w-full bg-[#0D131F] border border-slate-800 focus:border-blue-500 rounded-xl p-3 text-center tracking-[0.2em] font-mono text-sm text-white outline-none transition-colors placeholder-slate-700" 
                   placeholder="••••" 
                   required 
                 />
@@ -204,7 +194,7 @@ export default function DriverRegisterPage() {
 
           <button 
             disabled={loading}
-            className="w-full py-4 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 disabled:opacity-50 text-white font-bold rounded-2xl flex items-center justify-center gap-2 mt-6 transition-all shadow-lg shadow-cyan-500/10 active:scale-95 text-xs uppercase tracking-wider"
+            className="w-full py-3 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-semibold rounded-xl flex items-center justify-center gap-2 mt-6 transition-colors active:scale-[0.98] text-xs uppercase tracking-wider"
           >
             {loading ? 'Generating Account...' : (
               <>
@@ -218,7 +208,7 @@ export default function DriverRegisterPage() {
         <div className="mt-6 text-center">
           <p className="text-xs text-slate-500">
             Already have an EV account?{' '}
-            <a href="/driver-login" className="text-cyan-400 font-black hover:underline hover:text-cyan-300 transition-colors">
+            <a href="/driver-login" className="text-blue-400 font-bold hover:underline hover:text-blue-300 transition-colors">
               Login here
             </a>
           </p>
