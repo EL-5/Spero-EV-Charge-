@@ -13,7 +13,7 @@ import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 
 // Routes that do NOT require authentication
-const PUBLIC_PATHS = ['/login', '/manifest.json'];
+const PUBLIC_PATHS = ['/login', '/manifest.json', '/driver-login', '/driver-register'];
 // Routes that are completely public (static assets, webhooks, etc.)
 const PUBLIC_PREFIXES = ['/_next/', '/api/webhooks/', '/favicon', '/spero-logo'];
 
@@ -58,8 +58,10 @@ export async function middleware(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   if (!user) {
-    // Redirect unauthenticated users to login, preserving the intended destination
-    const loginUrl = new URL('/login', request.url);
+    // Redirect unauthenticated drivers to driver-login, and others to login
+    const isDriverPath = pathname.startsWith('/driver');
+    const targetRedirect = isDriverPath ? '/driver-login' : '/login';
+    const loginUrl = new URL(targetRedirect, request.url);
     loginUrl.searchParams.set('redirect', pathname);
     return NextResponse.redirect(loginUrl);
   }
@@ -75,6 +77,8 @@ export const config = {
      * - _next/image (image optimization)
      * - favicon.ico, robots.txt, sitemap.xml (static metadata files)
      * - /login (public auth page)
+     * - /driver-login (public driver login)
+     * - /driver-register (public driver registration)
      */
     '/((?!_next/static|_next/image|favicon.ico|manifest.json|robots.txt|sitemap.xml).*)',
   ],
