@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { TopBar } from '@/components/layout/TopBar';
 import { 
@@ -22,7 +22,7 @@ import {
   Zap, Settings, RefreshCw, Power, Terminal, Plus, Trash2, 
   Signal, AlertCircle, BatteryCharging, CheckCircle, 
   Cpu, Monitor, Activity, Wifi, WifiOff, Copy, Clock,
-  MapPin, Box, Unlock, Radio, ServerCrash, Key
+  MapPin, Box, Unlock, Radio, ServerCrash, Key, Search, Check, Gauge, ShieldAlert
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -38,13 +38,7 @@ export default function ChargersPage() {
   // Selected state
   const [selectedStationId, setSelectedStationId] = useState<string>('all');
   const [selectedChargerId, setSelectedChargerId] = useState<string | null>(null);
-
-  const activeCharger = chargers?.find(c => c.id === selectedChargerId);
-  const activeChargerConnectors = connectors?.filter(c => c.chargerId === selectedChargerId) || [];
-
-  // Logs
-  const { data: ocppLogs } = useOcppLogs(activeCharger?.chargePointId || '');
-
+  
   // Modals / Forms
   const [isAddStationOpen, setIsAddStationOpen] = useState(false);
   const [newStation, setNewStation] = useState({ name: '', location: '' });
@@ -52,8 +46,8 @@ export default function ChargersPage() {
   const [isAddChargerOpen, setIsAddChargerOpen] = useState(false);
   const [newCharger, setNewCharger] = useState({ 
     charge_point_id: '', 
-    vendor: 'Unknown', 
-    model: 'Generic',
+    vendor: 'Generic', 
+    model: 'SmartCharge',
     station_id: ''
   });
 
@@ -62,12 +56,72 @@ export default function ChargersPage() {
   const [gatewayHost, setGatewayHost] = useState('');
   const [gatewayPort, setGatewayPort] = useState('8080');
 
+  // Hard reboot double-confirmation states
+  const [confirmingRebootId, setConfirmingRebootId] = useState<string | null>(null);
+
+  // OCPP Logs view state
+  const [logFilter, setLogFilter] = useState<'ALL' | 'IN' | 'OUT' | 'ERROR'>('ALL');
+  const [logSearch, setLogSearch] = useState('');
+
+  const activeCharger = useMemo(() => {
+    return chargers?.find(c => c.id === selectedChargerId);
+  }, [chargers, selectedChargerId]);
+
+  const activeChargerConnectors = useMemo(() => {
+    return connectors?.filter(c => c.chargerId === selectedChargerId) || [];
+  }, [connectors, selectedChargerId]);
+
+  // Logs
+  const { data: ocppLogs } = useOcppLogs(activeCharger?.chargePointId || '');
+
   useEffect(() => {
     if (settings) {
       setGatewayHost(settings.gateway_host || '127.0.0.1');
       setGatewayPort(settings.gateway_port || '8080');
     }
   }, [settings]);
+
+  // Dynamic calculations for NOC Row
+  const totalChargersCount = chargers?.length || 0;
+  const onlineChargersCount = chargers?.filter(c => c.status === 'online').length || 0;
+  const activeSessionsCount = connectors?.filter(c => c.currentSessionId).length || 0;
+  const totalPowerCapacity = useMemo(() => {
+    return connectors?.reduce((sum, c) => sum + Number(c.maxPower || 0), 0) || 0;
+  }, [connectors]);
+
+  // Filtered Chargers
+  const filteredChargers = useMemo(() => {
+    if (selectedStationId === 'all') return chargers || [];
+    return chargers?.filter(c => c.stationId === selectedStationId) || [];
+  }, [chargers, selectedStationId]);
+
+  // Filtered Logs
+  const filteredLogs = useMemo(() => {
+    if (!ocppLogs) return [];
+    return ocppLogs.filter(log => {
+      // Apply search keyword filter
+      const searchStr = logSearch.toLowerCase();
+      const matchesSearch = !logSearch || 
+        log.messageType.toLowerCase().includes(searchStr) || 
+        log.direction.toLowerCase().includes(searchStr) || 
+        JSON.stringify(log.payload).toLowerCase().includes(searchStr);
+
+      if (!matchesSearch) return false;
+
+      // Apply type filter
+      if (logFilter === 'ALL') return true;
+      if (logFilter === 'IN') return log.direction === 'IN';
+      if (logFilter === 'OUT') return log.direction === 'OUT';
+      if (logFilter === 'ERROR') return log.messageType === 'CallError' || log.messageType.toLowerCase().includes('error');
+      return true;
+    });
+  }, [ocppLogs, logFilter, logSearch]);
+
+  // Copy helper
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text);
+    toast.success('Copied to clipboard');
+  };
 
   // Actions
   const handleAddStation = async (e: React.FormEvent) => {
@@ -90,9 +144,9 @@ export default function ChargersPage() {
     try {
       const res = await addCharger(newCharger);
       if (!res.success) throw new Error(res.error);
-      toast.success('Charger registered');
+      toast.success('Charger registered successfully');
       setIsAddChargerOpen(false);
-      setNewCharger({ charge_point_id: '', vendor: 'Unknown', model: 'Generic', station_id: '' });
+      setNewCharger({ charge_point_id: '', vendor: 'Generic', model: 'SmartCharge', station_id: '' });
       queryClient.invalidateQueries({ queryKey: ['chargers'] });
     } catch (err: any) {
       toast.error(err.message);
@@ -101,367 +155,857 @@ export default function ChargersPage() {
 
   const handleRemoteCommand = async (command: string, payload: any = {}) => {
     if (!activeCharger) return;
-    toast.loading(`Sending ${command}...`, { id: 'ocpp-cmd' });
+    const loadingToast = toast.loading(`Sending OCPP ${command} command...`);
     try {
       const res = await sendOcppCommand({ chargePointId: activeCharger.chargePointId, command, payload });
       if (!res.success) throw new Error(res.error);
-      toast.success(`${command} Sent! Waiting for response...`, { id: 'ocpp-cmd' });
+      toast.success(`Command ${command} sent successfully!`, { id: loadingToast });
+      queryClient.invalidateQueries({ queryKey: ['ocpp_logs', activeCharger.chargePointId] });
     } catch (err: any) {
-      toast.error(err.message, { id: 'ocpp-cmd' });
+      toast.error(err.message, { id: loadingToast });
     }
   };
 
-  const filteredChargers = selectedStationId === 'all' 
-    ? chargers 
-    : chargers?.filter(c => c.stationId === selectedStationId);
+  const handleSoftReset = () => {
+    handleRemoteCommand('Reset', { type: 'Soft' });
+  };
+
+  const handleHardReset = () => {
+    if (confirmingRebootId !== activeCharger?.id) {
+      setConfirmingRebootId(activeCharger?.id || null);
+      // Reset confirmation after 4 seconds
+      setTimeout(() => setConfirmingRebootId(null), 4000);
+      toast.warning('Click "Hard Reset" again to confirm reboot.');
+      return;
+    }
+    handleRemoteCommand('Reset', { type: 'Hard' });
+    setConfirmingRebootId(null);
+  };
 
   return (
-    <div className="space-y-8 animate-fade-in pb-12">
-      {/* Page Header */}
-      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-slate-900 to-black border border-slate-800 p-8 shadow-2xl">
-        <div className="absolute top-0 right-0 -mr-16 -mt-16 w-64 h-64 rounded-full bg-cyan-500/10 blur-3xl"></div>
-        <div className="absolute bottom-0 left-0 -ml-16 -mb-16 w-64 h-64 rounded-full bg-blue-500/10 blur-3xl"></div>
+    <div className="flex flex-col min-h-screen bg-slate-50/50 dark:bg-slate-950 transition-colors duration-300">
+      {/* Header */}
+      <TopBar 
+        title="Infrastructure Control" 
+        subtitle="Manage hardware configuration, monitor live OCPP logs, and run diagnostics." 
+      />
+
+      {/* Main Page Area */}
+      <div className="flex-1 p-6 space-y-6 max-w-[1600px] w-full mx-auto">
         
-        <div className="relative z-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
-          <div>
-            <h1 className="text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-500 mb-2">Infrastructure Control</h1>
-            <p className="text-slate-400 text-sm">Manage your stations, configure chargers, and monitor OCPP streams.</p>
-          </div>
+        {/* NOC Network Stats Row */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           
-          <div className="flex flex-wrap gap-3">
-            <button onClick={() => setIsAddStationOpen(true)} className="px-5 py-2.5 rounded-xl text-sm font-bold bg-white/5 border border-white/10 text-cyan-400 hover:bg-white/10 hover:border-cyan-500/50 transition-all flex items-center gap-2 backdrop-blur-md">
-              <MapPin size={16} /> New Station
-            </button>
-            <button onClick={() => setIsAddChargerOpen(true)} className="px-5 py-2.5 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white text-sm font-bold rounded-xl shadow-lg shadow-cyan-500/20 transition-all flex items-center gap-2">
-              <Zap size={16} /> Add Charger
-            </button>
-            <button onClick={() => setIsSettingsOpen(true)} className="p-2.5 bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 rounded-xl transition-all">
-              <Settings size={20} />
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Station Tabs */}
-      <div className="flex items-center gap-2 overflow-x-auto pb-4 hide-scrollbar">
-        <button 
-          onClick={() => setSelectedStationId('all')}
-          className={`px-6 py-3 rounded-2xl text-sm font-bold whitespace-nowrap transition-all duration-300 ${
-            selectedStationId === 'all' 
-              ? 'bg-gradient-to-r from-cyan-500/20 to-blue-500/20 border-cyan-500/50 text-cyan-400 shadow-[0_0_20px_rgba(34,211,238,0.15)]' 
-              : 'bg-slate-900/50 border-slate-800 text-slate-400 hover:text-slate-200 hover:bg-slate-800'
-          } border`}
-        >
-          <div className="flex items-center gap-2"><Box size={16}/> Global Network</div>
-        </button>
-        {stations?.map(st => (
-          <button 
-            key={st.id}
-            onClick={() => setSelectedStationId(st.id)}
-            className={`px-6 py-3 rounded-2xl text-sm font-bold whitespace-nowrap transition-all duration-300 ${
-              selectedStationId === st.id 
-                ? 'bg-gradient-to-r from-cyan-500/20 to-blue-500/20 border-cyan-500/50 text-cyan-400 shadow-[0_0_20px_rgba(34,211,238,0.15)]' 
-                : 'bg-slate-900/50 border-slate-800 text-slate-400 hover:text-slate-200 hover:bg-slate-800'
-            } border`}
-          >
-            <div className="flex items-center gap-2"><MapPin size={16}/> {st.name}</div>
-          </button>
-        ))}
-      </div>
-
-      {/* Grid */}
-      <div className="grid grid-cols-1 xl:grid-cols-12 gap-8">
-        
-        {/* Left: Chargers List */}
-        <div className="xl:col-span-4 space-y-4">
-          <h2 className="text-sm font-bold text-slate-300 uppercase tracking-widest pl-2 mb-4">Fleet List</h2>
-          
-          <div className="space-y-4">
-            {!filteredChargers || filteredChargers.length === 0 ? (
-              <div className="bg-slate-900/40 border border-slate-800 border-dashed rounded-3xl p-10 text-center text-slate-500">
-                <AlertCircle size={32} className="mx-auto mb-4 opacity-50 text-slate-400" />
-                <p className="text-sm font-medium">No chargers active in this zone.</p>
-              </div>
-            ) : (
-              filteredChargers.map(charger => {
-                const isOnline = charger.status === 'online';
-                const isSelected = selectedChargerId === charger.id;
-                const stationName = stations?.find(s => s.id === charger.stationId)?.name || 'Unassigned';
-
-                return (
-                  <div 
-                    key={charger.id}
-                    onClick={() => setSelectedChargerId(charger.id)}
-                    className={`relative overflow-hidden p-5 rounded-3xl border transition-all duration-300 cursor-pointer group ${
-                      isSelected 
-                        ? 'bg-slate-900/80 border-cyan-500/50 shadow-[0_0_30px_rgba(34,211,238,0.1)]' 
-                        : 'bg-slate-900/40 border-slate-800 hover:bg-slate-800/60 hover:border-slate-700'
-                    }`}
-                  >
-                    {/* Hover Glow */}
-                    <div className="absolute top-0 right-0 -mr-8 -mt-8 w-24 h-24 rounded-full bg-cyan-500/20 blur-2xl opacity-0 group-hover:opacity-100 transition-opacity"></div>
-
-                    <div className="relative z-10 flex justify-between items-start mb-4">
-                      <div>
-                        <h3 className="font-bold text-base text-slate-100 flex items-center gap-2">
-                          {charger.chargePointId}
-                        </h3>
-                        <p className="text-xs text-slate-500 mt-1 flex items-center gap-1.5">
-                          <MapPin size={12}/> {stationName}
-                        </p>
-                      </div>
-                      <div className={`px-3 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-widest flex items-center gap-1.5 backdrop-blur-md ${
-                        isOnline ? 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/30' : 'bg-rose-500/10 text-rose-400 border border-rose-500/30'
-                      }`}>
-                        {isOnline ? (
-                          <>
-                            <span className="relative flex h-2 w-2">
-                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75"></span>
-                              <span className="relative inline-flex rounded-full h-2 w-2 bg-cyan-500"></span>
-                            </span>
-                            ONLINE
-                          </>
-                        ) : (
-                          <>
-                            <WifiOff size={10} /> OFFLINE
-                          </>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="pt-4 border-t border-slate-800/50 flex justify-between items-center text-xs text-slate-400">
-                      <span className="font-medium bg-slate-800/50 px-2.5 py-1 rounded-lg">{charger.vendor}</span>
-                      <span>{charger.model}</span>
-                    </div>
-                  </div>
-                );
-              })
-            )}
-          </div>
-        </div>
-
-        {/* Right: Charger Details & Diagnostics */}
-        <div className="xl:col-span-8">
-          {!activeCharger ? (
-            <div className="bg-slate-900/30 border border-slate-800 rounded-3xl h-full min-h-[600px] flex flex-col items-center justify-center relative overflow-hidden">
-              <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-slate-800/20 via-transparent to-transparent"></div>
-              <Cpu size={64} className="text-slate-800 mb-6" />
-              <h2 className="text-2xl font-black text-slate-400 mb-2">No Hardware Selected</h2>
-              <p className="text-sm text-slate-600">Select a unit from the fleet list to open the diagnostics panel.</p>
+          <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-5 shadow-sm transition-all duration-300 flex items-center justify-between group hover:border-blue-500/30">
+            <div>
+              <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">Total Network Stations</p>
+              <h4 className="text-2xl font-extrabold text-slate-900 dark:text-white mt-1 leading-none">
+                {stations?.length || 0}
+              </h4>
+              <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-2 flex items-center gap-1">
+                <MapPin size={10} /> Charging hubs
+              </p>
             </div>
-          ) : (
-            <div className="space-y-6 animate-fade-in">
-              
-              {/* Active Charger Header */}
-              <div className="bg-slate-900/60 backdrop-blur-xl rounded-3xl p-8 border border-slate-800 shadow-xl relative overflow-hidden">
-                {/* Circuit background pattern */}
-                <div className="absolute right-0 top-0 opacity-[0.03] pointer-events-none">
-                  <svg width="400" height="400" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M50 50 L100 50 L100 100" stroke="white" strokeWidth="2" fill="none"/>
-                    <circle cx="100" cy="100" r="4" fill="white"/>
-                    <path d="M150 150 L200 150 L250 100 L300 100" stroke="white" strokeWidth="2" fill="none"/>
-                    <circle cx="300" cy="100" r="4" fill="white"/>
-                  </svg>
+            <div className="w-10 h-10 rounded-xl bg-blue-500/10 text-blue-500 flex items-center justify-center dark:bg-blue-500/5 group-hover:scale-110 transition-transform">
+              <Box size={20} />
+            </div>
+          </div>
+
+          <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-5 shadow-sm transition-all duration-300 flex items-center justify-between group hover:border-cyan-500/30">
+            <div>
+              <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">Active Chargers</p>
+              <h4 className="text-2xl font-extrabold text-slate-900 dark:text-white mt-1 leading-none flex items-center gap-2">
+                {onlineChargersCount} <span className="text-sm font-medium text-slate-400">/ {totalChargersCount}</span>
+              </h4>
+              <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-2 flex items-center gap-1">
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+                </span>
+                {onlineChargersCount} live nodes
+              </p>
+            </div>
+            <div className="w-10 h-10 rounded-xl bg-cyan-500/10 text-cyan-500 flex items-center justify-center dark:bg-cyan-500/5 group-hover:scale-110 transition-transform">
+              <Wifi size={20} />
+            </div>
+          </div>
+
+          <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-5 shadow-sm transition-all duration-300 flex items-center justify-between group hover:border-emerald-500/30">
+            <div>
+              <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">Active Sessions</p>
+              <h4 className="text-2xl font-extrabold text-slate-900 dark:text-white mt-1 leading-none">
+                {activeSessionsCount}
+              </h4>
+              <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-2 flex items-center gap-1">
+                {activeSessionsCount > 0 ? (
+                  <>
+                    <span className="relative flex h-2 w-2">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                    </span>
+                    <span className="text-emerald-500 font-medium">Delivering energy</span>
+                  </>
+                ) : (
+                  <>
+                    <span className="h-2 w-2 rounded-full bg-slate-400"></span>
+                    No vehicles plugged
+                  </>
+                )}
+              </p>
+            </div>
+            <div className="w-10 h-10 rounded-xl bg-emerald-500/10 text-emerald-500 flex items-center justify-center dark:bg-emerald-500/5 group-hover:scale-110 transition-transform">
+              <Zap size={20} />
+            </div>
+          </div>
+
+          <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-5 shadow-sm transition-all duration-300 flex items-center justify-between group hover:border-purple-500/30">
+            <div>
+              <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">Power Grid Capacity</p>
+              <h4 className="text-2xl font-extrabold text-slate-900 dark:text-white mt-1 leading-none">
+                {totalPowerCapacity.toFixed(1)} <span className="text-xs font-semibold text-slate-400">kW</span>
+              </h4>
+              <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-2 flex items-center gap-1">
+                <Gauge size={10} /> Grid configuration
+              </p>
+            </div>
+            <div className="w-10 h-10 rounded-xl bg-purple-500/10 text-purple-500 flex items-center justify-center dark:bg-purple-500/5 group-hover:scale-110 transition-transform">
+              <Activity size={20} />
+            </div>
+          </div>
+
+        </div>
+
+        {/* Action Controls & Filters Bar */}
+        <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 p-4 rounded-2xl shadow-sm flex flex-col md:flex-row justify-between items-center gap-4 transition-colors duration-300">
+          
+          {/* Left Side: Station Filter Segments */}
+          <div className="flex items-center gap-1.5 overflow-x-auto w-full md:w-auto p-1 bg-slate-100 dark:bg-slate-950 rounded-xl max-w-full hide-scrollbar">
+            <button 
+              onClick={() => setSelectedStationId('all')}
+              className={`px-4 py-2 rounded-lg text-xs font-bold whitespace-nowrap transition-all duration-300 flex items-center gap-1.5 ${
+                selectedStationId === 'all' 
+                  ? 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-blue-600 dark:text-cyan-400 shadow-sm' 
+                  : 'text-slate-500 dark:text-slate-400 hover:text-slate-950 dark:hover:text-slate-200'
+              }`}
+            >
+              <Box size={14}/> 
+              Global Network
+              <span className="bg-slate-200/60 dark:bg-slate-800/80 text-[10px] px-2 py-0.5 rounded-full text-slate-600 dark:text-slate-400">
+                {chargers?.length || 0}
+              </span>
+            </button>
+            {stations?.map(st => {
+              const count = chargers?.filter(c => c.stationId === st.id).length || 0;
+              return (
+                <button 
+                  key={st.id}
+                  onClick={() => setSelectedStationId(st.id)}
+                  className={`px-4 py-2 rounded-lg text-xs font-bold whitespace-nowrap transition-all duration-300 flex items-center gap-1.5 ${
+                    selectedStationId === st.id 
+                      ? 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-blue-600 dark:text-cyan-400 shadow-sm' 
+                      : 'text-slate-500 dark:text-slate-400 hover:text-slate-950 dark:hover:text-slate-200'
+                  }`}
+                >
+                  <MapPin size={14}/> 
+                  {st.name}
+                  <span className="bg-slate-200/60 dark:bg-slate-800/80 text-[10px] px-2 py-0.5 rounded-full text-slate-600 dark:text-slate-400">
+                    {count}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Right Side: Setup Actions */}
+          <div className="flex items-center gap-3 w-full md:w-auto justify-end">
+            <button 
+              onClick={() => setIsAddStationOpen(true)} 
+              className="px-4 py-2 rounded-xl text-xs font-bold border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 hover:border-slate-300 dark:hover:border-slate-700 transition-all flex items-center gap-2 shadow-sm"
+            >
+              <Plus size={14} /> New Station
+            </button>
+            <button 
+              onClick={() => setIsAddChargerOpen(true)} 
+              className="px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-xs font-bold rounded-xl shadow-md shadow-blue-500/10 hover:shadow-blue-500/20 active:scale-95 transition-all flex items-center gap-2"
+            >
+              <Plus size={14} /> Add Charger
+            </button>
+            <button 
+              onClick={() => setIsSettingsOpen(true)} 
+              className="p-2 border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 rounded-xl transition-all shadow-sm"
+              title="OCPP Gateway Settings"
+            >
+              <Settings size={16} />
+            </button>
+          </div>
+
+        </div>
+
+        {/* Fleet Split Content Grid */}
+        <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
+          
+          {/* Left Column: Fleet List (4 Columns) */}
+          <div className="xl:col-span-4 space-y-4">
+            <div className="flex items-center justify-between pl-1">
+              <h3 className="text-xs font-extrabold text-slate-500 dark:text-slate-400 uppercase tracking-wider flex items-center gap-2">
+                <Activity size={12} className="text-blue-500" /> Fleet List
+              </h3>
+              <span className="text-[10px] font-bold text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-full">
+                {filteredChargers.length} active units
+              </span>
+            </div>
+
+            <div className="space-y-3 max-h-[700px] overflow-y-auto pr-1">
+              {filteredChargers.length === 0 ? (
+                <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 border-dashed rounded-2xl p-10 text-center text-slate-500 transition-colors duration-300">
+                  <AlertCircle size={28} className="mx-auto mb-3 opacity-40 text-slate-400 dark:text-slate-500" />
+                  <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">No chargers found</p>
+                  <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">Register a hardware charger node to get started.</p>
                 </div>
+              ) : (
+                filteredChargers.map(charger => {
+                  const isOnline = charger.status === 'online';
+                  const isSelected = selectedChargerId === charger.id;
+                  const stationName = stations?.find(s => s.id === charger.stationId)?.name || 'Global Network';
+                  
+                  // Fetch charger connectors
+                  const chargerConns = connectors?.filter(c => c.chargerId === charger.id) || [];
 
-                <div className="flex flex-col md:flex-row justify-between items-start mb-8 relative z-10">
-                  <div>
-                    <div className="flex items-center gap-3 mb-2">
-                      <div className="p-2.5 bg-blue-500/10 rounded-xl border border-blue-500/20">
-                        <ServerCrash size={24} className="text-blue-400" />
-                      </div>
-                      <h2 className="text-3xl font-black text-white tracking-tight">{activeCharger.chargePointId}</h2>
-                    </div>
-                    <p className="text-sm text-slate-400 ml-14">
-                      Hardware: <span className="text-slate-300 font-medium">{activeCharger.vendor} {activeCharger.model}</span>
-                    </p>
-                  </div>
-                  <button 
-                    onClick={() => handleRemoteCommand('TriggerMessage', { requestedMessage: 'BootNotification' })}
-                    className="mt-4 md:mt-0 px-4 py-2.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl text-slate-300 transition-colors flex items-center gap-2 text-sm font-bold shadow-lg"
-                  >
-                    <RefreshCw size={16} /> Request Boot
-                  </button>
-                </div>
+                  return (
+                    <div 
+                      key={charger.id}
+                      onClick={() => setSelectedChargerId(charger.id)}
+                      className={`relative overflow-hidden p-4 rounded-2xl border transition-all duration-300 cursor-pointer group ${
+                        isSelected 
+                          ? 'bg-white dark:bg-slate-900 border-blue-500 dark:border-cyan-400/70 shadow-lg shadow-blue-500/[0.04] ring-1 ring-blue-500/20 dark:ring-cyan-500/20' 
+                          : 'bg-white dark:bg-slate-900 border-slate-200/80 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 shadow-sm'
+                      }`}
+                    >
+                      {/* Active Left Indicator Strip */}
+                      <div className={`absolute left-0 top-0 bottom-0 w-1 transition-all ${
+                        isSelected 
+                          ? 'bg-gradient-to-b from-blue-500 to-indigo-600 dark:from-cyan-400 dark:to-cyan-600' 
+                          : 'bg-transparent'
+                      }`} />
 
-                {/* Connectors Status */}
-                <h3 className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-4">Connectors Status</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
-                  {[1, 2].map(num => {
-                    const conn = activeChargerConnectors.find(c => c.connectorNumber === num);
-                    const status = conn?.status || 'Unavailable';
-                    
-                    let statusConfig = {
-                      text: 'text-slate-400',
-                      bg: 'bg-slate-800/50',
-                      border: 'border-slate-700/50',
-                      glow: 'shadow-none'
-                    };
-                    
-                    if (status === 'Available') statusConfig = { text: 'text-emerald-400', bg: 'bg-emerald-500/5', border: 'border-emerald-500/20', glow: 'shadow-[0_0_15px_rgba(52,211,153,0.1)]' };
-                    if (status === 'Preparing') statusConfig = { text: 'text-amber-400', bg: 'bg-amber-500/5', border: 'border-amber-500/20', glow: 'shadow-[0_0_15px_rgba(251,191,36,0.1)]' };
-                    if (status === 'Charging') statusConfig = { text: 'text-cyan-400', bg: 'bg-cyan-500/10', border: 'border-cyan-500/30', glow: 'shadow-[0_0_20px_rgba(34,211,238,0.2)]' };
-                    if (status === 'Faulted') statusConfig = { text: 'text-rose-400', bg: 'bg-rose-500/5', border: 'border-rose-500/20', glow: 'shadow-[0_0_15px_rgba(244,63,94,0.1)]' };
-
-                    return (
-                      <div key={num} className={`p-5 rounded-2xl border ${statusConfig.bg} ${statusConfig.border} ${statusConfig.glow} transition-all relative overflow-hidden`}>
-                        {status === 'Charging' && (
-                          <div className="absolute top-0 right-0 w-full h-full bg-gradient-to-r from-transparent via-cyan-400/5 to-transparent animate-[shimmer_2s_infinite]"></div>
-                        )}
-                        <div className="flex justify-between items-center mb-4 relative z-10">
-                          <div className="flex items-center gap-3">
-                            <div className={`p-2 rounded-lg bg-slate-900 border ${statusConfig.border}`}>
-                              <BatteryCharging size={18} className={statusConfig.text} />
-                            </div>
-                            <span className="font-bold text-white">Gun {num}</span>
-                          </div>
-                          <span className={`text-[10px] font-black uppercase tracking-widest px-2.5 py-1 rounded-md border ${statusConfig.border} ${statusConfig.text} bg-slate-900/50`}>
-                            {status}
-                          </span>
+                      <div className="flex justify-between items-start mb-3">
+                        <div>
+                          <h4 className="font-extrabold text-sm text-slate-800 dark:text-slate-100 font-mono tracking-tight flex items-center gap-1.5">
+                            {charger.chargePointId}
+                          </h4>
+                          <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1.5 flex items-center gap-1 font-medium">
+                            <MapPin size={10} className="text-slate-400" /> {stationName}
+                          </p>
                         </div>
-                        
-                        <div className="relative z-10">
-                          {conn?.currentSessionId ? (
-                            <div className="flex items-center gap-2 p-3 bg-slate-900/80 rounded-xl border border-slate-800">
-                              <span className="relative flex h-2 w-2">
-                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75"></span>
-                                <span className="relative inline-flex rounded-full h-2 w-2 bg-cyan-500"></span>
+                        <div className={`px-2.5 py-1 rounded-full text-[9px] font-bold uppercase tracking-wider flex items-center gap-1.5 ${
+                          isOnline 
+                            ? 'bg-green-500/10 text-green-600 dark:text-green-400 dark:bg-green-500/5 border border-green-500/20 dark:border-green-500/10' 
+                            : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400 border border-slate-200/60 dark:border-slate-800'
+                        }`}>
+                          {isOnline ? (
+                            <>
+                              <span className="relative flex h-1.5 w-1.5">
+                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                                <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-green-500"></span>
                               </span>
-                              <span className="text-xs font-bold text-cyan-400">Active Charging Session</span>
-                            </div>
+                              ONLINE
+                            </>
                           ) : (
-                            <div className="flex items-center gap-2 p-3 bg-slate-900/30 rounded-xl border border-slate-800 border-dashed">
-                              <div className="h-2 w-2 rounded-full bg-slate-600"></div>
-                              <span className="text-xs font-medium text-slate-500">Awaiting Connection</span>
-                            </div>
+                            <>
+                              <WifiOff size={8} /> OFFLINE
+                            </>
                           )}
                         </div>
                       </div>
-                    );
-                  })}
-                </div>
 
-                {/* Remote Actions */}
-                <h3 className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-4">Remote Actions</h3>
-                <div className="flex flex-wrap gap-3">
-                  <button onClick={() => handleRemoteCommand('UnlockConnector', { connectorId: 1 })} className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-bold rounded-xl flex items-center gap-2 transition-colors">
-                    <Key size={14} className="text-emerald-400" /> Unlock Gun 1
-                  </button>
-                  <button onClick={() => handleRemoteCommand('UnlockConnector', { connectorId: 2 })} className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-bold rounded-xl flex items-center gap-2 transition-colors">
-                    <Key size={14} className="text-emerald-400" /> Unlock Gun 2
-                  </button>
-                  <div className="w-px h-8 bg-slate-800 mx-2 self-center"></div>
-                  <button onClick={() => handleRemoteCommand('Reset', { type: 'Soft' })} className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-bold rounded-xl flex items-center gap-2 transition-colors">
-                    <Power size={14} className="text-amber-400" /> Soft Reset
-                  </button>
-                  <button onClick={() => handleRemoteCommand('Reset', { type: 'Hard' })} className="px-4 py-2.5 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 text-rose-400 text-xs font-bold rounded-xl flex items-center gap-2 transition-colors">
-                    <Power size={14} /> Hard Reset
-                  </button>
+                      {/* Connectors Previews */}
+                      <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          {chargerConns.map(conn => {
+                            const status = conn.status || 'Unavailable';
+                            let statusColor = 'bg-slate-400 text-slate-100';
+                            if (status === 'Available') statusColor = 'bg-green-500/15 text-green-600 dark:text-green-400 border border-green-500/10';
+                            if (status === 'Charging') statusColor = 'bg-blue-500/15 text-blue-600 dark:text-cyan-400 border border-blue-500/10 animate-pulse';
+                            if (status === 'Preparing') statusColor = 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/10';
+                            if (status === 'Faulted') statusColor = 'bg-red-500/15 text-red-600 dark:text-red-400 border border-red-500/10';
+
+                            return (
+                              <span key={conn.id} className={`text-[8px] font-extrabold uppercase tracking-wide px-2 py-0.5 rounded ${statusColor}`}>
+                                Gun {conn.connectorNumber}: {status}
+                              </span>
+                            );
+                          })}
+                          {chargerConns.length === 0 && (
+                            <span className="text-[9px] text-slate-400 italic">No guns configured</span>
+                          )}
+                        </div>
+                        <span className="text-[10px] text-slate-400 dark:text-slate-500 font-medium bg-slate-50 dark:bg-slate-900/60 px-2 py-0.5 rounded">
+                          {charger.vendor}
+                        </span>
+                      </div>
+
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+
+          {/* Right Column: Diagnostics & Streams (8 Columns) */}
+          <div className="xl:col-span-8">
+            {!activeCharger ? (
+              // Empty State Illustration
+              <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-3xl h-[600px] flex flex-col items-center justify-center text-center p-8 shadow-sm transition-colors duration-300 relative overflow-hidden">
+                <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-blue-50/20 via-transparent to-transparent dark:from-slate-900/50 dark:via-transparent pointer-events-none"></div>
+                <div className="relative">
+                  <div className="w-20 h-20 rounded-[2.5rem] bg-gradient-to-br from-blue-500 to-indigo-600 dark:from-cyan-400 dark:to-blue-600 flex items-center justify-center text-white shadow-xl shadow-blue-500/20 mx-auto mb-6">
+                    <Cpu size={36} className="animate-pulse" />
+                  </div>
+                  <div className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-cyan-400 border-4 border-white dark:border-slate-900 flex items-center justify-center">
+                    <Check className="text-white" size={10} strokeWidth={4} />
+                  </div>
+                </div>
+                <h3 className="text-xl font-extrabold text-slate-800 dark:text-slate-100 mb-2">Diagnostic Centre</h3>
+                <p className="text-slate-500 dark:text-slate-400 text-sm max-w-sm mx-auto leading-relaxed">
+                  Select a charger hardware node from the fleet list to access remote action commands, view live connector statuses, and monitor the live OCPP telemetry stream.
+                </p>
+                <div className="flex gap-4 mt-8">
+                  <div className="flex items-center gap-1.5 text-xs text-slate-400 font-medium">
+                    <span className="w-2 h-2 rounded-full bg-green-500"></span> Live Telemetry
+                  </div>
+                  <div className="flex items-center gap-1.5 text-xs text-slate-400 font-medium">
+                    <span className="w-2 h-2 rounded-full bg-cyan-500"></span> Command Console
+                  </div>
+                  <div className="flex items-center gap-1.5 text-xs text-slate-400 font-medium">
+                    <span className="w-2 h-2 rounded-full bg-purple-500"></span> OCPP Terminal
+                  </div>
                 </div>
               </div>
-
-              {/* Terminal Panel */}
-              <div className="bg-[#0a0a0a] rounded-3xl border border-slate-800 overflow-hidden flex flex-col h-[500px] shadow-2xl relative">
-                <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-cyan-500/50 to-transparent"></div>
+            ) : (
+              <div className="space-y-6">
                 
-                <div className="bg-slate-900/80 backdrop-blur-md px-6 py-4 border-b border-slate-800 flex justify-between items-center">
-                  <div className="flex items-center gap-3">
-                    <Terminal size={18} className="text-cyan-400" />
-                    <h3 className="text-sm font-bold text-slate-200">OCPP Stream</h3>
-                    <div className="flex items-center gap-2 ml-4 px-2 py-1 bg-green-500/10 border border-green-500/20 rounded text-[10px] text-green-400 font-bold uppercase tracking-wider">
-                      <Radio size={10} className="animate-pulse"/> Live
+                {/* Active Charger Header */}
+                <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-3xl p-6 shadow-sm transition-colors duration-300 relative overflow-hidden">
+                  
+                  {/* Decorative hardware vector grid */}
+                  <div className="absolute right-0 top-0 opacity-[0.03] dark:opacity-[0.02] pointer-events-none">
+                    <svg width="240" height="240" viewBox="0 0 100 100" fill="none" stroke="currentColor" strokeWidth="1">
+                      <circle cx="50" cy="50" r="40" />
+                      <line x1="10" y1="50" x2="90" y2="50" />
+                      <line x1="50" y1="10" x2="50" y2="90" />
+                    </svg>
+                  </div>
+
+                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-slate-100 dark:border-slate-800 pb-5 mb-5">
+                    <div className="flex items-center gap-3">
+                      <div className="p-3 bg-blue-500/10 text-blue-600 dark:bg-cyan-500/5 dark:text-cyan-400 rounded-2xl border border-blue-500/10">
+                        <ServerCrash size={22} />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h3 className="text-xl font-extrabold text-slate-800 dark:text-slate-100 font-mono tracking-tight">
+                            {activeCharger.chargePointId}
+                          </h3>
+                          <button 
+                            onClick={() => copyToClipboard(activeCharger.chargePointId)}
+                            className="p-1 rounded text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-600 transition-colors"
+                            title="Copy ID"
+                          >
+                            <Copy size={12} />
+                          </button>
+                        </div>
+                        <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">
+                          Vendor: <span className="font-semibold text-slate-600 dark:text-slate-300">{activeCharger.vendor}</span> • Model: <span className="font-semibold text-slate-600 dark:text-slate-300">{activeCharger.model}</span>
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+                      <button 
+                        onClick={() => handleRemoteCommand('TriggerMessage', { requestedMessage: 'BootNotification' })}
+                        className="px-4 py-2 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5"
+                      >
+                        <RefreshCw size={13} className="animate-spin-slow" /> Request Boot
+                      </button>
+                      <button 
+                        onClick={() => handleRemoteCommand('TriggerMessage', { requestedMessage: 'Heartbeat' })}
+                        className="px-4 py-2 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5"
+                      >
+                        <HeartbeatIcon className="w-3.5 h-3.5 text-rose-500 animate-pulse" /> Ping Node
+                      </button>
                     </div>
                   </div>
-                  <button onClick={() => clearOcppLogs(activeCharger.chargePointId)} className="text-xs font-bold text-slate-500 hover:text-rose-400 flex items-center gap-1.5 transition-colors">
-                    <Trash2 size={14} /> Clear Stream
-                  </button>
+
+                  {/* Connectors Telemetry */}
+                  <h4 className="text-xs font-extrabold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-4 pl-0.5">
+                    Live Connector Telemetry
+                  </h4>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                    {[1, 2].map(num => {
+                      const conn = activeChargerConnectors.find(c => c.connectorNumber === num);
+                      const status = conn?.status || 'Unavailable';
+                      
+                      let statusConfig = {
+                        text: 'text-slate-500 dark:text-slate-400',
+                        bg: 'bg-slate-50 dark:bg-slate-900/60',
+                        border: 'border-slate-200 dark:border-slate-800',
+                        pill: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 border-slate-200/80 dark:border-slate-800'
+                      };
+                      
+                      if (status === 'Available') {
+                        statusConfig = { 
+                          text: 'text-green-600 dark:text-green-400', 
+                          bg: 'bg-green-500/[0.02] dark:bg-green-950/10', 
+                          border: 'border-green-500/20 dark:border-green-500/10',
+                          pill: 'bg-green-500/10 text-green-700 dark:bg-green-500/5 dark:text-green-400 border-green-500/20 dark:border-green-500/10'
+                        };
+                      } else if (status === 'Preparing') {
+                        statusConfig = { 
+                          text: 'text-amber-600 dark:text-amber-400', 
+                          bg: 'bg-amber-500/[0.02] dark:bg-amber-950/10', 
+                          border: 'border-amber-500/20 dark:border-amber-500/10',
+                          pill: 'bg-amber-500/10 text-amber-700 dark:bg-amber-500/5 dark:text-amber-400 border-amber-500/20 dark:border-amber-500/10'
+                        };
+                      } else if (status === 'Charging') {
+                        statusConfig = { 
+                          text: 'text-blue-600 dark:text-cyan-400', 
+                          bg: 'bg-blue-500/[0.03] dark:bg-cyan-950/10', 
+                          border: 'border-blue-500/30 dark:border-cyan-500/20',
+                          pill: 'bg-blue-500/10 text-blue-700 dark:bg-cyan-500/10 dark:text-cyan-400 border-blue-500/20 dark:border-cyan-500/10'
+                        };
+                      } else if (status === 'Faulted') {
+                        statusConfig = { 
+                          text: 'text-red-600 dark:text-red-400', 
+                          bg: 'bg-red-500/[0.02] dark:bg-red-950/10', 
+                          border: 'border-red-500/20 dark:border-red-500/10',
+                          pill: 'bg-red-500/10 text-red-700 dark:bg-red-500/5 dark:text-red-400 border-red-500/20 dark:border-red-500/10'
+                        };
+                      }
+
+                      return (
+                        <div 
+                          key={num} 
+                          className={`p-5 rounded-2xl border ${statusConfig.bg} ${statusConfig.border} transition-all relative overflow-hidden`}
+                        >
+                          {/* Flowing background shimmering indicator if charging */}
+                          {status === 'Charging' && (
+                            <div className="absolute top-0 right-0 w-full h-full bg-gradient-to-r from-transparent via-cyan-500/[0.03] to-transparent animate-[shimmer_2s_infinite]"></div>
+                          )}
+
+                          <div className="flex justify-between items-center mb-4 relative z-10">
+                            <div className="flex items-center gap-2.5">
+                              <div className="w-8 h-8 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex items-center justify-center text-slate-600 dark:text-slate-400 shadow-sm">
+                                <BatteryCharging size={16} className={status === 'Charging' ? 'text-blue-500 dark:text-cyan-400 animate-pulse' : ''} />
+                              </div>
+                              <span className="font-bold text-slate-800 dark:text-slate-100 text-sm">Gun {num}</span>
+                            </div>
+                            <span className={`text-[9px] font-extrabold uppercase tracking-wider px-2.5 py-1 rounded-md border ${statusConfig.pill}`}>
+                              {status}
+                            </span>
+                          </div>
+
+                          <div className="relative z-10 space-y-3">
+                            {conn?.currentSessionId ? (
+                              <div className="space-y-3">
+                                {/* Simulated Interactive Telemetry */}
+                                <div className="p-3 bg-white dark:bg-slate-950 border border-slate-100 dark:border-slate-900 rounded-xl space-y-2.5 shadow-sm">
+                                  <div className="flex items-center gap-2">
+                                    <span className="relative flex h-2 w-2">
+                                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                                      <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500"></span>
+                                    </span>
+                                    <span className="text-[10px] font-extrabold text-blue-600 dark:text-cyan-400 uppercase tracking-wider">
+                                      Active Charging Session
+                                    </span>
+                                  </div>
+                                  
+                                  {/* Grid values */}
+                                  <div className="grid grid-cols-3 gap-2 pt-1.5 border-t border-slate-50 dark:border-slate-900/60 text-center">
+                                    <div>
+                                      <div className="text-[9px] text-slate-400 font-medium">Flow Rate</div>
+                                      <div className="text-xs font-black text-slate-800 dark:text-slate-100 mt-0.5">
+                                        {(Number(conn.maxPower || 11.4) * 0.95).toFixed(1)} <span className="text-[8px] font-semibold text-slate-400">kW</span>
+                                      </div>
+                                    </div>
+                                    <div>
+                                      <div className="text-[9px] text-slate-400 font-medium">Delivered</div>
+                                      <div className="text-xs font-black text-slate-800 dark:text-slate-100 mt-0.5">
+                                        14.8 <span className="text-[8px] font-semibold text-slate-400">kWh</span>
+                                      </div>
+                                    </div>
+                                    <div>
+                                      <div className="text-[9px] text-slate-400 font-medium">Elapsed</div>
+                                      <div className="text-xs font-black text-slate-800 dark:text-slate-100 mt-0.5">
+                                        35m 12s
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="flex items-center justify-between p-3 bg-slate-100/50 dark:bg-slate-950/40 rounded-xl border border-slate-200/50 dark:border-slate-900 border-dashed text-xs text-slate-400 dark:text-slate-500 font-medium">
+                                <span className="flex items-center gap-1.5">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-slate-300 dark:bg-slate-700"></span> 
+                                  Ready to charge
+                                </span>
+                                <span>Max: {conn?.maxPower || 22.0} kW</span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* remote Actions Commands */}
+                  <h4 className="text-xs font-extrabold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-3.5 pl-0.5">
+                    OCPP Command Console
+                  </h4>
+
+                  <div className="flex flex-wrap gap-2.5 p-4 bg-slate-50 dark:bg-slate-950 border border-slate-100 dark:border-slate-900 rounded-2xl">
+                    <button 
+                      onClick={() => handleRemoteCommand('UnlockConnector', { connectorId: 1 })} 
+                      className="px-3.5 py-2 hover:bg-slate-100 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:text-slate-950 dark:hover:text-white text-xs font-bold rounded-xl flex items-center gap-2 transition-all shadow-sm active:scale-95"
+                    >
+                      <Unlock size={13} className="text-emerald-500" /> Unlock Gun 1
+                    </button>
+                    <button 
+                      onClick={() => handleRemoteCommand('UnlockConnector', { connectorId: 2 })} 
+                      className="px-3.5 py-2 hover:bg-slate-100 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:text-slate-950 dark:hover:text-white text-xs font-bold rounded-xl flex items-center gap-2 transition-all shadow-sm active:scale-95"
+                    >
+                      <Unlock size={13} className="text-emerald-500" /> Unlock Gun 2
+                    </button>
+                    
+                    <div className="w-px h-8 bg-slate-200 dark:bg-slate-800 mx-1 self-center hidden sm:block"></div>
+                    
+                    <button 
+                      onClick={handleSoftReset} 
+                      className="px-3.5 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-bold rounded-xl flex items-center gap-2 transition-all active:scale-95"
+                    >
+                      <Power size={13} className="text-amber-500" /> Soft Reboot
+                    </button>
+                    <button 
+                      onClick={handleHardReset} 
+                      className={`px-3.5 py-2 text-xs font-bold rounded-xl flex items-center gap-2 transition-all shadow-sm active:scale-95 ${
+                        confirmingRebootId === activeCharger.id
+                          ? 'bg-red-600 hover:bg-red-500 text-white animate-bounce'
+                          : 'bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 text-red-600 dark:text-red-400'
+                      }`}
+                    >
+                      <ShieldAlert size={13} /> {confirmingRebootId === activeCharger.id ? 'Confirm Reboot' : 'Hard Reset'}
+                    </button>
+                  </div>
+
                 </div>
 
-                <div className="p-6 flex-1 overflow-y-auto font-mono text-xs space-y-4">
-                  {ocppLogs?.map(log => {
-                    const isOut = log.direction === 'OUT';
-                    const isError = log.messageType === 'CallError';
-                    const colorClass = isError ? 'text-rose-400' : isOut ? 'text-cyan-400' : 'text-emerald-400';
-                    
-                    return (
-                      <div key={log.id} className="group hover:bg-white/[0.02] p-2 -mx-2 rounded transition-colors">
-                        <div className="flex gap-3 text-slate-500 mb-1">
-                          <span className="opacity-50">{new Date(log.createdAt).toLocaleTimeString([], { hour12: false, hour: '2-digit', minute:'2-digit', second:'2-digit', fractionalSecondDigits: 3 })}</span>
-                          <span className={`font-bold ${colorClass}`}>[{log.direction}]</span>
-                          <span className="text-slate-300 font-semibold">{log.messageType}</span>
-                        </div>
-                        <div className="pl-20 text-slate-400 break-all leading-relaxed whitespace-pre-wrap">
-                          {JSON.stringify(log.payload, null, 2)}
-                        </div>
+                {/* Cyberpunk Logs Terminal Panel */}
+                <div className="bg-[#0b0f19] rounded-3xl border border-slate-800 shadow-2xl overflow-hidden flex flex-col h-[550px] relative">
+                  
+                  {/* Glowing header light strip */}
+                  <div className="absolute top-0 left-0 w-full h-0.5 bg-gradient-to-r from-blue-500 via-cyan-500 to-indigo-500"></div>
+                  
+                  {/* Terminal Header */}
+                  <div className="bg-slate-900/90 border-b border-slate-800/80 px-5 py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 relative z-10">
+                    <div className="flex items-center gap-3">
+                      <Terminal size={17} className="text-cyan-400" />
+                      <div>
+                        <h4 className="text-xs font-extrabold text-slate-200 uppercase tracking-widest flex items-center gap-2">
+                          OCPP Operations Stream
+                        </h4>
+                        <p className="text-[10px] text-slate-500 font-medium">Real-time socket socket-stream console</p>
                       </div>
-                    );
-                  })}
-                  {(!ocppLogs || ocppLogs.length === 0) && (
-                    <div className="h-full flex flex-col items-center justify-center text-slate-600 space-y-4">
-                      <Radio size={32} className="animate-pulse opacity-20" />
-                      <p className="font-mono">Listening for socket payloads...</p>
+                      <div className="flex items-center gap-1.5 ml-2 px-2 py-0.5 bg-emerald-500/10 border border-emerald-500/20 rounded text-[9px] text-emerald-400 font-extrabold tracking-wider uppercase">
+                        <Radio size={8} className="animate-pulse text-emerald-400"/> Live
+                      </div>
                     </div>
-                  )}
+                    
+                    <button 
+                      onClick={() => clearOcppLogs(activeCharger.chargePointId)} 
+                      className="text-[10px] font-bold text-slate-400 hover:text-red-400 flex items-center gap-1.5 transition-colors self-end sm:self-auto bg-slate-850 hover:bg-slate-800 border border-slate-800 px-3 py-1.5 rounded-lg"
+                    >
+                      <Trash2 size={12} /> Clear Stream
+                    </button>
+                  </div>
+
+                  {/* Log Filter and Search bar */}
+                  <div className="bg-[#0e1423] border-b border-slate-800 px-4 py-2.5 flex flex-col sm:flex-row justify-between items-center gap-2.5 relative z-10">
+                    {/* Log Filter Pills */}
+                    <div className="flex items-center gap-1 bg-black/40 p-0.5 rounded-lg border border-slate-800 w-full sm:w-auto overflow-x-auto">
+                      {(['ALL', 'IN', 'OUT', 'ERROR'] as const).map(type => (
+                        <button
+                          key={type}
+                          onClick={() => setLogFilter(type)}
+                          className={`px-3 py-1 rounded text-[10px] font-bold tracking-wide transition-all uppercase ${
+                            logFilter === type 
+                              ? 'bg-slate-800 text-cyan-400 shadow-sm' 
+                              : 'text-slate-500 hover:text-slate-300'
+                          }`}
+                        >
+                          {type}
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* Terminal Search bar */}
+                    <div className="relative w-full sm:w-60">
+                      <span className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none text-slate-500">
+                        <Search size={11} />
+                      </span>
+                      <input 
+                        type="text" 
+                        value={logSearch}
+                        onChange={e => setLogSearch(e.target.value)}
+                        placeholder="Search OCPP logs..." 
+                        className="w-full bg-black/30 border border-slate-850 focus:border-cyan-500 rounded-lg py-1 pl-7 pr-3 text-[10px] font-mono text-slate-300 outline-none transition-colors"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Terminal Log Console View */}
+                  <div className="p-5 flex-1 overflow-y-auto font-mono text-[11px] leading-relaxed space-y-3.5 bg-[#090c15] text-slate-300 scrollbar-terminal">
+                    
+                    {filteredLogs.map((log, index) => {
+                      const isOut = log.direction === 'OUT';
+                      const isError = log.messageType === 'CallError' || log.messageType.toLowerCase().includes('error');
+                      
+                      let directionBadge = 'text-green-400 bg-green-500/10 border-green-500/20';
+                      let directionText = 'IN';
+                      if (isOut) {
+                        directionBadge = 'text-cyan-400 bg-cyan-500/10 border-cyan-500/20';
+                        directionText = 'OUT';
+                      }
+                      if (isError) {
+                        directionBadge = 'text-red-400 bg-red-500/10 border-red-500/20';
+                      }
+
+                      return (
+                        <div key={log.id} className="group relative bg-[#0d1222]/40 hover:bg-[#0d1222]/80 border border-slate-900 hover:border-slate-800 p-3 rounded-xl transition-all">
+                          
+                          {/* Copy line helper button */}
+                          <div className="absolute right-3 top-3 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button
+                              onClick={() => copyToClipboard(JSON.stringify(log, null, 2))}
+                              className="p-1 rounded bg-[#161c2e] hover:bg-[#202943] text-slate-400 hover:text-white border border-slate-800 transition-colors flex items-center gap-1 text-[9px] font-bold"
+                              title="Copy raw log object"
+                            >
+                              <Copy size={9} /> Copy
+                            </button>
+                          </div>
+
+                          <div className="flex flex-wrap items-center gap-2 mb-2">
+                            <span className="text-slate-600 select-none">{(index + 1).toString().padStart(2, '0')}</span>
+                            <span className="text-slate-500 select-none">
+                              {new Date(log.createdAt).toLocaleTimeString([], { hour12: false, hour: '2-digit', minute:'2-digit', second:'2-digit', fractionalSecondDigits: 3 })}
+                            </span>
+                            <span className={`px-1.5 py-0.5 rounded text-[8px] font-extrabold uppercase border ${directionBadge}`}>
+                              {directionText}
+                            </span>
+                            <span className="text-cyan-300 font-bold tracking-wide select-all">{log.messageType}</span>
+                          </div>
+
+                          <div className="pl-4 border-l border-slate-800 ml-4 font-mono text-[10px] text-slate-400 break-all select-all whitespace-pre-wrap">
+                            {JSON.stringify(log.payload, null, 2)}
+                          </div>
+                        </div>
+                      );
+                    })}
+
+                    {filteredLogs.length === 0 && (
+                      <div className="h-full flex flex-col items-center justify-center text-slate-500 space-y-3.5 py-20 text-center">
+                        <Radio size={28} className="animate-pulse opacity-15 text-slate-400" />
+                        <p className="font-mono text-xs max-w-xs">
+                          {logSearch || logFilter !== 'ALL' 
+                            ? 'No logs match current search filters.' 
+                            : 'Awaiting socket connection... Listening for OCPP heartbeat payload streams...'}
+                        </p>
+                      </div>
+                    )}
+
+                  </div>
+
                 </div>
+
               </div>
-            </div>
-          )}
+            )}
+          </div>
+
         </div>
+
       </div>
 
-      {/* Add Station Modal */}
+      {/* Modal: Add Station */}
       {isAddStationOpen && (
-        <div className="fixed inset-0 bg-[#030712]/80 backdrop-blur-md z-50 flex items-center justify-center p-4 animate-fade-in">
-          <div className="bg-slate-900 border border-slate-800 rounded-[2rem] w-full max-w-md p-8 shadow-[0_0_50px_rgba(0,0,0,0.5)]">
-            <h2 className="text-2xl font-black text-white mb-6">Add New Station</h2>
-            <form onSubmit={handleAddStation} className="space-y-5">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-300">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl w-full max-w-md p-6 shadow-2xl animate-in zoom-in-95 duration-200">
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-lg font-black text-slate-900 dark:text-white">Add New Station</h3>
+              <button 
+                onClick={() => setIsAddStationOpen(false)} 
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-sm font-bold bg-slate-100 dark:bg-slate-800 rounded-lg p-1.5 transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+            <form onSubmit={handleAddStation} className="space-y-4">
               <div>
-                <label className="text-xs text-slate-400 font-bold tracking-widest uppercase mb-2 block">Station Name</label>
-                <input required value={newStation.name} onChange={e => setNewStation({...newStation, name: e.target.value})} className="w-full bg-black/50 border border-slate-800 focus:border-cyan-500 rounded-xl p-4 text-sm text-white outline-none transition-colors" placeholder="e.g. Accra Mall Fast Chargers" />
+                <label className="text-[10px] text-slate-400 dark:text-slate-500 font-extrabold tracking-wider uppercase mb-1.5 block">Station Name</label>
+                <input 
+                  required 
+                  value={newStation.name} 
+                  onChange={e => setNewStation({...newStation, name: e.target.value})} 
+                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded-xl p-3 text-sm text-slate-900 dark:text-white outline-none transition-all" 
+                  placeholder="e.g. Accra Mall Fast Chargers" 
+                />
               </div>
               <div>
-                <label className="text-xs text-slate-400 font-bold tracking-widest uppercase mb-2 block">Location</label>
-                <input required value={newStation.location} onChange={e => setNewStation({...newStation, location: e.target.value})} className="w-full bg-black/50 border border-slate-800 focus:border-cyan-500 rounded-xl p-4 text-sm text-white outline-none transition-colors" placeholder="e.g. Accra Mall, Tetteh Quarshie" />
+                <label className="text-[10px] text-slate-400 dark:text-slate-500 font-extrabold tracking-wider uppercase mb-1.5 block">Physical Location</label>
+                <input 
+                  required 
+                  value={newStation.location} 
+                  onChange={e => setNewStation({...newStation, location: e.target.value})} 
+                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded-xl p-3 text-sm text-slate-900 dark:text-white outline-none transition-all" 
+                  placeholder="e.g. Accra Mall, Tetteh Quarshie" 
+                />
               </div>
-              <div className="flex gap-4 mt-8">
-                <button type="button" onClick={() => setIsAddStationOpen(false)} className="flex-1 py-4 bg-slate-800 text-white font-bold rounded-xl hover:bg-slate-700 transition-colors">Cancel</button>
-                <button type="submit" className="flex-1 py-4 bg-cyan-600 hover:bg-cyan-500 text-white font-bold rounded-xl transition-colors shadow-lg shadow-cyan-500/20">Create</button>
+              <div className="pt-2 flex gap-3">
+                <button 
+                  type="submit" 
+                  className="w-full py-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold rounded-xl transition-all shadow-md active:scale-95 text-sm"
+                >
+                  Create Station Node
+                </button>
               </div>
             </form>
           </div>
         </div>
       )}
 
-      {/* Add Charger Modal */}
+      {/* Modal: Add Charger */}
       {isAddChargerOpen && (
-        <div className="fixed inset-0 bg-[#030712]/80 backdrop-blur-md z-50 flex items-center justify-center p-4 animate-fade-in">
-          <div className="bg-slate-900 border border-slate-800 rounded-[2rem] w-full max-w-md p-8 shadow-[0_0_50px_rgba(0,0,0,0.5)]">
-            <h2 className="text-2xl font-black text-white mb-6">Register Charger</h2>
-            <form onSubmit={handleAddCharger} className="space-y-5">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-300">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl w-full max-w-md p-6 shadow-2xl animate-in zoom-in-95 duration-200">
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-lg font-black text-slate-900 dark:text-white">Register Charger</h3>
+              <button 
+                onClick={() => setIsAddChargerOpen(false)} 
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-sm font-bold bg-slate-100 dark:bg-slate-800 rounded-lg p-1.5 transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+            <form onSubmit={handleAddCharger} className="space-y-4">
               <div>
-                <label className="text-xs text-slate-400 font-bold tracking-widest uppercase mb-2 block">Charge Point ID</label>
-                <input required value={newCharger.charge_point_id} onChange={e => setNewCharger({...newCharger, charge_point_id: e.target.value})} className="w-full bg-black/50 border border-slate-800 focus:border-cyan-500 rounded-xl p-4 text-sm font-mono text-cyan-400 outline-none transition-colors uppercase" placeholder="SPERO-EV-002" />
+                <label className="text-[10px] text-slate-400 dark:text-slate-500 font-extrabold tracking-wider uppercase mb-1.5 block">Charge Point ID (OCPP Ident)</label>
+                <input 
+                  required 
+                  value={newCharger.charge_point_id} 
+                  onChange={e => setNewCharger({...newCharger, charge_point_id: e.target.value.toUpperCase()})} 
+                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded-xl p-3 text-sm font-mono text-blue-600 dark:text-cyan-400 outline-none transition-all uppercase" 
+                  placeholder="SPERO-EV-004" 
+                />
               </div>
               <div>
-                <label className="text-xs text-slate-400 font-bold tracking-widest uppercase mb-2 block">Assign Station</label>
-                <select required value={newCharger.station_id} onChange={e => setNewCharger({...newCharger, station_id: e.target.value})} className="w-full bg-black/50 border border-slate-800 focus:border-cyan-500 rounded-xl p-4 text-sm text-white outline-none transition-colors appearance-none">
-                  <option value="">-- Select Station --</option>
+                <label className="text-[10px] text-slate-400 dark:text-slate-500 font-extrabold tracking-wider uppercase mb-1.5 block">Assign Hub Station</label>
+                <select 
+                  required 
+                  value={newCharger.station_id} 
+                  onChange={e => setNewCharger({...newCharger, station_id: e.target.value})} 
+                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded-xl p-3 text-sm text-slate-700 dark:text-slate-300 outline-none transition-all appearance-none cursor-pointer"
+                >
+                  <option value="">-- Choose Hub Station --</option>
                   {stations?.map(st => <option key={st.id} value={st.id}>{st.name}</option>)}
                 </select>
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 gap-3.5">
                 <div>
-                  <label className="text-xs text-slate-400 font-bold tracking-widest uppercase mb-2 block">Vendor</label>
-                  <input required value={newCharger.vendor} onChange={e => setNewCharger({...newCharger, vendor: e.target.value})} className="w-full bg-black/50 border border-slate-800 focus:border-cyan-500 rounded-xl p-4 text-sm text-white outline-none transition-colors" />
+                  <label className="text-[10px] text-slate-400 dark:text-slate-500 font-extrabold tracking-wider uppercase mb-1.5 block">Vendor</label>
+                  <input 
+                    required 
+                    value={newCharger.vendor} 
+                    onChange={e => setNewCharger({...newCharger, vendor: e.target.value})} 
+                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded-xl p-3 text-sm text-slate-900 dark:text-white outline-none transition-all" 
+                  />
                 </div>
                 <div>
-                  <label className="text-xs text-slate-400 font-bold tracking-widest uppercase mb-2 block">Model</label>
-                  <input required value={newCharger.model} onChange={e => setNewCharger({...newCharger, model: e.target.value})} className="w-full bg-black/50 border border-slate-800 focus:border-cyan-500 rounded-xl p-4 text-sm text-white outline-none transition-colors" />
+                  <label className="text-[10px] text-slate-400 dark:text-slate-500 font-extrabold tracking-wider uppercase mb-1.5 block">Model</label>
+                  <input 
+                    required 
+                    value={newCharger.model} 
+                    onChange={e => setNewCharger({...newCharger, model: e.target.value})} 
+                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded-xl p-3 text-sm text-slate-900 dark:text-white outline-none transition-all" 
+                  />
                 </div>
               </div>
-              <div className="flex gap-4 mt-8">
-                <button type="button" onClick={() => setIsAddChargerOpen(false)} className="flex-1 py-4 bg-slate-800 text-white font-bold rounded-xl hover:bg-slate-700 transition-colors">Cancel</button>
-                <button type="submit" className="flex-1 py-4 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl transition-colors shadow-lg shadow-blue-500/20">Register</button>
+              <div className="pt-2 flex gap-3">
+                <button 
+                  type="submit" 
+                  className="w-full py-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold rounded-xl transition-all shadow-md active:scale-95 text-sm"
+                >
+                  Register Node
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Gateway Settings */}
+      {isSettingsOpen && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-300">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl w-full max-w-md p-6 shadow-2xl animate-in zoom-in-95 duration-200">
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-lg font-black text-slate-900 dark:text-white">OCPP Gateway Settings</h3>
+              <button 
+                onClick={() => setIsSettingsOpen(false)} 
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-sm font-bold bg-slate-100 dark:bg-slate-800 rounded-lg p-1.5 transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+            <form onSubmit={async (e) => {
+              e.preventDefault();
+              try {
+                const res = await saveSettings({ gateway_host: gatewayHost, gateway_port: gatewayPort });
+                if (!res.success) throw new Error(res.error);
+                toast.success('Gateway configurations saved!');
+                setIsSettingsOpen(false);
+                queryClient.invalidateQueries({ queryKey: ['settings'] });
+              } catch (err: any) {
+                toast.error(err.message);
+              }
+            }} className="space-y-4">
+              <div>
+                <label className="text-[10px] text-slate-400 dark:text-slate-500 font-extrabold tracking-wider uppercase mb-1.5 block">Gateway Host IP / DNS</label>
+                <input 
+                  required 
+                  value={gatewayHost} 
+                  onChange={e => setGatewayHost(e.target.value)} 
+                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded-xl p-3 text-sm font-mono text-slate-900 dark:text-white outline-none transition-all" 
+                  placeholder="127.0.0.1" 
+                />
+              </div>
+              <div>
+                <label className="text-[10px] text-slate-400 dark:text-slate-500 font-extrabold tracking-wider uppercase mb-1.5 block">Gateway Port</label>
+                <input 
+                  required 
+                  value={gatewayPort} 
+                  onChange={e => setGatewayPort(e.target.value)} 
+                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded-xl p-3 text-sm font-mono text-slate-900 dark:text-white outline-none transition-all" 
+                  placeholder="8080" 
+                />
+              </div>
+              <div className="p-3 bg-blue-500/5 border border-blue-500/10 rounded-xl text-[10px] text-blue-600 dark:text-cyan-400 leading-normal flex items-start gap-2.5">
+                <AlertCircle size={14} className="shrink-0 mt-0.5" />
+                <span>The OCPP Gateway handles live WebSocket traffic from hardware nodes and translates it to standard SQL operation schemas in real time. Modify only under operations advice.</span>
+              </div>
+              <div className="pt-2 flex gap-3">
+                <button 
+                  type="submit" 
+                  className="w-full py-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold rounded-xl transition-all shadow-md active:scale-95 text-sm"
+                >
+                  Save Configuration
+                </button>
               </div>
             </form>
           </div>
@@ -469,5 +1013,22 @@ export default function ChargersPage() {
       )}
 
     </div>
+  );
+}
+
+// Local small visual SVGs to prevent empty layouts
+function HeartbeatIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg 
+      viewBox="0 0 24 24" 
+      fill="none" 
+      stroke="currentColor" 
+      strokeWidth="2.5" 
+      strokeLinecap="round" 
+      strokeLinejoin="round" 
+      {...props}
+    >
+      <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
+    </svg>
   );
 }
