@@ -6,11 +6,9 @@ import { requireAuth } from '@/lib/auth-guard';
 
 export async function addCharger(formData: {
   charge_point_id: string;
-  name: string;
   vendor?: string;
   model?: string;
-  serial_number?: string;
-  location?: string;
+  station_id?: string;
 }) {
   try {
     await requireAuth(['super_admin', 'manager']);
@@ -18,11 +16,10 @@ export async function addCharger(formData: {
     const { error } = await supabaseAdmin.from('chargers').insert([
       {
         charge_point_id: formData.charge_point_id,
-        name: formData.name,
+        name: formData.charge_point_id,
         vendor: formData.vendor || null,
         model: formData.model || null,
-        serial_number: formData.serial_number || null,
-        location: formData.location || null,
+        station_id: formData.station_id || null,
         status: 'offline',
       },
     ]);

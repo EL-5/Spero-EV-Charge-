@@ -195,13 +195,13 @@ export function useVehicles() {
 }
 
 // --- Wallet Transactions ---
-export function useWalletTransactions() {
-  useRealtimeSync('wallet_transactions', [['wallet-transactions']]);
+export function useWalletTransactions(driverId?: string) {
+  useRealtimeSync('wallet_transactions', [['wallet-transactions', driverId]]);
 
   return useQuery({
-    queryKey: ['wallet-transactions'],
+    queryKey: ['wallet-transactions', driverId],
     queryFn: async () => {
-      const { data, error } = await supabase
+      let query = supabase
         .from('wallet_transactions')
         .select(`
           *,
@@ -209,6 +209,12 @@ export function useWalletTransactions() {
           profiles:created_by (name)
         `)
         .order('created_at', { ascending: false });
+
+      if (driverId) {
+        query = query.eq('driver_id', driverId);
+      }
+
+      const { data, error } = await query;
       if (error) throw error;
       return (data || []).map(t => ({
         id: t.id,
@@ -436,6 +442,7 @@ export function useChargers() {
         status: c.status,
         lastHeartbeat: c.last_heartbeat,
         createdAt: c.created_at,
+        stationId: c.station_id,
       }));
     },
   });
@@ -496,5 +503,16 @@ export function useOcppLogs(chargePointId?: string) {
         createdAt: l.created_at,
       }));
     },
+  });
+}
+export function useStations() {
+  useRealtimeSync('stations', [['stations']]);
+  return useQuery({
+    queryKey: ['stations'],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('stations').select('*').order('created_at', { ascending: false });
+      if (error) throw error;
+      return data;
+    }
   });
 }

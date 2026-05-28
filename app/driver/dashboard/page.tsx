@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { TopBar } from '@/components/layout/TopBar';
+
 import { 
   useDrivers, 
   useVehicles, 
@@ -29,11 +29,24 @@ export default function DriverPortalPage() {
   const { data: chargers } = useChargers();
   const { data: connectors } = useConnectors();
 
+  const router = import('next/navigation').then(m => m.useRouter());
+  const routerInstance = typeof window !== 'undefined' ? require('next/navigation').useRouter() : null;
   // Top level tab
   const [activeTab, setActiveTab] = useState<'registered'|'guest'>('registered');
 
   // Registered State
   const [activeDriverId, setActiveDriverId] = useState<string>('');
+  
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data, error }) => {
+      if (error || !data.user) {
+        if (routerInstance) routerInstance.push('/driver-login');
+      } else {
+        setActiveDriverId(data.user.id);
+      }
+    });
+  }, [routerInstance]);
+
   const currentDriver = drivers?.find(d => d.id === activeDriverId);
   const currentVehicle = vehicles?.find(v => v.driverId === activeDriverId);
   const [topUpAmount, setTopUpAmount] = useState('50');
@@ -198,10 +211,13 @@ export default function DriverPortalPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#0f172a] text-[#f8fafc]">
-      <TopBar title="Driver Portal" subtitle="Live App-Driven Charging" />
+    <div className="w-full text-[#f8fafc]">
+      <div className="mb-6 border-b border-[#334155] pb-4">
+        <h1 className="text-2xl font-black text-white">Start Charge</h1>
+        <p className="text-xs text-[#94a3b8]">Live App-Driven Charging</p>
+      </div>
 
-      <div className="p-6 max-w-4xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-8">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         
         {/* LEFT COLUMN: SETUP */}
         <div className="space-y-6">
@@ -220,14 +236,16 @@ export default function DriverPortalPage() {
             {activeTab === 'registered' ? (
               <div className="space-y-4">
                 <div>
-                  <label className="text-[10px] text-[#94a3b8] font-bold">SELECT DRIVER</label>
-                  <select 
-                    className="w-full bg-[#0f172a] border border-[#334155] rounded p-2 text-xs text-white"
-                    value={activeDriverId} onChange={e => setActiveDriverId(e.target.value)}
-                  >
-                    <option value="">-- Choose Profile --</option>
-                    {drivers?.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
-                  </select>
+                  <label className="text-[10px] text-[#94a3b8] font-bold">LOGGED IN AS</label>
+                  <div className="w-full bg-[#0f172a] border border-[#334155] rounded p-3 text-sm text-white font-bold flex items-center gap-2">
+                    <User size={16} className="text-blue-400" />
+                    {currentDriver ? currentDriver.name : 'Loading profile...'}
+                  </div>
+                  {currentVehicle && (
+                    <div className="text-xs text-[#94a3b8] mt-2 ml-1">
+                      Vehicle: {currentVehicle.brand} {currentVehicle.model} ({currentVehicle.plateNumber})
+                    </div>
+                  )}
                 </div>
                 {currentDriver && (
                   <div className="p-3 bg-gradient-to-r from-blue-900/20 to-transparent border border-blue-900/50 rounded-lg flex justify-between items-center">

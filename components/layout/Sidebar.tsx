@@ -25,7 +25,7 @@ const navItems = [
   { href: '/analytics', label: 'Analytics', icon: BarChart3, roles: ['super_admin', 'manager', 'finance', 'accountant'] },
   { href: '/reports', label: 'Reports', icon: FileText, roles: ['super_admin', 'manager', 'accountant', 'finance'] },
   { href: '/users', label: 'Users', icon: UserCog, roles: ['super_admin'] },
-  { href: '/driver-portal', label: 'Driver Portal', icon: Smartphone, roles: ['super_admin', 'manager', 'attendant'] },
+
   { href: '/settings', label: 'Settings', icon: Settings, roles: ['super_admin'] },
 ];
 
