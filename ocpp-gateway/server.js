@@ -255,9 +255,29 @@ async function handleOcppCall(chargePointId, ws, messageId, action, payload) {
 
         // C. If no session is found at all, create a standard postpaid/manual ad-hoc session
         if (!activeSession && tag) {
+          // Fetch active kWh rate from pricing table — never use a hardcoded fallback
+          const { data: rateData, error: rateError } = await supabase
+            .from('pricing')
+            .select('rate, unit_quantity')
+            .eq('unit_type', 'kwh')
+            .eq('is_active', true)
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .single();
+
+          if (rateError || !rateData) {
+            console.error(`[OCPP-CSMS] StartTransaction BLOCKED: No active kWh pricing found. Configure pricing in Settings before charging.`);
+            sendCallResult(ws, messageId, {
+              transactionId: 0,
+              idTagInfo: { status: 'Blocked' }
+            });
+            break;
+          }
+
+          const ratePerKwh = Number(rateData.rate) / Number(rateData.unit_quantity || 1);
           const { data: driver } = await supabase.from('drivers').select('name').eq('id', tag.driver_id).single();
           const { data: vehicle } = await supabase.from('vehicles').select('id, plate_number, brand, model').eq('driver_id', tag.driver_id).limit(1).maybeSingle();
-          const receiptNumber = `RCP-${Math.floor(100000 + Math.random() * 900000)}`;
+          const receiptNumber = `RCP-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`;
 
           const { data: adhoc } = await supabase.from('sessions').insert([{
             receipt_number: receiptNumber,
@@ -269,7 +289,7 @@ async function handleOcppCall(chargePointId, ws, messageId, action, payload) {
             mode: 'postpaid',
             status: 'active',
             unit_type: 'kwh',
-            rate_at_time: 5.50,
+            rate_at_time: ratePerKwh,
             start_time: new Date().toISOString()
           }]).select().single();
 

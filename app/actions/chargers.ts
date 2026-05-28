@@ -51,8 +51,11 @@ export async function addCharger(formData: {
     revalidatePath('/chargers');
     return { success: true };
   } catch (error: any) {
-    console.error('Error adding charger:', error.message);
-    return { success: false, error: error.message };
+    console.error('[CHARGERS] addCharger error:', error.message);
+    if (error.message?.startsWith('Unauthenticated') || error.message?.startsWith('Forbidden')) {
+      return { success: false, error: error.message };
+    }
+    return { success: false, error: 'Failed to add charger. Please try again.' };
   }
 }
 
@@ -83,8 +86,11 @@ export async function updateCharger(id: string, formData: {
     revalidatePath('/chargers');
     return { success: true };
   } catch (error: any) {
-    console.error('Error updating charger:', error.message);
-    return { success: false, error: error.message };
+    console.error('[CHARGERS] updateCharger error:', error.message);
+    if (error.message?.startsWith('Unauthenticated') || error.message?.startsWith('Forbidden')) {
+      return { success: false, error: error.message };
+    }
+    return { success: false, error: 'Failed to update charger. Please try again.' };
   }
 }
 
@@ -102,8 +108,11 @@ export async function deleteCharger(id: string) {
     revalidatePath('/chargers');
     return { success: true };
   } catch (error: any) {
-    console.error('Error deleting charger:', error.message);
-    return { success: false, error: error.message };
+    console.error('[CHARGERS] deleteCharger error:', error.message);
+    if (error.message?.startsWith('Unauthenticated') || error.message?.startsWith('Forbidden')) {
+      return { success: false, error: error.message };
+    }
+    return { success: false, error: 'Failed to delete charger. Please try again.' };
   }
 }
 
@@ -133,8 +142,11 @@ export async function sendOcppCommand(data: {
     revalidatePath('/chargers');
     return { success: true, command: cmd };
   } catch (error: any) {
-    console.error('Error queuing OCPP command:', error.message);
-    return { success: false, error: error.message };
+    console.error('[CHARGERS] sendOcppCommand error:', error.message);
+    if (error.message?.startsWith('Unauthenticated') || error.message?.startsWith('Forbidden')) {
+      return { success: false, error: error.message };
+    }
+    return { success: false, error: 'Failed to send command. Please try again.' };
   }
 }
 
@@ -155,7 +167,10 @@ export async function clearOcppLogs(chargePointId?: string) {
     revalidatePath('/chargers');
     return { success: true };
   } catch (error: any) {
-    console.error('Error clearing OCPP logs:', error.message);
-    return { success: false, error: error.message };
+    console.error('[CHARGERS] clearOcppLogs error:', error.message);
+    if (error.message?.startsWith('Unauthenticated') || error.message?.startsWith('Forbidden')) {
+      return { success: false, error: error.message };
+    }
+    return { success: false, error: 'Failed to clear logs. Please try again.' };
   }
 }

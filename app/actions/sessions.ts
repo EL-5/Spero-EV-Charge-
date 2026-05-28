@@ -4,6 +4,7 @@ import { supabaseAdmin } from '@/lib/supabase-server';
 import { revalidatePath } from 'next/cache';
 import type { ChargingMode, UnitType } from '@/lib/types';
 import { requireAuth } from '@/lib/auth-guard';
+import { generateReceiptNumber } from '@/lib/utils';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // NOTE: Hubtel API integration has been removed.
@@ -58,7 +59,7 @@ export async function startSession(formData: {
     // Calculate the actual rate per 1 unit if quantity > 1
     const actualRate = Number(rateData.rate) / Number(rateData.unit_quantity || 1);
 
-    const receiptNumber = `RCP-${Math.floor(100000 + Math.random() * 900000)}`;
+    const receiptNumber = generateReceiptNumber();
 
     const { error } = await supabaseAdmin.from('sessions').insert([
       {
@@ -362,7 +363,7 @@ export async function initiatePrepaidSession(data: {
       targetUnits = prepaidAmount / ratePerKwh;
     }
 
-    const receiptNumber = `RCP-${Math.floor(100000 + Math.random() * 900000)}`;
+    const receiptNumber = generateReceiptNumber();
 
     const insertData: any = {
       receipt_number: receiptNumber,

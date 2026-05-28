@@ -120,45 +120,70 @@ export async function deleteDriver(id: string) {
     // Only managers and super_admins can delete drivers
     await requireAuth(['super_admin', 'manager']);
 
-    // 1. Attempt to dissociate related records (preserves history if schema allows NULLs)
+    // 1. SAFETY CHECK: Block deletion if the driver has active or pending-payment sessions
+    //    These represent in-progress financial transactions that must be resolved first.
+    const { data: activeSessions, error: checkError } = await supabaseAdmin
+      .from('sessions')
+      .select('id, receipt_number, status')
+      .eq('driver_id', id)
+      .in('status', ['active', 'pending_payment']);
 
-    // Vehicles
+    if (checkError) {
+      console.error('[DRIVERS] deleteDriver session check error:', checkError);
+      return { success: false, error: 'Could not verify driver session status. Please try again.' };
+    }
+
+    if (activeSessions && activeSessions.length > 0) {
+      const refs = activeSessions.map(s => s.receipt_number).join(', ');
+      return {
+        success: false,
+        error: `Cannot delete driver: ${activeSessions.length} active session(s) in progress (${refs}). Resolve all sessions first.`,
+      };
+    }
+
+    // 2. Attempt to dissociate related records (preserves history if schema allows NULLs)
+
+    // Vehicles — preserve by nullifying driver link
     const { error: vError } = await supabaseAdmin
       .from('vehicles')
       .update({ driver_id: null })
       .eq('driver_id', id);
     if (vError) {
+      console.warn('[DRIVERS] deleteDriver: vehicle nullification failed, falling back to hard delete', vError);
       await supabaseAdmin.from('vehicles').delete().eq('driver_id', id);
     }
 
-    // Sessions
+    // Sessions — preserve completed/cancelled history by nullifying FK
     const { error: sError } = await supabaseAdmin
       .from('sessions')
       .update({ driver_id: null })
       .eq('driver_id', id);
     if (sError) {
+      console.warn('[DRIVERS] deleteDriver: session nullification failed, falling back to hard delete', sError);
       await supabaseAdmin.from('sessions').delete().eq('driver_id', id);
     }
 
-    // Payments
+    // Payments — preserve by nullifying FK
     const { error: pError } = await supabaseAdmin
       .from('payments')
       .update({ driver_id: null })
       .eq('driver_id', id);
     if (pError) {
+      console.warn('[DRIVERS] deleteDriver: payment nullification failed, falling back to hard delete', pError);
       await supabaseAdmin.from('payments').delete().eq('driver_id', id);
     }
 
-    // Wallet Transactions
+    // Wallet Transactions — preserve by nullifying FK
     const { error: wtError } = await supabaseAdmin
       .from('wallet_transactions')
       .update({ driver_id: null })
       .eq('driver_id', id);
     if (wtError) {
+      console.warn('[DRIVERS] deleteDriver: wallet_transactions nullification failed, falling back to hard delete', wtError);
       await supabaseAdmin.from('wallet_transactions').delete().eq('driver_id', id);
     }
 
-    // 2. Finally delete the driver
+    // 3. Finally delete the driver
     const { error: finalError } = await supabaseAdmin.from('drivers').delete().eq('id', id);
 
     if (finalError) {

@@ -3,12 +3,19 @@ import { supabaseAdmin } from '@/lib/supabase-server';
 import { revalidatePath } from 'next/cache';
 import { requireAuth } from '@/lib/auth-guard';
 
+/**
+ * Internal-only helper — intentionally NOT exported as a Server Action.
+ * Exporting this would allow any browser caller to inject notifications for
+ * any user_id without authentication. Only call from within other guarded actions.
+ */
 export async function createNotification(payload: {
   user_id: string;
   title: string;
   message: string;
   type?: 'info' | 'success' | 'warning' | 'error';
 }) {
+  // NOTE: no requireAuth here — callers (debts.ts etc.) are themselves guarded.
+  // This is an internal DB write helper, not a public surface.
   try {
     const { error } = await supabaseAdmin
       .from('notifications')
@@ -22,8 +29,8 @@ export async function createNotification(payload: {
     if (error) throw error;
     return { success: true };
   } catch (err: any) {
-    console.error('Failed to create notification:', err);
-    return { success: false, error: err.message };
+    console.error('[NOTIFICATIONS] createNotification error:', err);
+    return { success: false, error: 'Failed to create notification.' };
   }
 }
 

@@ -49,9 +49,22 @@ export default function AnalyticsPage() {
   const revenueData = last5;
 
   // Payment Method Distribution
+  // Payment Method Distribution — keys match what sessions/payments write to DB
   const payMethods = ['cash', 'mtn', 'telecel', 'airteltigo', 'wallet'];
-  const methodLabels: Record<string, string> = { cash: 'Cash', mtn: 'MTN', telecel: 'Telecel', airteltigo: 'AirtelTigo', wallet: 'Wallet' };
-  const methodColors: Record<string, string> = { cash: '#16a34a', mtn: '#eab308', telecel: '#dc2626', airteltigo: '#2563eb', wallet: '#d97706' };
+  const methodLabels: Record<string, string> = {
+    cash: 'Cash',
+    mtn: 'MTN MoMo',
+    telecel: 'Telecel Cash',
+    airteltigo: 'Tigo Cash',
+    wallet: 'Wallet',
+  };
+  const methodColors: Record<string, string> = {
+    cash: '#16a34a',
+    mtn: '#eab308',
+    telecel: '#dc2626',
+    airteltigo: '#2563eb',
+    wallet: '#7c3aed',
+  };
   
   const paymentDistribution = payMethods.map(m => {
     const count = payments.filter(p => p.method === m).length;
@@ -212,17 +225,23 @@ export default function AnalyticsPage() {
         {/* Payment distribution chart */}
         <div className="stat-card">
           <h3 className="font-semibold mb-4" style={{ color: 'var(--foreground)' }}>Payment Method Distribution</h3>
-          <ResponsiveContainer width="100%" height={200}>
-            <BarChart data={paymentDistribution} layout="vertical" barSize={28}>
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" horizontal={false} />
-              <XAxis type="number" tick={{ fontSize: 12, fill: 'var(--muted-foreground)' }} axisLine={false} tickLine={false} tickFormatter={v => `${v}%`} />
-              <YAxis type="category" dataKey="name" tick={{ fontSize: 13, fill: 'var(--foreground)' }} axisLine={false} tickLine={false} />
-              <Tooltip contentStyle={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 8 }} formatter={(v) => [`${v}%`, 'Share']} />
-              {paymentDistribution.map((entry, i) => (
-                <Bar key={i} dataKey="value" fill={entry.color} radius={[0, 4, 4, 0]} />
-              ))}
-            </BarChart>
-          </ResponsiveContainer>
+          {paymentDistribution.length === 0 ? (
+            <div className="text-center py-8" style={{ color: 'var(--muted-foreground)' }}>No payment data in this period.</div>
+          ) : (
+            <ResponsiveContainer width="100%" height={200}>
+              <BarChart data={paymentDistribution} layout="vertical" barSize={28}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" horizontal={false} />
+                <XAxis type="number" tick={{ fontSize: 12, fill: 'var(--muted-foreground)' }} axisLine={false} tickLine={false} tickFormatter={v => `${v}%`} />
+                <YAxis type="category" dataKey="name" tick={{ fontSize: 13, fill: 'var(--foreground)' }} axisLine={false} tickLine={false} width={90} />
+                <Tooltip contentStyle={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 8 }} formatter={(v) => [`${v}%`, 'Share']} />
+                <Bar dataKey="value" radius={[0, 4, 4, 0]}>
+                  {paymentDistribution.map((entry, i) => (
+                    <Cell key={i} fill={entry.color} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          )}
         </div>
 
       </div>

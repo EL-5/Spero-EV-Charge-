@@ -46,7 +46,6 @@ export async function resetSystem() {
     await supabaseAdmin.from('notifications').delete().neq('id', '00000000-0000-0000-0000-000000000000');
     await supabaseAdmin.from('payments').delete().neq('id', '00000000-0000-0000-0000-000000000000');
     await supabaseAdmin.from('wallet_transactions').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-    await supabaseAdmin.from('charging_sessions').delete().neq('id', '00000000-0000-0000-0000-000000000000');
     await supabaseAdmin.from('sessions').delete().neq('id', '00000000-0000-0000-0000-000000000000');
     await supabaseAdmin.from('vehicles').delete().neq('id', '00000000-0000-0000-0000-000000000000');
     await supabaseAdmin.from('drivers').delete().neq('id', '00000000-0000-0000-0000-000000000000');

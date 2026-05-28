@@ -2,6 +2,7 @@
 import { supabaseAdmin } from '@/lib/supabase-server';
 import { revalidatePath } from 'next/cache';
 import { requireAuth } from '@/lib/auth-guard';
+import { generateReceiptNumber } from '@/lib/utils';
 
 /**
  * Records a debt repayment:
@@ -58,7 +59,7 @@ export async function recordDebtPayment(payload: {
       amount,
       method: method.toLowerCase().replace(' ', '_').replace('hubtel_momo', 'hubtel'),
       status: 'completed',
-      receipt_number: `DEBT-${Date.now()}`,
+      receipt_number: generateReceiptNumber('DEBT'),
     });
 
     // Notify all admins about the repayment

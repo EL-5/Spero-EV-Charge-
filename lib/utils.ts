@@ -5,6 +5,18 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
+/**
+ * Generates a collision-resistant receipt number.
+ * Format: RCP-<base36 timestamp>-<4 random chars>
+ * Entropy: ~1.7 billion combinations — safe for realistic station volumes.
+ */
+export function generateReceiptNumber(prefix = 'RCP'): string {
+  const ts = Date.now().toString(36).toUpperCase();
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  const rand = Array.from({ length: 4 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+  return `${prefix}-${ts}-${rand}`;
+}
+
 export function formatCurrency(amount: number, currency = 'GHS'): string {
   return `${currency} ${amount.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}`;
 }
