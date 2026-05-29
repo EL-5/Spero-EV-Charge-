@@ -111,11 +111,24 @@ export async function processPayment(data: {
     // Fetch session details for the payment record
     const { data: session } = await supabaseAdmin
       .from('sessions')
-      .select('receipt_number, driver_id, driver_name, total_amount, charger_id, connector_number, mode, chargers(charge_point_id)')
+      .select('receipt_number, driver_id, driver_name, total_amount, charger_id, connector_number, mode')
       .eq('id', data.session_id)
       .single();
 
     if (!session) throw new Error('Session not found');
+
+    // Fetch the mapped charger details separately to bypass schema relationship issues
+    let chargePointId: string | null = null;
+    if (session.charger_id) {
+      const { data: charger } = await supabaseAdmin
+        .from('chargers')
+        .select('charge_point_id')
+        .eq('id', session.charger_id)
+        .single();
+      if (charger) {
+        chargePointId = charger.charge_point_id;
+      }
+    }
 
     const sessionCost = session.total_amount || 0;
     const excessAmount = Math.max(0, data.amount - sessionCost);
@@ -217,8 +230,7 @@ export async function processPayment(data: {
 
     // 5. Trigger RemoteStartTransaction if a charger is mapped to this session
     // (This replaces the physical RFID authorization flow)
-    if (session.charger_id && (session.chargers as any)?.charge_point_id) {
-      const chargePointId = (session.chargers as any).charge_point_id;
+    if (session.charger_id && chargePointId) {
       const connectorId = session.connector_number || 1;
       const idTag = session.receipt_number;
 
@@ -233,6 +245,8 @@ export async function processPayment(data: {
         }
       });
     }
+
+
 
     revalidatePath('/sessions');
     revalidatePath('/shifts');
