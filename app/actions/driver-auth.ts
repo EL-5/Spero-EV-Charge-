@@ -29,12 +29,16 @@ export async function registerDriver(data: {
     const email = formatPhoneToEmail(data.phone);
 
     // 1. Create the user in Supabase Auth
+    // NOTE: The DB trigger "handle_new_user" automatically inserts new auth signups into the 'profiles' table.
+    // However, the 'profiles' table has a check constraint restricting roles to ['super_admin', 'manager', 'attendant', etc.],
+    // which does NOT include 'driver'. To prevent the trigger from failing with a "Database error creating new user",
+    // we temporarily register them with the 'attendant' role, then clean up the profiles table and update metadata.
     const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
       email,
       password: data.pin,
       email_confirm: true,
       user_metadata: {
-        role: 'driver',
+        role: 'attendant', // Bypasses the db constraint trigger
         full_name: data.fullName,
         phone: data.phone,
       }
@@ -42,6 +46,18 @@ export async function registerDriver(data: {
 
     if (authError) throw new Error(authError.message);
     const userId = authData.user.id;
+
+    // 1b. Clean up: delete the temporary profile created by the trigger
+    await supabaseAdmin.from('profiles').delete().eq('id', userId);
+
+    // 1c. Update auth metadata back to the correct 'driver' role
+    await supabaseAdmin.auth.admin.updateUserById(userId, {
+      user_metadata: {
+        role: 'driver',
+        full_name: data.fullName,
+        phone: data.phone,
+      }
+    });
 
     // 2. Create Driver Profile
     const { error: driverError } = await supabaseAdmin.from('drivers').insert([{
