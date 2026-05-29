@@ -64,7 +64,7 @@ export async function registerDriver(data: {
       id: userId,
       name: data.fullName,
       phone: data.phone,
-      type: 'personal',
+      type: 'individual', // Satisfies constraint 'drivers_type_check'
       wallet_balance: 0,
       is_active: true
     }]);
