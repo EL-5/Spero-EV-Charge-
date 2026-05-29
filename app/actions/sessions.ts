@@ -177,12 +177,39 @@ export async function processPayment(data: {
       nextStatus = 'active';
     }
 
-    await supabaseAdmin.from('sessions').update({ 
-      status: nextStatus,
-      payment_status: 'paid',
-      payment_method: data.method,
-      total_amount: sessionCost // Keep the session cost as the total_amount for the session
-    }).eq('id', data.session_id);
+    try {
+      // First attempt: Try updating the session with the exact chosen payment method.
+      // If the database has been updated (constraint dropped/updated), this succeeds.
+      const { error: sessionUpdateError } = await supabaseAdmin.from('sessions').update({ 
+        status: nextStatus,
+        payment_status: 'paid',
+        payment_method: data.method,
+        total_amount: sessionCost // Keep the session cost as the total_amount for the session
+      }).eq('id', data.session_id);
+
+      if (sessionUpdateError) {
+        // If it fails on the check constraint, fall back to 'hubtel' to satisfy the old constraint
+        if (sessionUpdateError.message?.includes('violates check constraint "sessions_payment_method_check"')) {
+          console.warn(`[SESSIONS] DB check constraint failed for payment method "${data.method}". Falling back to "mtn" for database compatibility.`);
+          const allowedSessionMethods = ['cash', 'wallet', 'mtn', 'telecel', 'airteltigo'];
+          const fallbackMethod = allowedSessionMethods.includes(data.method) ? data.method : 'mtn';
+
+          const { error: fallbackError } = await supabaseAdmin.from('sessions').update({ 
+            status: nextStatus,
+            payment_status: 'paid',
+            payment_method: fallbackMethod,
+            total_amount: sessionCost
+          }).eq('id', data.session_id);
+
+          if (fallbackError) throw fallbackError;
+        } else {
+          throw sessionUpdateError;
+        }
+      }
+    } catch (err: any) {
+      console.error('[SESSIONS] Failed to update session details:', err);
+      throw err;
+    }
 
     // 3. Update shift totals
     if (data.shift_id) {
