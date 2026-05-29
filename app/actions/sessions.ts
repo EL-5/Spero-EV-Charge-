@@ -111,7 +111,7 @@ export async function processPayment(data: {
     // Fetch session details for the payment record
     const { data: session } = await supabaseAdmin
       .from('sessions')
-      .select('receipt_number, driver_id, driver_name, total_amount, charger_id, connector_number, mode')
+      .select('receipt_number, driver_id, driver_name, total_amount, charger_id, connector_number, mode, status, end_time')
       .eq('id', data.session_id)
       .single();
 
@@ -171,8 +171,9 @@ export async function processPayment(data: {
 
     // 2. Update session status
     let nextStatus = 'completed';
-    // If it's a prepaid session that was just paid for, it should transition to active to allow charging
-    if (session.mode === 'prepaid') {
+    // If it's a prepaid session that was just paid for and is NOT yet ended/finished,
+    // transition to active to allow charging. Otherwise, it should be marked as completed.
+    if (session.mode === 'prepaid' && session.status !== 'completed' && !session.end_time) {
       nextStatus = 'active';
     }
 
