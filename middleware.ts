@@ -30,43 +30,56 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  const response = NextResponse.next({
-    request: { headers: request.headers },
+  let supabaseResponse = NextResponse.next({
+    request,
   });
 
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() {
-          return request.cookies.getAll();
+  try {
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          getAll() {
+            return request.cookies.getAll();
+          },
+          setAll(cookiesToSet) {
+            cookiesToSet.forEach(({ name, value, options }) =>
+              request.cookies.set({ name, value, ...options })
+            );
+            supabaseResponse = NextResponse.next({
+              request,
+            });
+            cookiesToSet.forEach(({ name, value, options }) =>
+              supabaseResponse.cookies.set(name, value, options)
+            );
+          },
         },
-        setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
-          cookiesToSet.forEach(({ name, value, options }) =>
-            response.cookies.set(name, value, options)
-          );
-        },
-      },
+      }
+    );
+
+    // getUser() validates the JWT with Supabase — cannot be forged client-side
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      // Redirect unauthenticated drivers to driver-login, and others to login
+      const isDriverPath = pathname.startsWith('/driver');
+      const targetRedirect = isDriverPath ? '/driver-login' : '/login';
+      const loginUrl = new URL(targetRedirect, request.url);
+      loginUrl.searchParams.set('redirect', pathname);
+      return NextResponse.redirect(loginUrl);
     }
-  );
-
-  // getUser() validates the JWT with Supabase — cannot be forged client-side
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    // Redirect unauthenticated drivers to driver-login, and others to login
+  } catch (err) {
+    console.error('[MIDDLEWARE ERROR] Safe recovery triggered:', err);
+    // Graceful recovery: redirect to appropriate login path instead of 500 error page
     const isDriverPath = pathname.startsWith('/driver');
     const targetRedirect = isDriverPath ? '/driver-login' : '/login';
-    const loginUrl = new URL(targetRedirect, request.url);
-    loginUrl.searchParams.set('redirect', pathname);
-    return NextResponse.redirect(loginUrl);
+    return NextResponse.redirect(new URL(targetRedirect, request.url));
   }
 
-  return response;
+  return supabaseResponse;
 }
 
 export const config = {
