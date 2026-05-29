@@ -81,15 +81,15 @@ export const mockSessions: Session[] = [
     id: 's6', receiptNumber: 'RCP-0006', driverId: 'd4', driverName: 'Nii Okaifio', vehicleId: 'v3', vehiclePlate: 'AE-9012-24',
     attendantId: 'u4', attendantName: 'Ama Owusu', mode: 'postpaid', status: 'completed',
     unitType: 'kwh', rateAtTime: 5.20, startTime: '2025-05-06T09:00:00', endTime: '2025-05-06T11:00:00',
-    unitsConsumed: 30.0, totalAmount: 156.00, walletDeduction: 0, paymentMethod: 'hubtel', createdAt: '2025-05-06T09:00:00',
+    unitsConsumed: 30.0, totalAmount: 156.00, walletDeduction: 0, paymentMethod: 'mtn', createdAt: '2025-05-06T09:00:00',
   },
 ];
 
 export const mockPayments: Payment[] = [
   { id: 'p1', sessionId: 's1', receiptNumber: 'RCP-0001', driverId: 'd1', driverName: 'Ernest Osei', amount: 112.75, method: 'cash', status: 'success', attendantId: 'u4', attendantName: 'Ama Owusu', createdAt: '2025-05-08T10:35:00' },
   { id: 'p2', sessionId: 's4', receiptNumber: 'RCP-0004', driverId: 'd6', driverName: 'Adjoa Mensah', amount: 83.60, method: 'wallet', status: 'success', attendantId: 'u4', attendantName: 'Ama Owusu', createdAt: '2025-05-07T15:35:00' },
-  { id: 'p3', sessionId: 's6', receiptNumber: 'RCP-0006', driverId: 'd4', driverName: 'Nii Okaifio', amount: 156.00, method: 'hubtel', reference: 'HBT-20250506-9876', status: 'success', attendantId: 'u4', attendantName: 'Ama Owusu', createdAt: '2025-05-06T11:05:00' },
-  { id: 'p4', sessionId: 's2', receiptNumber: 'RCP-0002', driverId: 'd4', driverName: 'Nii Okaifio', amount: 200.00, method: 'paystack', reference: 'PSK-20250508-1234', status: 'success', attendantId: 'u4', attendantName: 'Ama Owusu', createdAt: '2025-05-08T11:05:00' },
+  { id: 'p3', sessionId: 's6', receiptNumber: 'RCP-0006', driverId: 'd4', driverName: 'Nii Okaifio', amount: 156.00, method: 'mtn', reference: 'MTN-20250506-9876', status: 'success', attendantId: 'u4', attendantName: 'Ama Owusu', createdAt: '2025-05-06T11:05:00' },
+  { id: 'p4', sessionId: 's2', receiptNumber: 'RCP-0002', driverId: 'd4', driverName: 'Nii Okaifio', amount: 200.00, method: 'telecel', reference: 'TEL-20250508-1234', status: 'success', attendantId: 'u4', attendantName: 'Ama Owusu', createdAt: '2025-05-08T11:05:00' },
 ];
 
 export const mockWalletTransactions: WalletTransaction[] = [
@@ -132,8 +132,8 @@ export const mockDashboardStats: DashboardStats = {
   walletBalancesHeld: 4215.50,
   outstandingDebts: 200.00,
   cashRevenue: 5432.75,
-  hubtelRevenue: 4890.25,
-  paystackRevenue: 4500.50,
+  momoRevenue: 4890.25,
+  walletRevenue: 4500.50,
   activeShifts: 1,
   totalDrivers: 45,
   totalVehicles: 42,
@@ -159,6 +159,7 @@ export const mockMonthlyRevenue = [
 
 export const mockPaymentDistribution = [
   { name: 'Cash', value: 36.6, color: '#1d4ed8' },
-  { name: 'Hubtel', value: 33.0, color: '#3b82f6' },
-  { name: 'Paystack', value: 30.4, color: '#93c5fd' },
+  { name: 'MTN MoMo', value: 33.0, color: '#3b82f6' },
+  { name: 'Telecel Cash', value: 18.2, color: '#ef4444' },
+  { name: 'Tigo Cash', value: 12.2, color: '#06b6d4' },
 ];

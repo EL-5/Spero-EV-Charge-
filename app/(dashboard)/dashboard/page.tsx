@@ -41,7 +41,7 @@ export default function DashboardPage() {
   
   const allPayments = payments || [];
   const byCash = allPayments.filter((p: any) => p.method === 'cash').reduce((sum: number, p: any) => sum + (p.amount || 0), 0);
-  const byMoMo = allPayments.filter((p: any) => ['mtn', 'telecel', 'airteltigo', 'hubtel'].includes(p.method)).reduce((sum: number, p: any) => sum + (p.amount || 0), 0);
+  const byMoMo = allPayments.filter((p: any) => ['mtn', 'telecel', 'airteltigo'].includes(p.method)).reduce((sum: number, p: any) => sum + (p.amount || 0), 0);
   const byWallet = allPayments.filter((p: any) => p.method === 'wallet').reduce((sum: number, p: any) => sum + (p.amount || 0), 0);
   const totalRevenue = allPayments.reduce((sum: number, p: any) => sum + (p.amount || 0), 0);
 

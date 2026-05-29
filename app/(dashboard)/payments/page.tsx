@@ -11,15 +11,17 @@ import jsPDF from 'jspdf';
 
 const methodIcons: Record<string, React.ReactNode> = {
   cash: <DollarSign size={14} />,
-  hubtel: <Smartphone size={14} />,
-  paystack: <CreditCard size={14} />,
+  mtn: <Smartphone size={14} />,
+  telecel: <Smartphone size={14} />,
+  airteltigo: <Smartphone size={14} />,
   wallet: <Wallet size={14} />,
 };
 
 const methodColors: Record<string, string> = {
   cash: 'bg-green-100 text-green-700',
-  hubtel: 'bg-blue-100 text-blue-700',
-  paystack: 'bg-purple-100 text-purple-700',
+  mtn: 'bg-yellow-100 text-yellow-800',
+  telecel: 'bg-red-100 text-red-700',
+  airteltigo: 'bg-blue-100 text-blue-700',
   wallet: 'bg-orange-100 text-orange-700',
 };
 
@@ -150,7 +152,7 @@ export default function PaymentsPage() {
 
   const total = allPayments.reduce((sum: number, p: any) => sum + (p.amount || 0), 0);
   const byCash = allPayments.filter((p: any) => p.method === 'cash').reduce((sum: number, p: any) => sum + (p.amount || 0), 0);
-  const byMoMo = allPayments.filter((p: any) => ['mtn', 'telecel', 'airteltigo', 'hubtel'].includes(p.method)).reduce((sum: number, p: any) => sum + (p.amount || 0), 0);
+  const byMoMo = allPayments.filter((p: any) => ['mtn', 'telecel', 'airteltigo'].includes(p.method)).reduce((sum: number, p: any) => sum + (p.amount || 0), 0);
   const byWallet = allPayments.filter((p: any) => p.method === 'wallet').reduce((sum: number, p: any) => sum + (p.amount || 0), 0);
 
   return (

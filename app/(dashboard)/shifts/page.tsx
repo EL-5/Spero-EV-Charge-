@@ -200,7 +200,7 @@ export default function ShiftsPage() {
                 <div className="grid grid-cols-2 gap-3">
                   {[
                     { label: 'Cash Collected', value: formatCurrency(activeShift.cashCollected) },
-                    { label: 'Digital (Hubtel)', value: formatCurrency(activeShift.hubtelCollected) },
+                    { label: 'Mobile Money (MoMo)', value: formatCurrency(activeShift.hubtelCollected) },
                     { label: 'Wallet Deductions', value: formatCurrency(activeShift.walletDeductions) },
                     { label: 'Total Sessions', value: activeShift.totalSessions.toString() },
                     { label: 'Duration', value: calcDuration(activeShift.startTime) },

@@ -3,7 +3,7 @@ export type UserRole = 'super_admin' | 'manager' | 'accountant' | 'finance' | 'a
 export type SessionStatus = 'active' | 'pending_payment' | 'completed' | 'cancelled';
 export type ChargingMode = 'prepaid' | 'postpaid';
 export type UnitType = 'kwh' | 'minutes' | 'hours';
-export type PaymentMethod = 'cash' | 'hubtel' | 'paystack' | 'wallet';
+export type PaymentMethod = 'cash' | 'wallet' | 'mtn' | 'telecel' | 'airteltigo';
 export type DriverType = 'individual' | 'corporate';
 
 export interface User {
@@ -148,8 +148,8 @@ export interface DashboardStats {
   walletBalancesHeld: number;
   outstandingDebts: number;
   cashRevenue: number;
-  hubtelRevenue: number;
-  paystackRevenue: number;
+  momoRevenue: number;
+  walletRevenue: number;
   activeShifts: number;
   totalDrivers: number;
   totalVehicles: number;

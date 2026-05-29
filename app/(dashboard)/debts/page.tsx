@@ -217,8 +217,9 @@ export default function DebtsPage() {
                     onChange={e => setPayMethod(e.target.value)}
                   >
                     <option value="Cash">Cash</option>
-                    <option value="Hubtel MoMo">Hubtel MoMo</option>
-                    <option value="Paystack">Paystack</option>
+                    <option value="MTN MoMo">MTN MoMo</option>
+                    <option value="Telecel Cash">Telecel Cash</option>
+                    <option value="Tigo Cash">Tigo Cash</option>
                   </select>
                 </div>
                 <div className="flex gap-3">

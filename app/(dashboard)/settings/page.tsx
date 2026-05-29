@@ -454,18 +454,23 @@ export default function SettingsPage() {
                     </div>
                   </div>
                   <div className="p-4 rounded-xl border" style={{ borderColor: 'var(--border)' }}>
-                    <div className="flex items-center justify-between mb-4">
-                      <span className="font-semibold">Hubtel MoMo</span>
-                      <span className="badge status-active">Configured via .env</span>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Wallet size={18} style={{ color: '#2563eb' }} />
+                        <span className="font-semibold">Driver Wallet Deductions</span>
+                      </div>
+                      <span className="badge status-active">Always Enabled</span>
                     </div>
-                    <p className="text-xs mt-2" style={{ color: 'var(--muted-foreground)' }}>Hubtel keys are managed securely in the server environment.</p>
                   </div>
                   <div className="p-4 rounded-xl border" style={{ borderColor: 'var(--border)' }}>
-                    <div className="flex items-center justify-between mb-4">
-                      <span className="font-semibold">Paystack</span>
-                      <span className="badge status-active">Configured via .env</span>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Smartphone size={18} style={{ color: '#d97706' }} />
+                        <span className="font-semibold">Mobile Money Record-Keeping (MTN MoMo, Telecel Cash, Tigo Cash)</span>
+                      </div>
+                      <span className="badge status-active">Always Enabled</span>
                     </div>
-                    <p className="text-xs mt-2" style={{ color: 'var(--muted-foreground)' }}>Paystack keys are managed securely in the server environment.</p>
+                    <p className="text-xs mt-2" style={{ color: 'var(--muted-foreground)' }}>Allows attendants to easily record MoMo references and phone numbers for daily financial reconciliation.</p>
                   </div>
                 </div>
               </div>
@@ -829,8 +834,8 @@ export default function SettingsPage() {
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     {[
                       { name: 'Supabase DB', status: 'connected', latency: '42ms', icon: RefreshCw },
-                      { name: 'Paystack Gateway', status: 'connected', latency: '118ms', icon: CreditCard },
-                      { name: 'Hubtel SMS API', status: 'connected', latency: '85ms', icon: Smartphone },
+                      { name: 'OCPP Gateway', status: 'connected', latency: '24ms', icon: Zap },
+                      { name: 'SMS Node', status: 'connected', latency: '65ms', icon: Smartphone },
                     ].map(service => (
                       <div key={service.name} className="p-4 rounded-2xl border border-slate-100 bg-slate-50/30 flex items-center gap-4">
                         <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center text-green-600">

@@ -264,7 +264,7 @@ export function useShifts(options: { attendantId?: string } = {}) {
         endTime: s.end_time,
         status: s.status,
         cashCollected: s.cash_collected,
-        hubtelCollected: (s.hubtel_collected || 0) + (s.paystack_collected || 0), // Merge legacy Paystack into Hubtel for reporting
+        hubtelCollected: (s.hubtel_collected || 0) + (s.paystack_collected || 0), // Merge legacy digital payment columns for MoMo reporting
         walletDeductions: s.wallet_deductions,
         totalSessions: s.total_sessions,
         outstandingDebts: s.outstanding_debts,
