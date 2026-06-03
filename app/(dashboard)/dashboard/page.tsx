@@ -1,4 +1,5 @@
 'use client';
+import { useState } from 'react';
 import { TopBar } from '@/components/layout/TopBar';
 import { formatCurrency, getStatusColor, getStatusLabel, formatDateTime } from '@/lib/utils';
 import {
@@ -11,7 +12,148 @@ import {
 } from 'recharts';
 import Link from 'next/link';
 import { useAuthStore } from '@/store/auth';
-import { useDashboardStats, useSessions, useShifts, usePayments, useDrivers } from '@/hooks/use-database';
+import { useDashboardStats, useSessions, useShifts, usePayments, useDrivers, useStations, useStationGridMetrics } from '@/hooks/use-database';
+
+// --- Smart Meter Grid Load Monitor Component ---
+function GridLoadMonitor() {
+  const { data: stations } = useStations();
+  const [selectedStationId, setSelectedStationId] = useState<string>('all');
+  const { data: gridMetrics } = useStationGridMetrics(selectedStationId);
+
+  const activeMetrics = gridMetrics || [];
+  const latestMetric = activeMetrics[activeMetrics.length - 1];
+
+  const currentKw = latestMetric?.activePowerKw || 0;
+  const CAPACITY_LIMIT_KW = 100.0;
+  const utilizationPct = Math.min(100, (currentKw / CAPACITY_LIMIT_KW) * 100);
+  const isOverloaded = utilizationPct >= 85;
+
+  return (
+    <div className="stat-card space-y-4">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+        <div>
+          <h3 className="font-semibold text-lg flex items-center gap-2" style={{ color: 'var(--foreground)' }}>
+            <Activity size={18} className="text-blue-600 animate-pulse" /> Live Grid Load Monitor
+          </h3>
+          <p className="text-xs text-slate-500">Real-time station transformer and 3-phase consumption analytics</p>
+        </div>
+
+        <select
+          value={selectedStationId}
+          onChange={(e) => setSelectedStationId(e.target.value)}
+          className="bg-slate-50 border border-slate-200 rounded-xl p-2 text-xs font-semibold text-slate-700 outline-none cursor-pointer"
+        >
+          <option value="all">All Stations (Combined)</option>
+          {stations?.map((st: any) => (
+            <option key={st.id} value={st.id}>{st.name}</option>
+          ))}
+        </select>
+      </div>
+
+      {latestMetric ? (
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-center">
+          <div className="lg:col-span-4 flex flex-col items-center justify-center p-4 bg-slate-50 rounded-2xl border border-slate-100 relative overflow-hidden">
+            <div className="text-sm font-semibold text-slate-500 mb-2">Grid Utilization</div>
+            <div className="relative w-36 h-36 flex items-center justify-center">
+              <svg className="w-full h-full transform -rotate-90">
+                <circle cx="72" cy="72" r="60" stroke="#f1f5f9" strokeWidth="12" fill="transparent" />
+                <circle
+                  cx="72"
+                  cy="72"
+                  r="60"
+                  stroke={isOverloaded ? '#dc2626' : '#2563eb'}
+                  strokeWidth="12"
+                  fill="transparent"
+                  strokeDasharray={376.99}
+                  strokeDashoffset={376.99 - (376.99 * utilizationPct) / 100}
+                  strokeLinecap="round"
+                  className="transition-all duration-1000 ease-out"
+                />
+              </svg>
+              <div className="absolute flex flex-col items-center justify-center">
+                <span className="text-2xl font-black text-slate-900">{utilizationPct.toFixed(0)}%</span>
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">of {CAPACITY_LIMIT_KW}kW</span>
+              </div>
+            </div>
+
+            {isOverloaded && (
+              <div className="mt-3 flex items-center gap-1.5 text-[10px] font-bold text-red-600 bg-red-50 border border-red-200 px-2.5 py-1 rounded-full animate-bounce">
+                <AlertTriangle size={12} /> CRITICAL GRID LOAD
+              </div>
+            )}
+          </div>
+
+          <div className="lg:col-span-8 space-y-4">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div className="p-3.5 bg-white border border-slate-100 rounded-xl">
+                <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Active Power</span>
+                <div className="text-lg font-black text-slate-800 mt-0.5">{currentKw.toFixed(2)} kW</div>
+              </div>
+              <div className="p-3.5 bg-white border border-slate-100 rounded-xl">
+                <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Avg Voltage</span>
+                <div className="text-lg font-black text-slate-800 mt-0.5">
+                  {(latestMetric.voltageV.reduce((a: number, b: number) => a + b, 0) / 3).toFixed(1)} V
+                </div>
+              </div>
+              <div className="p-3.5 bg-white border border-slate-100 rounded-xl">
+                <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Total Current</span>
+                <div className="text-lg font-black text-slate-800 mt-0.5">
+                  {latestMetric.currentA.reduce((a: number, b: number) => a + b, 0).toFixed(1)} A
+                </div>
+              </div>
+              <div className="p-3.5 bg-white border border-slate-100 rounded-xl">
+                <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Total Energy</span>
+                <div className="text-lg font-black text-slate-800 mt-0.5">{latestMetric.totalEnergyKwh.toFixed(1)} kWh</div>
+              </div>
+            </div>
+
+            <div className="p-4 bg-slate-50 border border-slate-100 rounded-2xl">
+              <div className="text-xs font-bold text-slate-500 mb-3 uppercase tracking-wider">3-Phase Balance Metrics</div>
+              <div className="grid grid-cols-3 gap-4 text-center">
+                <div className="border-r border-slate-200/60">
+                  <div className="text-[10px] font-extrabold text-blue-600">PHASE L1</div>
+                  <div className="text-xs font-black text-slate-850 mt-1">{latestMetric.voltageV[0]}V / {latestMetric.currentA[0]}A</div>
+                </div>
+                <div className="border-r border-slate-200/60">
+                  <div className="text-[10px] font-extrabold text-indigo-600">PHASE L2</div>
+                  <div className="text-xs font-black text-slate-850 mt-1">{latestMetric.voltageV[1]}V / {latestMetric.currentA[1]}A</div>
+                </div>
+                <div>
+                  <div className="text-[10px] font-extrabold text-purple-600">PHASE L3</div>
+                  <div className="text-xs font-black text-slate-850 mt-1">{latestMetric.voltageV[2]}V / {latestMetric.currentA[2]}A</div>
+                </div>
+              </div>
+            </div>
+
+            <div className="h-[120px] w-full pt-2">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={activeMetrics}>
+                  <defs>
+                    <linearGradient id="gridPowerGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#2563eb" stopOpacity={0.15}/>
+                      <stop offset="95%" stopColor="#2563eb" stopOpacity={0}/>
+                    </linearGradient>
+                  </defs>
+                  <Tooltip 
+                    formatter={(value) => [`${value} kW`, 'Grid Load']}
+                    labelFormatter={(label) => new Date(activeMetrics[label]?.recordedAt).toLocaleTimeString()}
+                  />
+                  <Area type="monotone" dataKey="activePowerKw" stroke="#2563eb" strokeWidth={2} fillOpacity={1} fill="url(#gridPowerGrad)" />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="p-8 text-center bg-slate-50 border border-slate-200 border-dashed rounded-2xl text-slate-500">
+          <Activity size={24} className="mx-auto mb-2 text-slate-400 animate-pulse" />
+          <div className="text-sm font-semibold">No grid telemetry data available</div>
+          <div className="text-xs text-slate-400 mt-1">Start the Smart Meter Poller script to begin streaming telemetry.</div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function DashboardPage() {
   const { user } = useAuthStore();
@@ -214,6 +356,9 @@ export default function DashboardPage() {
           </div>
 
           <div className="grid grid-cols-1 gap-6">
+            {/* Live Grid Load Monitor */}
+            <GridLoadMonitor />
+
             {/* Attendant Performance */}
             <div className="stat-card">
               <h3 className="font-semibold mb-4">Attendant Performance (Revenue)</h3>
@@ -489,6 +634,9 @@ export default function DashboardPage() {
 
         {/* Charts & Table (Existing) */}
         <div className="grid grid-cols-1 gap-6">
+          {/* Live Grid Load Monitor */}
+          <GridLoadMonitor />
+
           <div className="stat-card">
             <h3 className="font-semibold mb-4">Recent Global Sessions</h3>
             <div className="overflow-x-auto">

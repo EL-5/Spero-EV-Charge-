@@ -30,18 +30,52 @@ const supabase = createClient(supabaseUrl, supabaseServiceKey, {
 const PORT = process.env.PORT || 8080;
 const wss = new WebSocket.Server({ port: PORT });
 
+const GATEWAY_INSTANCE_ID = process.env.GATEWAY_INSTANCE_ID || `instance-${Math.random().toString(36).substring(2, 8)}`;
+console.log(`[OCPP-CSMS] Gateway instance ID: ${GATEWAY_INSTANCE_ID}`);
+
 // Active WebSocket connections map: chargePointId -> ws
 const activeConnections = new Map();
 
 // Active charging transactions: transactionId -> { sessionId, chargePointId, connectorId, targetUnits, prepaidAmount, rateAtTime, startWh }
 const activeTransactions = new Map();
 
+// Load active transactions from database on startup
+async function restoreActiveTransactions() {
+  try {
+    const { data, error } = await supabase.from('live_transactions').select('*');
+    if (error) {
+      console.error('[OCPP-CSMS] Failed to restore active transactions from database:', error.message);
+      return;
+    }
+    if (data && data.length > 0) {
+      console.log(`[OCPP-CSMS] Restoring ${data.length} active transactions from database...`);
+      for (const tx of data) {
+        activeTransactions.set(tx.transaction_id, {
+          sessionId: tx.session_id,
+          chargePointId: tx.charge_point_id,
+          connectorId: tx.connector_id,
+          targetUnits: Number(tx.target_units || 0),
+          prepaidAmount: Number(tx.prepaid_amount || 0),
+          rateAtTime: Number(tx.rate_at_time || 5.50),
+          startWh: Number(tx.start_wh || 0),
+          transactionId: tx.transaction_id
+        });
+        console.log(`  Restored Tx: ${tx.transaction_id} | Session: ${tx.session_id}`);
+      }
+    }
+  } catch (err) {
+    console.error('[OCPP-CSMS] Unexpected error restoring active transactions:', err.message);
+  }
+}
+
+restoreActiveTransactions();
+
 console.log(`[OCPP-CSMS] Standalone OCPP Central System listening on port ${PORT}...`);
 
 // =============================================================================
 // WebSocket Server Connections Manager
 // =============================================================================
-wss.on('connection', (ws, req) => {
+wss.on('connection', async (ws, req) => {
   // Extract Charge Point ID from URL path (e.g. /ocpp/SPERO-EV-001 -> SPERO-EV-001)
   const pathname = new URL(req.url, 'http://localhost').pathname;
   const pathParts = pathname.split('/').filter(Boolean);
@@ -54,6 +88,39 @@ wss.on('connection', (ws, req) => {
   }
 
   console.log(`[OCPP-CSMS] Charger "${chargePointId}" attempting to connect...`);
+
+  // Fetch charger configurations for verification
+  const { data: chargerData, error: dbError } = await supabase
+    .from('chargers')
+    .select('security_profile, auth_password')
+    .eq('charge_point_id', chargePointId)
+    .maybeSingle();
+
+  if (dbError || !chargerData) {
+    console.warn(`[OCPP-CSMS] Rejected connection for "${chargePointId}": Charger is not pre-registered in the database.`);
+    ws.close(4404, 'Not Found: Charger not registered');
+    return;
+  }
+
+  // If Security Profile 1, verify credentials
+  if (chargerData.security_profile === 1) {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Basic ')) {
+      console.warn(`[OCPP-CSMS] Rejected connection for "${chargePointId}": Missing or invalid Authorization header.`);
+      ws.close(4401, 'Unauthorized: Basic Auth Required');
+      return;
+    }
+    const token = authHeader.substring(6);
+    const credentials = Buffer.from(token, 'base64').toString('ascii');
+    const [username, password] = credentials.split(':');
+
+    if (username !== chargePointId || password !== chargerData.auth_password) {
+      console.warn(`[OCPP-CSMS] Rejected connection for "${chargePointId}": Invalid auth credentials.`);
+      ws.close(4401, 'Unauthorized: Invalid credentials');
+      return;
+    }
+  }
+
   activeConnections.set(chargePointId, ws);
   
   // Update charger state to online in database
@@ -277,6 +344,22 @@ async function handleOcppCall(chargePointId, ws, messageId, action, payload) {
             transactionId: transactionId
           });
 
+          // Persist transaction to DB to survive gateway restarts
+          try {
+            await supabase.from('live_transactions').insert([{
+              transaction_id: transactionId,
+              session_id: activeSession.id,
+              charge_point_id: chargePointId,
+              connector_id: connectorId,
+              target_units: Number(activeSession.target_units || 0),
+              prepaid_amount: Number(activeSession.prepaid_amount || 0),
+              rate_at_time: Number(activeSession.rate_at_time || 5.50),
+              start_wh: startWh
+            }]);
+          } catch (dbErr) {
+            console.error('[OCPP-CSMS] Failed to insert live_transaction:', dbErr.message);
+          }
+
           console.log(`[OCPP-CSMS] StartTransaction Approved: TxId: ${transactionId} | Session: ${activeSession.receipt_number} | Target: ${activeSession.target_units} kWh`);
           sendCallResult(ws, messageId, {
             transactionId: transactionId,
@@ -328,6 +411,11 @@ async function handleOcppCall(chargePointId, ws, messageId, action, payload) {
               
               // Remove mapping to avoid double remote stop triggers
               activeTransactions.delete(transactionId);
+              try {
+                await supabase.from('live_transactions').delete().eq('transaction_id', transactionId);
+              } catch (dbErr) {
+                console.error('[OCPP-CSMS] Failed to delete live_transaction on limit stop:', dbErr.message);
+              }
 
               // Push stop command directly down the active socket
               const uniqueMsgId = `CMD-${Math.floor(100000 + Math.random() * 900000)}`;
@@ -357,6 +445,11 @@ async function handleOcppCall(chargePointId, ws, messageId, action, payload) {
           // Remove connection link from connector
           await updateConnectorSessionLink(chargePointId, activeTx.connectorId, null, 'Available');
           activeTransactions.delete(transactionId);
+          try {
+            await supabase.from('live_transactions').delete().eq('transaction_id', transactionId);
+          } catch (dbErr) {
+            console.error('[OCPP-CSMS] Failed to delete live_transaction on StopTransaction:', dbErr.message);
+          }
 
           // Triggers our server-side completion action, which calculates premature-stop credit refunds atomically
           await completeChargingSessionRecord(activeTx.sessionId, finalKwh);
@@ -389,12 +482,29 @@ supabase
     if (cmd.status !== 'pending') return;
 
     const chargePointId = cmd.charge_point_id;
-    const ws = activeConnections.get(chargePointId);
+
+    // Check if we should handle this command on this instance
+    const hasConnection = activeConnections.has(chargePointId);
+    const targetMatchesThisInstance = cmd.instance_id === GATEWAY_INSTANCE_ID;
+    const isTargetedToAnotherInstance = cmd.instance_id && cmd.instance_id !== GATEWAY_INSTANCE_ID;
+
+    // We only process if it's explicitly targeted to us, OR if it has no target instance but we hold the WebSocket connection
+    const shouldProcess = targetMatchesThisInstance || (!cmd.instance_id && hasConnection);
+
+    if (!shouldProcess) {
+      if (isTargetedToAnotherInstance) {
+        console.log(`[OCPP-CSMS] [QUEUE] Command ${cmd.id} is targeted to instance "${cmd.instance_id}", ignoring (I am "${GATEWAY_INSTANCE_ID}").`);
+      } else {
+        console.log(`[OCPP-CSMS] [QUEUE] Charger "${chargePointId}" is not connected to this instance ("${GATEWAY_INSTANCE_ID}"), ignoring.`);
+      }
+      return;
+    }
 
     console.log(`[OCPP-CSMS] [QUEUE] Captured pending command for "${chargePointId}": ${cmd.command}`);
 
+    const ws = activeConnections.get(chargePointId);
     if (!ws) {
-      console.warn(`[OCPP-CSMS] Remote execution failed: Charger "${chargePointId}" is currently offline.`);
+      console.warn(`[OCPP-CSMS] Remote execution failed: Charger "${chargePointId}" is currently offline on this instance.`);
       await updateCommandStatus(cmd.id, 'failed', { error: 'Charging station is currently offline' });
       return;
     }
@@ -478,11 +588,13 @@ function sendCallError(ws, messageId, errorCode, errorDescription) {
 
 async function updateChargerOnlineStatus(chargePointId, status) {
   try {
-    await supabase.from('chargers').update({
+    const updateData = {
       status: status,
-      last_heartbeat: new Date().toISOString()
-    }).eq('charge_point_id', chargePointId);
-    console.log(`[OCPP-CSMS] Database updated online status: Charger "${chargePointId}" is now: ${status.toUpperCase()}`);
+      last_heartbeat: new Date().toISOString(),
+      gateway_instance_id: status === 'online' ? GATEWAY_INSTANCE_ID : null
+    };
+    await supabase.from('chargers').update(updateData).eq('charge_point_id', chargePointId);
+    console.log(`[OCPP-CSMS] Database updated online status: Charger "${chargePointId}" is now: ${status.toUpperCase()} (Instance: ${status === 'online' ? GATEWAY_INSTANCE_ID : 'NULL'})`);
   } catch (err) {
     console.error(`[OCPP-CSMS] Failed to update charger online status:`, err.message);
   }

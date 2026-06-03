@@ -139,6 +139,15 @@ export async function sendOcppCommand(data: {
   try {
     await requireAuth(['super_admin', 'manager', 'attendant']);
 
+    // Fetch the target charger's gateway_instance_id to route the command properly
+    const { data: charger } = await supabaseAdmin
+      .from('chargers')
+      .select('gateway_instance_id')
+      .eq('charge_point_id', data.chargePointId)
+      .single();
+
+    const instanceId = charger?.gateway_instance_id || null;
+
     const { data: cmd, error } = await supabaseAdmin
       .from('ocpp_commands')
       .insert([
@@ -147,6 +156,7 @@ export async function sendOcppCommand(data: {
           command: data.command,
           payload: data.payload || {},
           status: 'pending',
+          instance_id: instanceId,
         },
       ])
       .select()

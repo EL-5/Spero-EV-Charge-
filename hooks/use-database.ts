@@ -516,3 +516,37 @@ export function useStations() {
     }
   });
 }
+
+// --- Smart Meter Grid Metrics ---
+export function useStationGridMetrics(stationId?: string) {
+  useRealtimeSync('station_grid_metrics', [['station_grid_metrics', stationId]]);
+
+  return useQuery({
+    queryKey: ['station_grid_metrics', stationId],
+    queryFn: async () => {
+      let query = supabase
+        .from('station_grid_metrics')
+        .select('*')
+        .order('recorded_at', { ascending: false })
+        .limit(20);
+
+      if (stationId && stationId !== 'all') {
+        query = query.eq('station_id', stationId);
+      }
+
+      const { data, error } = await query;
+      if (error) throw error;
+      
+      // Return sorted from oldest to newest for charts
+      return (data || []).reverse().map(m => ({
+        id: m.id,
+        stationId: m.station_id,
+        activePowerKw: Number(m.active_power_kw || 0),
+        voltageV: m.voltage_v || [230, 230, 230],
+        currentA: m.current_a || [0, 0, 0],
+        totalEnergyKwh: Number(m.total_energy_kwh || 0),
+        recordedAt: m.recorded_at,
+      }));
+    },
+  });
+}
