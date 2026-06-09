@@ -89,44 +89,11 @@ wss.on('connection', async (ws, req) => {
 
   console.log(`[OCPP-CSMS] Charger "${chargePointId}" attempting to connect...`);
 
-  // Fetch charger configurations for verification
-  const { data: chargerData, error: dbError } = await supabase
-    .from('chargers')
-    .select('security_profile, auth_password')
-    .eq('charge_point_id', chargePointId)
-    .maybeSingle();
+  let isVerifying = true;
+  let isRejected = false;
+  const pendingMessages = [];
 
-  if (dbError || !chargerData) {
-    console.warn(`[OCPP-CSMS] Rejected connection for "${chargePointId}": Charger is not pre-registered in the database.`);
-    ws.close(4404, 'Not Found: Charger not registered');
-    return;
-  }
-
-  // If Security Profile 1, verify credentials
-  if (chargerData.security_profile === 1) {
-    const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith('Basic ')) {
-      console.warn(`[OCPP-CSMS] Rejected connection for "${chargePointId}": Missing or invalid Authorization header.`);
-      ws.close(4401, 'Unauthorized: Basic Auth Required');
-      return;
-    }
-    const token = authHeader.substring(6);
-    const credentials = Buffer.from(token, 'base64').toString('ascii');
-    const [username, password] = credentials.split(':');
-
-    if (username !== chargePointId || password !== chargerData.auth_password) {
-      console.warn(`[OCPP-CSMS] Rejected connection for "${chargePointId}": Invalid auth credentials.`);
-      ws.close(4401, 'Unauthorized: Invalid credentials');
-      return;
-    }
-  }
-
-  activeConnections.set(chargePointId, ws);
-  
-  // Update charger state to online in database
-  updateChargerOnlineStatus(chargePointId, 'online');
-
-  ws.on('message', async (message) => {
+  const handleIncomingMessage = async (message) => {
     try {
       const packet = JSON.parse(message.toString());
       if (!Array.isArray(packet) || packet.length < 3) {
@@ -157,7 +124,62 @@ wss.on('connection', async (ws, req) => {
     } catch (err) {
       console.error(`[OCPP-CSMS] Error parsing incoming socket packet from "${chargePointId}":`, err.message);
     }
+  };
+
+  ws.on('message', async (message) => {
+    if (isRejected) return;
+    if (isVerifying) {
+      pendingMessages.push(message);
+      return;
+    }
+    await handleIncomingMessage(message);
   });
+
+  // Fetch charger configurations for verification
+  const { data: chargerData, error: dbError } = await supabase
+    .from('chargers')
+    .select('security_profile, auth_password')
+    .eq('charge_point_id', chargePointId)
+    .maybeSingle();
+
+  if (dbError || !chargerData) {
+    console.warn(`[OCPP-CSMS] Rejected connection for "${chargePointId}": Charger is not pre-registered in the database.`);
+    isRejected = true;
+    ws.close(4404, 'Not Found: Charger not registered');
+    return;
+  }
+
+  // If Security Profile 1, verify credentials
+  if (chargerData.security_profile === 1) {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Basic ')) {
+      console.warn(`[OCPP-CSMS] Rejected connection for "${chargePointId}": Missing or invalid Authorization header.`);
+      isRejected = true;
+      ws.close(4401, 'Unauthorized: Basic Auth Required');
+      return;
+    }
+    const token = authHeader.substring(6);
+    const credentials = Buffer.from(token, 'base64').toString('ascii');
+    const [username, password] = credentials.split(':');
+
+    if (username !== chargePointId || password !== chargerData.auth_password) {
+      console.warn(`[OCPP-CSMS] Rejected connection for "${chargePointId}": Invalid auth credentials.`);
+      isRejected = true;
+      ws.close(4401, 'Unauthorized: Invalid credentials');
+      return;
+    }
+  }
+
+  activeConnections.set(chargePointId, ws);
+  
+  // Update charger state to online in database
+  updateChargerOnlineStatus(chargePointId, 'online');
+
+  // Authentication complete, process any pending messages
+  isVerifying = false;
+  for (const msg of pendingMessages) {
+    await handleIncomingMessage(msg);
+  }
 
   ws.on('close', (code, reason) => {
     console.log(`[OCPP-CSMS] Connection closed for "${chargePointId}". Code: ${code} | Reason: ${reason}`);

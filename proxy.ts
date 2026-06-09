@@ -17,7 +17,7 @@ const PUBLIC_PATHS = ['/login', '/manifest.json', '/driver-login', '/driver-regi
 // Routes that are completely public (static assets, webhooks, etc.)
 const PUBLIC_PREFIXES = ['/_next/', '/api/webhooks/', '/favicon', '/spero-logo'];
 
-export async function middleware(request: NextRequest) {
+export default async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   // Allow public asset paths without any auth check
