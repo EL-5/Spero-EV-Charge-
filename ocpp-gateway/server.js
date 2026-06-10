@@ -533,7 +533,7 @@ supabase
 
     try {
       const ocppAction = cmd.command;
-      const messageId = `UI-${cmd.id.slice(0, 8)}`; // Form matching UI trace identifier
+      const messageId = Math.floor(Math.random() * 100000000).toString(); // Strict numeric Message ID to prevent C++ parser crashes on cheap chargers
       
       let ocppPayload = {};
       if (ocppAction === 'RemoteStartTransaction') {

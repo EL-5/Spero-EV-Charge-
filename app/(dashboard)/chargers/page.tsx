@@ -722,16 +722,35 @@ export default function ChargersPage() {
                     </button>
 
                     <button 
-                      onClick={() => handleRemoteCommand('RemoteStartTransaction', { connectorId: 1, idTag: 'ADMIN-TEST-001' })} 
-                      className="px-3.5 py-2 hover:bg-slate-100 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:text-slate-950 dark:hover:text-white text-xs font-bold rounded-xl flex items-center gap-2 transition-all shadow-sm active:scale-95"
+                      onClick={() => handleRemoteCommand('RemoteStartTransaction', { connectorId: 1, idTag: 'A1B2C3D4' })} 
+                      className="px-3 py-1.5 hover:bg-slate-100 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 text-[10px] font-bold rounded flex items-center gap-1"
                     >
-                      <Zap size={13} className="text-blue-500" /> Start Gun 1
+                      <Zap size={11} className="text-blue-500" /> Test 1 (Normal)
                     </button>
                     <button 
-                      onClick={() => handleRemoteCommand('RemoteStartTransaction', { connectorId: 2, idTag: 'ADMIN-TEST-002' })} 
-                      className="px-3.5 py-2 hover:bg-slate-100 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:text-slate-950 dark:hover:text-white text-xs font-bold rounded-xl flex items-center gap-2 transition-all shadow-sm active:scale-95"
+                      onClick={() => handleRemoteCommand('RemoteStartTransaction', { idTag: 'A1B2C3D4' })} 
+                      className="px-3 py-1.5 hover:bg-slate-100 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 text-[10px] font-bold rounded flex items-center gap-1"
                     >
-                      <Zap size={13} className="text-blue-500" /> Start Gun 2
+                      <Zap size={11} className="text-purple-500" /> Test 2 (No ID)
+                    </button>
+                    <button 
+                      onClick={() => handleRemoteCommand('RemoteStartTransaction', { 
+                        connectorId: 1, 
+                        idTag: 'A1B2C3D4',
+                        chargingProfile: {
+                          chargingProfileId: 1,
+                          stackLevel: 0,
+                          chargingProfilePurpose: 'TxDefaultProfile',
+                          chargingProfileKind: 'Absolute',
+                          chargingSchedule: {
+                            chargingRateUnit: 'A',
+                            chargingSchedulePeriod: [{ startPeriod: 0, limit: 32 }]
+                          }
+                        }
+                      })} 
+                      className="px-3 py-1.5 hover:bg-slate-100 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 text-[10px] font-bold rounded flex items-center gap-1"
+                    >
+                      <Zap size={11} className="text-orange-500" /> Test 3 (Profile)
                     </button>
                     
                     <div className="w-px h-8 bg-slate-200 dark:bg-slate-800 mx-1 self-center hidden sm:block"></div>

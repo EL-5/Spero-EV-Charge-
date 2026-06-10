@@ -482,19 +482,15 @@ export function useOcppLogs(chargePointId?: string) {
   return useQuery({
     queryKey: ['ocpp_logs', chargePointId],
     queryFn: async () => {
-      let query = supabase
-        .from('ocpp_logs')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .limit(50);
+      const url = chargePointId 
+        ? `/api/ocpp/logs?chargePointId=${encodeURIComponent(chargePointId)}` 
+        : '/api/ocpp/logs';
       
-      if (chargePointId) {
-        query = query.eq('charge_point_id', chargePointId);
-      }
-
-      const { data, error } = await query;
-      if (error) throw error;
-      return (data || []).map(l => ({
+      const res = await fetch(url);
+      if (!res.ok) throw new Error('Failed to fetch OCPP logs');
+      
+      const data = await res.json();
+      return (data || []).map((l: any) => ({
         id: l.id,
         chargePointId: l.charge_point_id,
         direction: l.direction,
