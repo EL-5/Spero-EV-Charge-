@@ -106,7 +106,7 @@ export default function ChargersPage() {
   // Filtered Logs
   const filteredLogs = useMemo(() => {
     if (!ocppLogs) return [];
-    return ocppLogs.filter(log => {
+    return ocppLogs.filter((log: any) => {
       // Apply search keyword filter
       const searchStr = logSearch.toLowerCase();
       const matchesSearch = !logSearch || 
@@ -841,7 +841,7 @@ export default function ChargersPage() {
                   {/* Terminal Log Console View */}
                   <div className="p-5 flex-1 overflow-y-auto font-mono text-[11px] leading-relaxed space-y-3.5 bg-[#090c15] text-slate-300 scrollbar-terminal">
                     
-                    {filteredLogs.map((log, index) => {
+                    {filteredLogs.map((log: any, index: number) => {
                       const isOut = log.direction === 'OUT';
                       const isError = log.messageType === 'CallError' || log.messageType.toLowerCase().includes('error');
                       
