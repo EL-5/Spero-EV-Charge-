@@ -28,7 +28,19 @@ const supabase = createClient(supabaseUrl, supabaseServiceKey, {
 });
 
 const PORT = process.env.PORT || 8080;
-const wss = new WebSocket.Server({ port: PORT });
+const wss = new WebSocket.Server({ 
+  port: PORT,
+  handleProtocols: (protocols, request) => {
+    // Echo back the requested OCPP subprotocol so strict chargers don't abort the handshake
+    for (const protocol of protocols) {
+      if (protocol.toLowerCase().startsWith('ocpp')) {
+        return protocol;
+      }
+    }
+    // Default fallback
+    return 'ocpp1.6';
+  }
+});
 
 const GATEWAY_INSTANCE_ID = process.env.GATEWAY_INSTANCE_ID || `instance-${Math.random().toString(36).substring(2, 8)}`;
 console.log(`[OCPP-CSMS] Gateway instance ID: ${GATEWAY_INSTANCE_ID}`);
