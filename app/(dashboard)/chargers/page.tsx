@@ -1224,9 +1224,9 @@ export default function ChargersPage() {
                     </div>
                   </div>
                   <div>
-                    <span className="text-slate-505">// Example connection path for a registered node (e.g. SPERO-EV-001):</span>
-                    <div className="text-slate-400 bg-black/20 p-2 rounded border border-slate-900 mt-1">
-                      ws://{gatewayHost}:{gatewayPort}/ocpp/SPERO-EV-001
+                    <span className="text-slate-505">// Example connection path for a registered node (e.g. {chargers?.[0]?.chargePointId || 'SPERO-EV-001'}):</span>
+                    <div className="p-3 bg-black/40 rounded-xl border border-slate-800/50 mt-2 font-mono text-[11px] text-slate-300">
+                      ws://{gatewayHost}:{gatewayPort}/ocpp/{chargers?.[0]?.chargePointId || 'SPERO-EV-001'}
                     </div>
                   </div>
                 </div>
