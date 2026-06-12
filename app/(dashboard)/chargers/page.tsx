@@ -61,8 +61,8 @@ export default function ChargersPage() {
 
   // Settings
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [gatewayHost, setGatewayHost] = useState('');
-  const [gatewayPort, setGatewayPort] = useState('8080');
+  const [gatewayHost, setGatewayHost] = useState(settings?.gateway_host || 'spero-ev-charge.onrender.com');
+  const [gatewayPort, setGatewayPort] = useState(settings?.gateway_port || '443');
 
   // Hard reboot double-confirmation states
   const [confirmingRebootId, setConfirmingRebootId] = useState<string | null>(null);
