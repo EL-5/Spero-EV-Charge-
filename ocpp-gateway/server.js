@@ -22,9 +22,13 @@ if (!supabaseUrl || !supabaseServiceKey) {
   process.exit(1);
 }
 
+// Fix for Supabase Realtime in Node.js 20 on Render
+global.WebSocket = WebSocket;
+
 // Administrative Supabase client (RLS bypassed for hardware operations)
 const supabase = createClient(supabaseUrl, supabaseServiceKey, {
-  auth: { persistSession: false, autoRefreshToken: false }
+  auth: { persistSession: false, autoRefreshToken: false },
+  global: { WebSocket }
 });
 
 const PORT = process.env.PORT || 8080;
