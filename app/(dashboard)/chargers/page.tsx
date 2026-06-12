@@ -84,8 +84,8 @@ export default function ChargersPage() {
 
   useEffect(() => {
     if (settings) {
-      setGatewayHost(settings.gateway_host || '127.0.0.1');
-      setGatewayPort(settings.gateway_port || '8080');
+      setGatewayHost(settings.gateway_host || 'spero-ev-charge.onrender.com');
+      setGatewayPort(settings.gateway_port || '443');
     }
   }, [settings]);
 
