@@ -79,12 +79,13 @@ wss.on('connection', async (ws, req) => {
   // Extract Charge Point ID from URL path (e.g. /ocpp/SPERO-EV-001 -> SPERO-EV-001)
   const pathname = new URL(req.url, 'http://localhost').pathname;
   const pathParts = pathname.split('/').filter(Boolean);
-  const chargePointId = pathParts[pathParts.length - 1];
+  let chargePointId = pathParts[pathParts.length - 1];
 
-  if (!chargePointId) {
-    console.warn(`[OCPP-CSMS] Rejected connection: Missing ChargePointId in URL path. Path received: ${pathname}`);
-    ws.close(4001, 'Missing ChargePointId in URL path');
-    return;
+  if (!chargePointId || chargePointId.toLowerCase() === 'ocpp') {
+    // Chinese firmware workaround: The screen restricts the domain input and prevents adding the ID or path.
+    // Default to the known charger ID if it connects to the root domain.
+    chargePointId = '3084372503230006';
+    console.warn(`[OCPP-CSMS] Missing ChargePointId in URL. Auto-assigning ID: ${chargePointId}`);
   }
 
   console.log(`[OCPP-CSMS] Charger "${chargePointId}" attempting to connect...`);
