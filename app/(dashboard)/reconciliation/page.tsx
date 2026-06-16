@@ -71,11 +71,11 @@ export default function ReconciliationPage() {
       <div className="p-6 space-y-6">
 
         {/* Action Bar */}
-        <div className="flex justify-between items-center stat-card p-4">
+        <div className="flex flex-col sm:flex-row sm:justify-between items-start sm:items-center gap-4 stat-card p-4">
           <div className="text-sm text-slate-500">
             Compare physical smart meter readings with recorded app energy.
           </div>
-          <button onClick={() => setShowModal(true)} className="btn btn-primary gap-2">
+          <button onClick={() => setShowModal(true)} className="btn btn-primary gap-2 w-full sm:w-auto justify-center">
             <Plus size={16} /> Add Meter Reading
           </button>
         </div>
@@ -83,18 +83,18 @@ export default function ReconciliationPage() {
         {/* Data Table */}
         <div className="stat-card overflow-hidden">
           <div className="overflow-x-auto">
-            <table>
+            <table className="w-full">
               <thead>
                 <tr>
-                  <th>Period Start</th>
-                  <th>Period End</th>
-                  <th>Meter (kWh)</th>
-                  <th>App (kWh)</th>
-                  <th>Variance (kWh)</th>
-                  <th>Variance (%)</th>
-                  <th>Notes</th>
-                  <th>Added By</th>
-                  <th>Actions</th>
+                  <th className="whitespace-nowrap">Period Start</th>
+                  <th className="whitespace-nowrap">Period End</th>
+                  <th className="whitespace-nowrap">Meter (kWh)</th>
+                  <th className="whitespace-nowrap">App (kWh)</th>
+                  <th className="whitespace-nowrap">Variance (kWh)</th>
+                  <th className="whitespace-nowrap">Variance (%)</th>
+                  <th className="whitespace-nowrap">Notes</th>
+                  <th className="whitespace-nowrap">Added By</th>
+                  <th className="whitespace-nowrap">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -103,21 +103,21 @@ export default function ReconciliationPage() {
                   const isHighVariance = Math.abs(variancePercent) > 5;
                   return (
                     <tr key={r.id}>
-                      <td className="text-xs">{formatDateTime(r.periodStart)}</td>
-                      <td className="text-xs">{formatDateTime(r.periodEnd)}</td>
+                      <td className="text-xs whitespace-nowrap">{formatDateTime(r.periodStart)}</td>
+                      <td className="text-xs whitespace-nowrap">{formatDateTime(r.periodEnd)}</td>
                       <td className="font-bold text-slate-700">{r.meterKwh.toFixed(2)}</td>
                       <td className="font-medium text-blue-600">{r.appKwh.toFixed(2)}</td>
                       <td className={`font-bold ${isHighVariance ? 'text-red-600' : 'text-slate-600'}`}>
                         {r.varianceKwh > 0 ? '+' : ''}{r.varianceKwh.toFixed(2)}
                       </td>
                       <td>
-                        <div className={`badge ${isHighVariance ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>
-                          {isHighVariance ? <AlertTriangle size={12} className="mr-1" /> : <CheckCircle size={12} className="mr-1" />}
+                        <div className={`badge ${isHighVariance ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'} whitespace-nowrap`}>
+                          {isHighVariance ? <AlertTriangle size={12} className="mr-1 inline" /> : <CheckCircle size={12} className="mr-1 inline" />}
                           {variancePercent.toFixed(1)}%
                         </div>
                       </td>
-                      <td className="text-xs text-slate-500 max-w-[200px] truncate" title={r.notes}>{r.notes || '—'}</td>
-                      <td className="text-xs">{r.createdByName}</td>
+                      <td className="text-xs text-slate-500 max-w-[150px] sm:max-w-[200px] truncate" title={r.notes}>{r.notes || '—'}</td>
+                      <td className="text-xs whitespace-nowrap">{r.createdByName}</td>
                       <td>
                         <button onClick={() => handleDelete(r.id)} className="text-red-400 hover:text-red-600 p-1">
                           <Trash2 size={16} />
@@ -143,14 +143,14 @@ export default function ReconciliationPage() {
       {/* Add Modal */}
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
-          <div className="stat-card max-w-md w-full p-6 space-y-6">
+          <div className="stat-card max-w-md w-full p-6 space-y-6 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-bold">Add Meter Reading</h2>
               <button onClick={() => setShowModal(false)} className="text-slate-400 hover:text-slate-600">&times;</button>
             </div>
             
             <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="form-label">Period Start</label>
                   <input 
