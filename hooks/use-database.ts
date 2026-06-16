@@ -54,12 +54,14 @@ export function useDashboardStats(options: { attendantId?: string } = {}) {
       let activeQuery = supabase.from('sessions').select('*', { count: 'exact', head: true }).eq('status', 'active');
       let revenueQuery = supabase.from('payments').select('amount').gte('created_at', todayISO);
       let unitsQuery = supabase.from('sessions').select('units_consumed').eq('status', 'completed').gte('created_at', todayISO);
+      let allTimeUnitsQuery = supabase.from('sessions').select('units_consumed').eq('status', 'completed');
 
       if (options.attendantId) {
         sessionQuery = sessionQuery.eq('attendant_id', options.attendantId);
         activeQuery = activeQuery.eq('attendant_id', options.attendantId);
         revenueQuery = revenueQuery.eq('attendant_id', options.attendantId);
         unitsQuery = unitsQuery.eq('attendant_id', options.attendantId);
+        allTimeUnitsQuery = allTimeUnitsQuery.eq('attendant_id', options.attendantId);
       }
 
       const { count: sessionCount } = await sessionQuery;
@@ -69,9 +71,13 @@ export function useDashboardStats(options: { attendantId?: string } = {}) {
       
       const { data: revenueData } = await revenueQuery;
       const { data: unitsData } = await unitsQuery;
+      const { data: allTimeUnitsData } = await allTimeUnitsQuery;
       
       const totalRevenue = revenueData?.reduce((acc, p) => acc + (p.amount || 0), 0) || 0;
       const totalUnits = unitsData?.reduce((acc, s) => acc + (Number(s.units_consumed) || 0), 0) || 0;
+      const totalUnitsAllTime = allTimeUnitsData?.reduce((acc, s) => acc + (Number(s.units_consumed) || 0), 0) || 0;
+      const completedSessionsCount = allTimeUnitsData?.length || 0;
+      const averageUnitsPerSession = completedSessionsCount > 0 ? (totalUnitsAllTime / completedSessionsCount) : 0;
 
       return {
         revenueToday: totalRevenue,
@@ -81,7 +87,9 @@ export function useDashboardStats(options: { attendantId?: string } = {}) {
         totalDrivers: driverCount || 0,
         totalVehicles: vehicleCount || 0,
         unitsSoldToday: totalUnits,
-      } as Partial<DashboardStats> & { unitsSoldToday: number };
+        totalUnitsAllTime: totalUnitsAllTime,
+        averageUnitsPerSession: averageUnitsPerSession,
+      } as Partial<DashboardStats> & { unitsSoldToday: number; totalUnitsAllTime: number; averageUnitsPerSession: number; };
     },
   });
 }
@@ -542,6 +550,40 @@ export function useStationGridMetrics(stationId?: string) {
         currentA: m.current_a || [0, 0, 0],
         totalEnergyKwh: Number(m.total_energy_kwh || 0),
         recordedAt: m.recorded_at,
+      }));
+    },
+  });
+}
+
+// --- Energy Reconciliation ---
+export function useReconciliations() {
+  useRealtimeSync('energy_reconciliation', [['reconciliations']]);
+  return useQuery({
+    queryKey: ['reconciliations'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('energy_reconciliation')
+        .select(`
+          id, period_start, period_end, meter_kwh, app_kwh,
+          variance_kwh, variance_percentage, notes, created_by, created_at,
+          users:created_by (name)
+        `)
+        .order('period_start', { ascending: false });
+      
+      if (error) throw error;
+      
+      return (data || []).map((r: any) => ({
+        id: r.id,
+        periodStart: r.period_start,
+        periodEnd: r.period_end,
+        meterKwh: Number(r.meter_kwh),
+        appKwh: Number(r.app_kwh),
+        varianceKwh: Number(r.variance_kwh),
+        variancePercentage: Number(r.variance_percentage),
+        notes: r.notes,
+        createdBy: r.created_by,
+        createdByName: r.users?.name || 'Unknown',
+        createdAt: r.created_at,
       }));
     },
   });

@@ -166,3 +166,16 @@ export interface CorporateAccount {
   totalSessions: number;
   createdAt: string;
 }
+
+export interface EnergyReconciliation {
+  id: string;
+  periodStart: string;
+  periodEnd: string;
+  meterKwh: number;
+  appKwh: number;
+  varianceKwh: number;
+  variancePercentage: number;
+  notes?: string;
+  createdBy: string;
+  createdAt: string;
+}

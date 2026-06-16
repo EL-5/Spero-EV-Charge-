@@ -261,18 +261,24 @@ export default function ReportsPage() {
               </div>
 
               {/* Summary stats */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
-                {[
-                  { label: 'Total Revenue', value: formatCurrency(totalRevenue) },
-                  { label: 'Total Sessions', value: reportData.length.toString() },
-                  { label: 'Avg per Session', value: reportData.length > 0 ? formatCurrency(totalRevenue / reportData.length) : 'GHS 0.00' },
-                  { label: 'Period', value: `${formatDate(dateFrom)} - ${formatDate(dateTo)}` },
-                ].map(item => (
-                  <div key={item.label} className="p-3 rounded-lg" style={{ background: 'var(--muted)' }}>
-                    <div className="text-xs mb-1" style={{ color: 'var(--muted-foreground)' }}>{item.label}</div>
-                    <div className="font-bold text-sm" style={{ color: 'var(--foreground)' }}>{item.value}</div>
-                  </div>
-                ))}
+              <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3 mb-4">
+                {(() => {
+                  const totalKwh = reportData.reduce((sum: number, s: any) => sum + (Number(s.unitsConsumed) || 0), 0);
+                  const avgKwh = reportData.length > 0 ? totalKwh / reportData.length : 0;
+                  return [
+                    { label: 'Total Revenue', value: formatCurrency(totalRevenue) },
+                    { label: 'Total Sessions', value: reportData.length.toString() },
+                    { label: 'Rev / Session', value: reportData.length > 0 ? formatCurrency(totalRevenue / reportData.length) : 'GHS 0.00' },
+                    { label: 'Total Energy', value: `${totalKwh.toFixed(1)} kWh` },
+                    { label: 'Avg Energy / Session', value: `${avgKwh.toFixed(1)} kWh` },
+                    { label: 'Period', value: `${formatDate(dateFrom)} - ${formatDate(dateTo)}` },
+                  ].map(item => (
+                    <div key={item.label} className="p-3 rounded-lg flex flex-col justify-center" style={{ background: 'var(--muted)' }}>
+                      <div className="text-[10px] sm:text-xs mb-0.5" style={{ color: 'var(--muted-foreground)' }}>{item.label}</div>
+                      <div className="font-bold text-xs sm:text-sm" style={{ color: 'var(--foreground)' }}>{item.value}</div>
+                    </div>
+                  ));
+                })()}
               </div>
 
               {/* Session table */}

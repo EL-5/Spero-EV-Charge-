@@ -2,7 +2,7 @@
 import { useState } from 'react';
 import { TopBar } from '@/components/layout/TopBar';
 import { formatDate } from '@/lib/utils';
-import { Search, Car, Zap, Building2, Edit, Trash2 } from 'lucide-react';
+import { Search, Car, Zap, Building2, Edit, Trash2, Download } from 'lucide-react';
 import { useVehicles, useDrivers } from '@/hooks/use-database';
 import { useAuthStore } from '@/store/auth';
 import { updateVehicle, deleteVehicle } from '@/app/actions/vehicles';
@@ -61,6 +61,32 @@ export default function VehiclesPage() {
     v.plateNumber.toLowerCase().includes(search.toLowerCase())
   );
 
+  const exportCSV = () => {
+    const headers = ['Brand', 'Model', 'Plate Number', 'Owner Type', 'Driver / Fleet Name', 'Total Sessions'];
+    const rows = filtered.map(v => {
+      const ownerType = v.corporateAccountId ? 'Fleet' : 'Individual';
+      const ownerName = v.corporateAccountId ? 'Fleet Vehicle' : (drivers?.find((d: any) => d.id === v.driverId)?.name || 'Unassigned');
+      return [v.brand, v.model, v.plateNumber, ownerType, ownerName, v.totalSessions || 0];
+    });
+
+    if (rows.length === 0) return;
+
+    const csvString = [headers, ...rows]
+      .map(row => row.map(val => `"${String(val ?? '').replace(/"/g, '""')}"`).join(","))
+      .join("\n");
+    
+    const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `SCMS_Vehicles_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
   const isSuperAdmin = user?.role === 'super_admin';
 
   return (
@@ -84,19 +110,24 @@ export default function VehiclesPage() {
           </div>
         </div>
 
-        {/* Search */}
-        <div className="stat-card">
-          <div className="relative">
-            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: 'var(--muted-foreground)' }} />
-            <input
-              type="text"
-              placeholder="Search by brand, plate, or model..."
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              className="form-input w-full"
-              style={{ paddingLeft: '36px' }}
-            />
+        {/* Search & Export */}
+        <div className="flex flex-col sm:flex-row gap-4 items-center justify-between">
+          <div className="stat-card flex-1 w-full m-0 p-3">
+            <div className="relative">
+              <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: 'var(--muted-foreground)' }} />
+              <input
+                type="text"
+                placeholder="Search by brand, plate, or model..."
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                className="form-input w-full border-none shadow-none focus:ring-0 bg-transparent"
+                style={{ paddingLeft: '36px' }}
+              />
+            </div>
           </div>
+          <button onClick={exportCSV} className="btn btn-secondary gap-2 w-full sm:w-auto h-[46px] whitespace-nowrap">
+            <Download size={16} /> Export CSV
+          </button>
         </div>
 
         {/* Vehicle grid */}

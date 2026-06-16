@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation';
 import {
   LayoutDashboard, Users, Car, Zap, CreditCard, Wallet,
   AlertTriangle, Clock, BarChart3, FileText, UserCog,
-  Settings, ChevronLeft, ChevronRight, LogOut, Bolt, Smartphone
+  Settings, ChevronLeft, ChevronRight, LogOut, Bolt, Smartphone, Activity
 } from 'lucide-react';
 import { useUIStore } from '@/store/ui';
 import { useAuthStore } from '@/store/auth';
@@ -25,6 +25,7 @@ const navItems = [
   { href: '/shifts', label: 'Shifts', icon: Clock, roles: ['super_admin', 'manager', 'attendant'] },
   { href: '/analytics', label: 'Analytics', icon: BarChart3, roles: ['super_admin', 'manager', 'finance', 'accountant'] },
   { href: '/reports', label: 'Reports', icon: FileText, roles: ['super_admin', 'manager', 'accountant', 'finance'] },
+  { href: '/reconciliation', label: 'Energy Recon', icon: Activity, roles: ['super_admin', 'manager', 'accountant', 'finance'] },
   { href: '/users', label: 'Users', icon: UserCog, roles: ['super_admin'] },
 
   { href: '/settings', label: 'Settings', icon: Settings, roles: ['super_admin'] },
