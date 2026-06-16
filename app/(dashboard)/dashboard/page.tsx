@@ -178,7 +178,7 @@ export default function DashboardPage() {
 
   const stats = liveStats || {
     revenueToday: 0, totalSessions: 0, activeSessions: 0, pendingPayments: 0,
-    totalDrivers: 0, totalVehicles: 0, unitsSoldToday: 0,
+    totalDrivers: 0, totalVehicles: 0, unitsSoldToday: 0, totalUnitsAllTime: 0, averageUnitsPerSession: 0,
   };
   
   const allPayments = payments || [];
