@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import type { Driver, Session, User, Vehicle, DashboardStats } from '@/lib/types';
 import { useEffect } from 'react';
+import { getPaymentProofsForSession, getProofSessionIds } from '@/app/actions/sessions';
 
 // --- Realtime Helper ---
 function useRealtimeSync(table: string, queryKeys: any[][]) {
@@ -52,6 +53,8 @@ export function useDashboardStats(options: { attendantId?: string } = {}) {
 
       let sessionQuery = supabase.from('sessions').select('*', { count: 'exact', head: true }).eq('status', 'completed').gte('created_at', todayISO);
       let activeQuery = supabase.from('sessions').select('*', { count: 'exact', head: true }).eq('status', 'active');
+      // FIX: Count BOTH 'active' and 'pending_payment' as pending — previously only 'active' was counted
+      let pendingQuery = supabase.from('sessions').select('*', { count: 'exact', head: true }).in('status', ['active', 'pending_payment']);
       let revenueQuery = supabase.from('payments').select('amount').gte('created_at', todayISO);
       let unitsQuery = supabase.from('sessions').select('units_consumed').eq('status', 'completed').gte('created_at', todayISO);
       let allTimeUnitsQuery = supabase.from('sessions').select('units_consumed').eq('status', 'completed');
@@ -59,6 +62,7 @@ export function useDashboardStats(options: { attendantId?: string } = {}) {
       if (options.attendantId) {
         sessionQuery = sessionQuery.eq('attendant_id', options.attendantId);
         activeQuery = activeQuery.eq('attendant_id', options.attendantId);
+        pendingQuery = pendingQuery.eq('attendant_id', options.attendantId);
         revenueQuery = revenueQuery.eq('attendant_id', options.attendantId);
         unitsQuery = unitsQuery.eq('attendant_id', options.attendantId);
         allTimeUnitsQuery = allTimeUnitsQuery.eq('attendant_id', options.attendantId);
@@ -66,6 +70,7 @@ export function useDashboardStats(options: { attendantId?: string } = {}) {
 
       const { count: sessionCount } = await sessionQuery;
       const { count: activeCount } = await activeQuery;
+      const { count: pendingCount } = await pendingQuery;
       const { count: driverCount } = await supabase.from('drivers').select('*', { count: 'exact', head: true });
       const { count: vehicleCount } = await supabase.from('vehicles').select('*', { count: 'exact', head: true });
       
@@ -83,7 +88,7 @@ export function useDashboardStats(options: { attendantId?: string } = {}) {
         revenueToday: totalRevenue,
         totalSessions: sessionCount || 0,
         activeSessions: activeCount || 0,
-        pendingPayments: activeCount || 0,
+        pendingPayments: pendingCount || 0, // FIX: now includes both active + pending_payment
         totalDrivers: driverCount || 0,
         totalVehicles: vehicleCount || 0,
         unitsSoldToday: totalUnits,
@@ -123,8 +128,9 @@ export function useDrivers() {
 }
 
 // --- Sessions ---
-export function useSessions(options: { limit?: number; attendantId?: string } = {}) {
-  const limit = options.limit || 10;
+// FIX: loadAll=true disables the limit so ALL pending sessions are always fetched.
+export function useSessions(options: { limit?: number; attendantId?: string; loadAll?: boolean } = {}) {
+  const limit = options.loadAll ? 9999 : (options.limit || 10);
   useRealtimeSync('sessions', [['sessions', limit, options.attendantId]]);
   
   return useQuery({
@@ -136,8 +142,12 @@ export function useSessions(options: { limit?: number; attendantId?: string } = 
           *,
           profiles:attendant_id (name)
         `)
-        .order('created_at', { ascending: false })
-        .limit(limit);
+        .order('created_at', { ascending: false });
+
+      // Only apply limit when not loading all
+      if (!options.loadAll) {
+        query = query.limit(limit);
+      }
 
       if (options.attendantId) {
         query = query.eq('attendant_id', options.attendantId);
@@ -306,6 +316,9 @@ export function usePayments(options: { attendantId?: string } = {}) {
       const { data, error } = await query;
       
       if (error) throw error;
+
+      // Get list of session IDs that have uploaded proofs
+      const proofSessionIds = await getProofSessionIds();
       
       return (data || []).map(p => ({
         id: p.id,
@@ -322,9 +335,24 @@ export function usePayments(options: { attendantId?: string } = {}) {
         unitsConsumed: (p as any).sessions?.units_consumed,
         rateAtTime: (p as any).sessions?.rate_at_time,
         unitType: (p as any).sessions?.unit_type,
+        hasProof: proofSessionIds.includes(p.session_id),
         createdAt: p.created_at,
       }));
     },
+  });
+}
+
+// --- Payment Proofs ---
+export function usePaymentProofs(options: { sessionId?: string; paymentId?: string } = {}) {
+  useRealtimeSync('payment_proofs', [['payment-proofs', options.sessionId, options.paymentId]]);
+
+  return useQuery({
+    queryKey: ['payment-proofs', options.sessionId, options.paymentId],
+    queryFn: async () => {
+      if (!options.sessionId) return [];
+      return await getPaymentProofsForSession(options.sessionId);
+    },
+    enabled: !!(options.sessionId || options.paymentId),
   });
 }
 

@@ -3,9 +3,9 @@ import { useState } from 'react';
 import { toast } from 'sonner';
 import { TopBar } from '@/components/layout/TopBar';
 import { formatCurrency, formatDateTime, getStatusColor, getStatusLabel } from '@/lib/utils';
-import { Search, CreditCard, DollarSign, Smartphone, Wallet, Activity, XCircle, Printer, Share2, Download } from 'lucide-react';
+import { Search, CreditCard, DollarSign, Smartphone, Wallet, Activity, XCircle, Printer, Share2, Download, ShieldCheck, ShieldAlert, Eye } from 'lucide-react';
 import { useAuthStore } from '@/store/auth';
-import { usePayments, useDrivers, useSettings } from '@/hooks/use-database';
+import { usePayments, useDrivers, useSettings, usePaymentProofs } from '@/hooks/use-database';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 
@@ -35,6 +35,12 @@ export default function PaymentsPage() {
   const [selectedPayment, setSelectedPayment] = useState<any>(null);
   const [search, setSearch] = useState('');
   const [methodFilter, setMethodFilter] = useState('all');
+  const [proofFilter, setProofFilter] = useState('all'); // 'all' | 'with_proof' | 'no_proof'
+
+  // Load proofs for the selected payment
+  const { data: selectedProofs } = usePaymentProofs(
+    selectedPayment ? { sessionId: selectedPayment.sessionId } : {}
+  );
 
   // Branding & Config
   const branding = {
@@ -147,7 +153,11 @@ export default function PaymentsPage() {
       (p.reference || '').toLowerCase().includes(search.toLowerCase()) ||
       (p.driverName || '').toLowerCase().includes(search.toLowerCase());
     const matchMethod = methodFilter === 'all' || p.method === methodFilter;
-    return matchSearch && matchMethod;
+    const matchProof =
+      proofFilter === 'all' ? true
+      : proofFilter === 'with_proof' ? p.hasProof
+      : !p.hasProof && ['mtn', 'telecel', 'airteltigo'].includes(p.method);
+    return matchSearch && matchMethod && matchProof;
   });
 
   const total = allPayments.reduce((sum: number, p: any) => sum + (p.amount || 0), 0);
@@ -213,6 +223,11 @@ export default function PaymentsPage() {
               <option value="airteltigo">AirtelTigo</option>
               <option value="wallet">Wallet Credit</option>
             </select>
+            <select value={proofFilter} onChange={e => setProofFilter(e.target.value)} className="form-select w-full sm:w-auto">
+              <option value="all">All Proofs</option>
+              <option value="with_proof">✅ Proof Uploaded</option>
+              <option value="no_proof">⚠️ Missing Proof (MoMo)</option>
+            </select>
           </div>
         </div>
 
@@ -229,6 +244,7 @@ export default function PaymentsPage() {
                   <th>Reference</th>
                   <th>Attendant</th>
                   <th>Status</th>
+                  <th>Proof</th>
                   <th>Date</th>
                   <th>Action</th>
                 </tr>
@@ -250,6 +266,21 @@ export default function PaymentsPage() {
                     <td className="text-sm text-slate-500">{p.attendantName || '—'}</td>
                     <td>
                       <span className={`badge ${getStatusColor(p.status)}`}>{getStatusLabel(p.status)}</span>
+                    </td>
+                    <td>
+                      {['mtn', 'telecel', 'airteltigo'].includes(p.method) ? (
+                        p.hasProof ? (
+                          <span className="flex items-center gap-1 text-green-600 text-xs font-bold">
+                            <ShieldCheck size={13} /> Verified
+                          </span>
+                        ) : (
+                          <span className="flex items-center gap-1 text-amber-500 text-xs font-bold">
+                            <ShieldAlert size={13} /> Missing
+                          </span>
+                        )
+                      ) : (
+                        <span className="text-slate-300 text-xs">N/A</span>
+                      )}
                     </td>
                     <td className="text-[10px] text-slate-400 font-medium">{formatDateTime(p.createdAt)}</td>
                     <td>
@@ -368,6 +399,48 @@ export default function PaymentsPage() {
                   <p className="text-[8px] mt-2 font-mono uppercase tracking-tighter" style={{ color: '#cbd5e1' }}>Verified by Spero Fleet SCMS</p>
                 </div>
               </div>
+
+                {/* Proof Images (if any) */}
+                {selectedProofs && selectedProofs.length > 0 && (
+                  <div className="px-6 pb-4">
+                    <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-2">
+                      <ShieldCheck size={12} className="text-green-600" /> MoMo Payment Proofs ({selectedProofs.length})
+                    </div>
+                    <div className="space-y-3">
+                      {selectedProofs.map((proof: any) => (
+                        <div key={proof.id} className="border border-slate-100 rounded-xl overflow-hidden">
+                          <img
+                            src={proof.imageUrl}
+                            alt="MoMo SMS Proof"
+                            className="w-full max-h-60 object-contain bg-slate-50"
+                          />
+                          {proof.smsText && (
+                            <div className="p-3 bg-slate-50 border-t border-slate-100">
+                              <div className="text-[10px] font-bold text-slate-400 uppercase mb-1">SMS Text</div>
+                              <p className="text-xs text-slate-700 font-mono whitespace-pre-wrap">{proof.smsText}</p>
+                            </div>
+                          )}
+                          <div className="px-3 py-2 text-[10px] text-slate-400 flex justify-between">
+                            <span>Uploaded by {proof.attendantName}</span>
+                            <span>{formatDateTime(proof.uploadedAt)}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {selectedPayment && ['mtn', 'telecel', 'airteltigo'].includes(selectedPayment.method) && (!selectedProofs || selectedProofs.length === 0) && (
+                  <div className="px-6 pb-4">
+                    <div className="flex items-center gap-2 p-3 rounded-xl bg-amber-50 border border-amber-200">
+                      <ShieldAlert size={16} className="text-amber-600 shrink-0" />
+                      <div>
+                        <div className="text-xs font-bold text-amber-800">No MoMo Proof Uploaded</div>
+                        <div className="text-[10px] text-amber-600">This MoMo payment has no SMS verification proof. Flag for review.</div>
+                      </div>
+                    </div>
+                  </div>
+                )}
 
               <div className="p-4 bg-slate-50 flex gap-2 border-t border-slate-100">
                 <button 

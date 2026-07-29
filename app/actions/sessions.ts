@@ -597,3 +597,206 @@ export async function stopSessionWithRefund(sessionId: string, actualUnitsConsum
     return { success: false, error: error.message || 'Failed to complete session with refund' };
   }
 }
+
+export async function uploadPaymentProof(data: {
+  session_id: string;
+  payment_id?: string;
+  receipt_number?: string;
+  image_base64: string;
+  image_mime_type: string;
+  image_extension: string;
+  sms_text?: string;
+}) {
+  try {
+    const authUser = await requireAuth(['super_admin', 'manager', 'attendant']);
+
+    const timestamp = Date.now();
+    // Path structure: proofs/{session_id}/{timestamp}.{ext}
+    const storagePath = `proofs/${data.session_id}/${timestamp}.${data.image_extension}`;
+
+    // Strip data URI prefix if present
+    const base64Data = data.image_base64.replace(/^data:[^;]+;base64,/, '');
+    const buffer = Buffer.from(base64Data, 'base64');
+
+    // Upload image to Supabase Storage
+    const { error: uploadError } = await supabaseAdmin
+      .storage
+      .from('payment-proofs')
+      .upload(storagePath, buffer, {
+        contentType: data.image_mime_type,
+        upsert: true,
+        metadata: {
+          session_id: data.session_id,
+          payment_id: data.payment_id || '',
+          receipt_number: data.receipt_number || '',
+          attendant_id: authUser.id,
+          uploaded_at: new Date().toISOString(),
+        },
+      });
+
+    if (uploadError) throw new Error(`Storage upload failed: ${uploadError.message}`);
+
+    // If sms_text is provided, save it as a companion text file
+    if (data.sms_text && data.sms_text.trim()) {
+      const textPath = `proofs/${data.session_id}/${timestamp}.txt`;
+      await supabaseAdmin
+        .storage
+        .from('payment-proofs')
+        .upload(textPath, Buffer.from(data.sms_text.trim(), 'utf-8'), {
+          contentType: 'text/plain',
+          upsert: true,
+        });
+    }
+
+    // Generate signed URL (10 years)
+    const { data: signedUrlData, error: urlError } = await supabaseAdmin
+      .storage
+      .from('payment-proofs')
+      .createSignedUrl(storagePath, 60 * 60 * 24 * 365 * 10);
+
+    if (urlError || !signedUrlData?.signedUrl) {
+      throw new Error('Could not generate signed URL');
+    }
+
+    // Also attempt DB insert if table exists
+    try {
+      await supabaseAdmin.from('payment_proofs').insert([{
+        session_id: data.session_id,
+        payment_id: data.payment_id || null,
+        receipt_number: data.receipt_number || null,
+        attendant_id: authUser.id,
+        image_url: signedUrlData.signedUrl,
+        storage_path: storagePath,
+        sms_text: data.sms_text || null,
+      }]);
+    } catch {
+      // Table doesn't exist yet — handled gracefully via Storage API
+    }
+
+    revalidatePath('/payments');
+    revalidatePath('/sessions');
+    return { success: true, image_url: signedUrlData.signedUrl, storage_path: storagePath };
+  } catch (error: any) {
+    console.error('[SESSIONS] uploadPaymentProof error:', error);
+    if (error.message?.startsWith('Unauthenticated') || error.message?.startsWith('Forbidden')) {
+      return { success: false, error: error.message };
+    }
+    return { success: false, error: error.message || 'Failed to upload payment proof.' };
+  }
+}
+
+/**
+ * Fetches proof files directly from Supabase Storage for a given session.
+ * Works with or without the payment_proofs DB table.
+ */
+export async function getPaymentProofsForSession(sessionId: string) {
+  try {
+    if (!sessionId) return [];
+
+    // 1. Try DB table first
+    try {
+      const { data: dbProofs } = await supabaseAdmin
+        .from('payment_proofs')
+        .select('*, profiles:attendant_id(name)')
+        .eq('session_id', sessionId)
+        .order('uploaded_at', { ascending: false });
+
+      if (dbProofs && dbProofs.length > 0) {
+        return dbProofs.map((p: any) => ({
+          id: p.id,
+          sessionId: p.session_id,
+          paymentId: p.payment_id,
+          receiptNumber: p.receipt_number,
+          attendantName: p.profiles?.name || 'Attendant',
+          imageUrl: p.image_url,
+          smsText: p.sms_text,
+          uploadedAt: p.uploaded_at || p.created_at,
+        }));
+      }
+    } catch {
+      // DB table not available — fallback to Storage API below
+    }
+
+    // 2. Fallback to Supabase Storage listing under proofs/{sessionId}
+    const { data: fileList, error: listError } = await supabaseAdmin
+      .storage
+      .from('payment-proofs')
+      .list(`proofs/${sessionId}`);
+
+    if (listError || !fileList || fileList.length === 0) return [];
+
+    // Separate image files from txt files
+    const imageFiles = fileList.filter(f => !f.name.endsWith('.txt') && f.name !== '.emptyFolderPlaceholder');
+    const txtFiles = fileList.filter(f => f.name.endsWith('.txt'));
+
+    const proofs = await Promise.all(
+      imageFiles.map(async (file) => {
+        const filePath = `proofs/${sessionId}/${file.name}`;
+        const { data: signed } = await supabaseAdmin
+          .storage
+          .from('payment-proofs')
+          .createSignedUrl(filePath, 60 * 60 * 24 * 365 * 10);
+
+        // Check if matching text file exists
+        const timestamp = file.name.split('.')[0];
+        const matchingTxt = txtFiles.find(t => t.name.startsWith(timestamp));
+        let smsText = '';
+
+        if (matchingTxt) {
+          try {
+            const { data: txtBlob } = await supabaseAdmin
+              .storage
+              .from('payment-proofs')
+              .download(`proofs/${sessionId}/${matchingTxt.name}`);
+            if (txtBlob) {
+              smsText = await txtBlob.text();
+            }
+          } catch {}
+        }
+
+        return {
+          id: file.id || file.name,
+          sessionId,
+          imageUrl: signed?.signedUrl || '',
+          smsText: smsText || (file.metadata as any)?.sms_text || '',
+          uploadedAt: file.created_at || new Date().toISOString(),
+          attendantName: 'Attendant',
+        };
+      })
+    );
+
+    return proofs.filter(p => p.imageUrl);
+  } catch (err) {
+    console.error('getPaymentProofsForSession error:', err);
+    return [];
+  }
+}
+
+/**
+ * Returns a list of session IDs that have proof uploads in Supabase Storage.
+ */
+export async function getProofSessionIds(): Promise<string[]> {
+  try {
+    // 1. Try DB table first
+    try {
+      const { data: dbProofs } = await supabaseAdmin
+        .from('payment_proofs')
+        .select('session_id');
+      if (dbProofs && dbProofs.length > 0) {
+        return Array.from(new Set(dbProofs.map((p: any) => p.session_id)));
+      }
+    } catch {}
+
+    // 2. Storage fallback — list directories under 'proofs/'
+    const { data: folders, error } = await supabaseAdmin
+      .storage
+      .from('payment-proofs')
+      .list('proofs');
+
+    if (error || !folders) return [];
+    return folders.map(f => f.name).filter(Boolean);
+  } catch (err) {
+    console.error('getProofSessionIds error:', err);
+    return [];
+  }
+}

@@ -192,6 +192,34 @@ export default function DashboardPage() {
       <div>
         <TopBar title="Attendant Dashboard" subtitle={`Welcome back, ${user?.name}`} />
         <div className="p-6 space-y-6">
+          {/* Payment Protocol Notice — Always visible to attendants */}
+          <div className="rounded-2xl border-2 border-amber-300 bg-gradient-to-r from-amber-50 to-orange-50 p-5 shadow-sm">
+            <div className="flex items-start gap-4">
+              <div className="w-12 h-12 rounded-xl bg-amber-100 border border-amber-200 flex items-center justify-center text-amber-600 shrink-0">
+                <AlertTriangle size={24} />
+              </div>
+              <div className="flex-1">
+                <div className="font-black text-amber-900 text-sm uppercase tracking-wide mb-2 flex items-center gap-2">
+                  ⚠️ PAYMENT PROTOCOL — READ BEFORE EVERY SESSION
+                </div>
+                <div className="space-y-2 text-sm text-amber-900">
+                  <div className="flex items-start gap-2">
+                    <span className="font-black text-amber-700 shrink-0 mt-0.5">STEP 1:</span>
+                    <span>Always ask the client: <strong>"Are you paying by Mobile Money (MoMo) or Cash?"</strong></span>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <span className="font-black text-green-700 shrink-0 mt-0.5">✅ MOMO:</span>
+                    <span>Proceed to charge. Record the session and collect the MoMo SMS proof after payment.</span>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <span className="font-black text-red-700 shrink-0 mt-0.5">❌ CASH:</span>
+                    <span><strong>DO NOT start charging.</strong> Politely inform the client: <em>"We only accept Mobile Money (MTN MoMo, Telecel Cash, or AirtelTigo). Please load your MoMo wallet and return."</em></span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
           {/* Quick Actions */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <Link href="/sessions" className="stat-card hover:border-blue-400 transition-colors flex items-center gap-4 group">
@@ -273,7 +301,8 @@ export default function DashboardPage() {
             </div>
             <div className="stat-card">
               <div className="text-sm text-slate-500 mb-1">Pending Payments</div>
-              <div className="text-xl font-bold text-red-600">{displaySessions.filter((s: any) => s.status === 'active').length}</div>
+              {/* FIX: Count both 'active' and 'pending_payment' sessions */}
+              <div className="text-xl font-bold text-red-600">{displaySessions.filter((s: any) => s.status === 'active' || s.status === 'pending_payment').length}</div>
             </div>
           </div>
 

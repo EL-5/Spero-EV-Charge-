@@ -1,13 +1,13 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { toast } from 'sonner';
 import { TopBar } from '@/components/layout/TopBar';
 import { formatCurrency, formatDateTime, getStatusColor, getStatusLabel } from '@/lib/utils';
-import { Search, Plus, Zap, Clock, CheckCircle, XCircle, UserPlus, Car, AlertTriangle, DollarSign, Smartphone, Wallet, Trash2 } from 'lucide-react';
+import { Search, Plus, Zap, Clock, CheckCircle, XCircle, UserPlus, Car, AlertTriangle, DollarSign, Smartphone, Wallet, Trash2, Upload, Camera, FileImage, ShieldCheck } from 'lucide-react';
 import type { Session } from '@/lib/types';
 import { useSessions, useDrivers, useVehicles, useShifts, usePricing } from '@/hooks/use-database';
 import { useAuthStore } from '@/store/auth';
-import { startSession, updateSessionStatus, completeSession, processPayment, deleteSession } from '@/app/actions/sessions';
+import { startSession, updateSessionStatus, completeSession, processPayment, deleteSession, uploadPaymentProof } from '@/app/actions/sessions';
 import { addDriver } from '@/app/actions/drivers';
 import { addVehicle } from '@/app/actions/vehicles';
 import html2canvas from 'html2canvas';
@@ -19,8 +19,9 @@ type ModalStep = 'session' | 'register_new';
 export default function SessionsPage() {
   const { user } = useAuthStore();
   const isAttendant = user?.role === 'attendant';
+  // FIX: loadAll=true ensures no sessions are ever dropped due to a record limit
   const { data: sessions, isLoading, refetch: refetchSessions } = useSessions({ 
-    limit: 50, 
+    loadAll: true, 
     attendantId: isAttendant ? user?.id : undefined 
   });
   const { data: drivers, refetch: refetchDrivers } = useDrivers();
@@ -46,11 +47,20 @@ export default function SessionsPage() {
   const [completeForm, setCompleteForm] = useState({ units: 0, amount: 0 });
   const [isPaying, setIsPaying] = useState(false);
   const [paymentPhone, setPaymentPhone] = useState('');
-  const [paymentMethod, setPaymentMethod] = useState<'cash' | 'wallet' | 'mtn' | 'telecel' | 'airteltigo'>('cash');
+  const [paymentMethod, setPaymentMethod] = useState<'wallet' | 'mtn' | 'telecel' | 'airteltigo'>('mtn');
   const [paymentStatus, setPaymentStatus] = useState<string | null>(null);
   const [actualAmount, setActualAmount] = useState<number>(0);
   const [showSuccess, setShowSuccess] = useState(false);
   const [completedPayment, setCompletedPayment] = useState<any>(null);
+
+  // MoMo SMS proof upload state
+  const [proofFile, setProofFile] = useState<File | null>(null);
+  const [proofPreview, setProofPreview] = useState<string | null>(null);
+  const [proofSmsText, setProofSmsText] = useState('');
+  const [isUploadingProof, setIsUploadingProof] = useState(false);
+  const [proofUploaded, setProofUploaded] = useState(false);
+  const proofInputRef = useRef<HTMLInputElement>(null);
+  const lastPaymentIdRef = useRef<string | null>(null);
 
   const [newMode, setNewMode] = useState<'prepaid' | 'postpaid'>('postpaid');
   const [formData, setFormData] = useState({
@@ -159,6 +169,26 @@ export default function SessionsPage() {
     }
   };
 
+  // Send to Pending: records kWh & amount but does NOT open payment
+  const handleSendToPending = async () => {
+    if (!selected) return;
+    setLoading(true);
+    const res = await completeSession(selected.id, {
+      units_consumed: completeForm.units,
+      total_amount: completeForm.amount,
+    });
+    setLoading(false);
+    if (res.success) {
+      setIsCompleting(false);
+      setSelected(null);
+      await refetchSessions();
+      toast.success('Session moved to Pending Payment. Collect MoMo when ready.');
+    } else {
+      toast.error('Error: ' + ((res as any).error || 'Failed to update session.'));
+    }
+
+  };
+
   const handleTriggerPayment = async () => {
     if (!selected || !activeShift) return toast.error('No active session or shift found.');
     
@@ -186,7 +216,7 @@ export default function SessionsPage() {
     
     if (res.success) {
       const methodLabel = {
-        cash: 'Cash', wallet: 'Wallet', mtn: 'MTN MoMo',
+        wallet: 'Wallet', mtn: 'MTN MoMo',
         telecel: 'Telecel Cash', airteltigo: 'Tigo Cash',
       }[paymentMethod] || paymentMethod.toUpperCase();
 
@@ -199,7 +229,15 @@ export default function SessionsPage() {
         reference,
         createdAt: new Date().toISOString(),
         receiptNumber: selected.receiptNumber || (selected as any).receipt_number,
+        paymentId: reference, // use reference as a unique ID for proof linking
       });
+
+      // Reset proof state for new payment
+      setProofFile(null);
+      setProofPreview(null);
+      setProofSmsText('');
+      setProofUploaded(false);
+      lastPaymentIdRef.current = reference;
       
       setIsPaying(false);
       setShowSuccess(true);
@@ -867,8 +905,18 @@ export default function SessionsPage() {
                 
                 <div className="flex gap-3 pt-2">
                   <button onClick={() => setIsCompleting(false)} className="btn btn-secondary flex-1">Cancel</button>
+                  {/* Send to Pending — records usage but does NOT open payment */}
+                  <button
+                    onClick={handleSendToPending}
+                    className="btn flex-1 gap-2 font-bold"
+                    style={{ background: '#fef3c7', color: '#92400e', border: '1.5px solid #fde68a' }}
+                    disabled={loading || (selected?.mode !== 'prepaid' && completeForm.units <= 0)}
+                  >
+                    <Clock size={15} /> Send to Pending
+                  </button>
+                  {/* Finish & Pay Now — records usage AND opens payment collection */}
                   <button onClick={handleComplete} className="btn btn-primary flex-1" disabled={loading}>
-                    {loading ? 'Processing...' : 'Finish & Pay'}
+                    {loading ? 'Processing...' : 'Finish & Pay Now'}
                   </button>
                 </div>
               </div>
@@ -948,7 +996,6 @@ export default function SessionsPage() {
                   <label className="text-xs font-bold uppercase text-slate-400 tracking-wider mb-3 block">Payment Method</label>
                   <div className="grid grid-cols-2 gap-2">
                     {[
-                      { id: 'cash', label: 'Cash', color: 'bg-emerald-500', icon: DollarSign },
                       { id: 'wallet', label: 'Wallet', color: 'bg-blue-600', icon: Wallet },
                       { id: 'mtn', label: 'MTN MoMo', color: 'bg-yellow-500', icon: Smartphone },
                       { id: 'telecel', label: 'Telecel Cash', color: 'bg-red-600', icon: Smartphone },
@@ -976,6 +1023,8 @@ export default function SessionsPage() {
                       </button>
                     ))}
                   </div>
+                  {/* Cash removed: attendants must use MoMo only per payment protocol */}
+                  <p className="text-[10px] text-slate-400 mt-2 italic text-center">💡 Cash payments are not accepted. Use MoMo or Wallet only.</p>
                 </div>
 
                 {['mtn', 'telecel', 'airteltigo'].includes(paymentMethod) && (
@@ -1054,6 +1103,144 @@ export default function SessionsPage() {
                 </div>
               </div>
 
+              {/* MoMo SMS Proof Upload — shown for MoMo payments */}
+              {completedPayment && ['mtn', 'telecel', 'airteltigo'].includes(completedPayment.method) && (
+                <div className="p-5 border-t border-slate-100 bg-slate-50">
+                  {proofUploaded ? (
+                    <div className="flex items-center gap-3 p-3 rounded-xl bg-green-50 border border-green-200">
+                      <ShieldCheck size={20} className="text-green-600 shrink-0" />
+                      <div>
+                        <div className="font-bold text-green-800 text-sm">MoMo Proof Saved</div>
+                        <div className="text-xs text-green-600">Payment verification complete. Fraud checks enabled.</div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      <div className="flex items-center gap-2 mb-1">
+                        <Upload size={14} className="text-blue-600" />
+                        <span className="text-xs font-bold uppercase text-slate-600 tracking-wider">Upload MoMo SMS Proof</span>
+                        <span className="text-[10px] text-slate-400">(Required for audit)</span>
+                      </div>
+
+                      {/* Image preview */}
+                      {proofPreview && (
+                        <div className="relative w-full rounded-xl overflow-hidden border border-slate-200">
+                          <img src={proofPreview} alt="SMS Proof" className="w-full max-h-40 object-cover" />
+                          <button
+                            onClick={() => { setProofFile(null); setProofPreview(null); }}
+                            className="absolute top-2 right-2 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center text-xs"
+                          >
+                            ×
+                          </button>
+                        </div>
+                      )}
+
+                      {/* File input — hidden, triggered by buttons below */}
+                      <input
+                        ref={proofInputRef}
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp,image/heic"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (!file) return;
+                          setProofFile(file);
+                          const reader = new FileReader();
+                          reader.onload = () => setProofPreview(reader.result as string);
+                          reader.readAsDataURL(file);
+                        }}
+                      />
+
+                      <div className="grid grid-cols-2 gap-2">
+                        {/* Camera capture */}
+                        <button
+                          onClick={() => {
+                            if (proofInputRef.current) {
+                              proofInputRef.current.setAttribute('capture', 'environment');
+                              proofInputRef.current.click();
+                            }
+                          }}
+                          className="flex items-center justify-center gap-2 py-2.5 rounded-xl border-2 border-dashed border-blue-200 bg-blue-50 text-blue-700 text-xs font-bold hover:bg-blue-100 transition-colors"
+                        >
+                          <Camera size={16} /> Take Photo
+                        </button>
+                        {/* Gallery picker */}
+                        <button
+                          onClick={() => {
+                            if (proofInputRef.current) {
+                              proofInputRef.current.removeAttribute('capture');
+                              proofInputRef.current.click();
+                            }
+                          }}
+                          className="flex items-center justify-center gap-2 py-2.5 rounded-xl border-2 border-dashed border-slate-200 bg-white text-slate-600 text-xs font-bold hover:bg-slate-50 transition-colors"
+                        >
+                          <FileImage size={16} /> Choose File
+                        </button>
+                      </div>
+
+                      {/* Optional SMS text */}
+                      <textarea
+                        className="w-full text-xs p-3 rounded-xl border border-slate-200 bg-white resize-none focus:outline-none focus:ring-2 focus:ring-blue-200"
+                        rows={2}
+                        placeholder="Paste SMS text here (optional)..."
+                        value={proofSmsText}
+                        onChange={(e) => setProofSmsText(e.target.value)}
+                      />
+
+                      {/* Upload button */}
+                      {proofFile && (
+                        <button
+                          onClick={async () => {
+                            if (!proofFile || !completedPayment) return;
+                            setIsUploadingProof(true);
+                            try {
+                              const reader = new FileReader();
+                              reader.readAsDataURL(proofFile);
+                              reader.onload = async () => {
+                                const base64 = reader.result as string;
+                                const ext = proofFile.name.split('.').pop() || 'jpg';
+                                const res = await uploadPaymentProof({
+                                  session_id: completedPayment.id,
+                                  receipt_number: completedPayment.receiptNumber,
+                                  image_base64: base64,
+                                  image_mime_type: proofFile.type,
+                                  image_extension: ext,
+                                  sms_text: proofSmsText || undefined,
+                                });
+                                if (res.success) {
+                                  setProofUploaded(true);
+                                  toast.success('MoMo proof uploaded successfully!');
+                                } else {
+                                  toast.error('Upload failed: ' + res.error);
+                                }
+                                setIsUploadingProof(false);
+                              };
+                            } catch (err) {
+                              setIsUploadingProof(false);
+                              toast.error('Upload failed. Try again.');
+                            }
+                          }}
+                          disabled={isUploadingProof}
+                          className="w-full py-3 bg-blue-600 text-white rounded-xl text-sm font-bold flex items-center justify-center gap-2 hover:bg-blue-700 shadow-sm transition-all active:scale-95 disabled:opacity-60"
+                        >
+                          {isUploadingProof ? (
+                            <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Uploading...</>
+                          ) : (
+                            <><Upload size={16} /> Upload MoMo Proof</>  
+                          )}
+                        </button>
+                      )}
+
+                      {!proofFile && (
+                        <p className="text-[10px] text-amber-600 text-center font-medium">
+                          ⚠️ Please take a photo of the client's MoMo confirmation SMS before closing.
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
               <div className="p-4 bg-slate-50 flex flex-col gap-2 border-t border-slate-100">
                 <div className="flex gap-2">
                   <button 
@@ -1067,7 +1254,10 @@ export default function SessionsPage() {
                   onClick={() => { setShowSuccess(false); setSelected(null); setCompletedPayment(null); }}
                   className="w-full py-2 text-xs font-bold text-slate-400 hover:text-slate-600 transition-colors"
                 >
-                  Close & Continue
+                  {!proofUploaded && ['mtn', 'telecel', 'airteltigo'].includes(completedPayment?.method || '') 
+                    ? '⚠️ Close Without Proof (Not Recommended)' 
+                    : 'Close & Continue'
+                  }
                 </button>
               </div>
             </div>
