@@ -591,10 +591,7 @@ export function useReconciliations() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('energy_reconciliation')
-        .select(`
-          *,
-          profiles:created_by (name)
-        `)
+        .select('*')
         .order('period_start', { ascending: false });
       
       if (error) {
@@ -608,6 +605,14 @@ export function useReconciliations() {
         const varKwh = r.variance_kwh !== null && r.variance_kwh !== undefined ? Number(r.variance_kwh) : (meter - app);
         const varPct = r.variance_percentage !== null && r.variance_percentage !== undefined ? Number(r.variance_percentage) : (meter > 0 ? (varKwh / meter) * 100 : 0);
 
+        let createdByName = 'Admin';
+        if (r.notes) {
+          try {
+            const parsed = JSON.parse(r.notes);
+            if (parsed.createdByName) createdByName = parsed.createdByName;
+          } catch (e) {}
+        }
+
         return {
           id: r.id,
           periodStart: r.period_start,
@@ -618,7 +623,7 @@ export function useReconciliations() {
           variancePercentage: Number(varPct.toFixed(2)),
           notes: r.notes,
           createdBy: r.created_by,
-          createdByName: (r as any).profiles?.name || 'Admin',
+          createdByName,
           createdAt: r.created_at,
         };
       });
