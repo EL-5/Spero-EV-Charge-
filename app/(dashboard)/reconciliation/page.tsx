@@ -67,45 +67,138 @@ export default function ReconciliationPage() {
           const sheet = workbook.Sheets[workbook.SheetNames[0]];
           const jsonRows: any[] = XLSX.utils.sheet_to_json(sheet, { header: 1 });
 
+          if (!jsonRows || jsonRows.length === 0) {
+            return reject(new Error('Spreadsheet is empty'));
+          }
+
+          let dateColIdx = -1;
+          let targetColIdx = -1;
+          let headerRowIdx = -1;
+
+          const energyKeywords = ['kwh', 'consumption', 'units', 'energy', 'draw', 'used', 'diff', 'difference', 'daily'];
+          const amountKeywords = ['amount', 'ghs', 'collected', 'paid', 'settlement', 'revenue'];
+          const dateKeywords = ['date', 'day', 'time', 'timestamp', 'period', 'created'];
+          const targetKeywords = type === 'hubtel' ? amountKeywords : energyKeywords;
+
+          // 1. Scan top 15 rows for Header Row & exact column indices
+          for (let r = 0; r < Math.min(15, jsonRows.length); r++) {
+            const row = jsonRows[r];
+            if (!Array.isArray(row)) continue;
+
+            row.forEach((cell, cIdx) => {
+              if (cell !== undefined && cell !== null) {
+                const str = String(cell).trim().toLowerCase();
+                if (dateColIdx === -1 && dateKeywords.some(k => str.includes(k))) {
+                  dateColIdx = cIdx;
+                  headerRowIdx = r;
+                }
+                if (targetColIdx === -1 && targetKeywords.some(k => str.includes(k))) {
+                  targetColIdx = cIdx;
+                  headerRowIdx = r;
+                }
+              }
+            });
+
+            if (targetColIdx !== -1) break;
+          }
+
+          // 2. Fallback: If no target header found, evaluate columns for daily numbers vs cumulative meter readings
+          if (targetColIdx === -1) {
+            const colSums: Record<number, { sum: number; count: number; max: number }> = {};
+            const startR = headerRowIdx !== -1 ? headerRowIdx + 1 : 0;
+
+            for (let r = startR; r < jsonRows.length; r++) {
+              const row = jsonRows[r];
+              if (!Array.isArray(row)) continue;
+
+              row.forEach((cell, cIdx) => {
+                const num = parseFloat(String(cell).replace(/,/g, '').trim());
+                if (!isNaN(num) && num > 0) {
+                  if (!colSums[cIdx]) colSums[cIdx] = { sum: 0, count: 0, max: 0 };
+                  colSums[cIdx].sum += num;
+                  colSums[cIdx].count += 1;
+                  colSums[cIdx].max = Math.max(colSums[cIdx].max, num);
+                }
+              });
+            }
+
+            let bestCol = -1;
+            let bestMax = Infinity;
+            Object.entries(colSums).forEach(([cIdxStr, stats]) => {
+              const cIdx = Number(cIdxStr);
+              if (cIdx === dateColIdx) return;
+              // Prefer daily numbers (< 10,000) over cumulative meter indexes (> 100,000)
+              if (stats.max < 10000 && stats.max > 0 && stats.max < bestMax) {
+                bestMax = stats.max;
+                bestCol = cIdx;
+              }
+            });
+
+            if (bestCol !== -1) {
+              targetColIdx = bestCol;
+            }
+          }
+
           let totalKwh = 0;
           let totalAmount = 0;
           let totalCount = 0;
           const dailyRows: Array<{ day: string; dateStr?: string; kwh?: number; amount?: number }> = [];
 
-          jsonRows.forEach((row, idx) => {
-            if (!Array.isArray(row) || row.length === 0) return;
+          // 3. Process data rows
+          const startDataRow = headerRowIdx !== -1 ? headerRowIdx + 1 : 0;
+
+          for (let r = startDataRow; r < jsonRows.length; r++) {
+            const row = jsonRows[r];
+            if (!Array.isArray(row) || row.length === 0) continue;
+
+            const rowText = row.join(' ').toLowerCase();
+            if (rowText.includes('grand total') || rowText.includes('total sum') || rowText.includes('summary')) {
+              continue;
+            }
 
             let dateVal = '';
-            let kwhVal = NaN;
-            let amountVal = NaN;
+            let val = NaN;
 
-            row.forEach((cell) => {
-              if (cell !== undefined && cell !== null) {
+            if (dateColIdx !== -1 && row[dateColIdx] !== undefined) {
+              dateVal = String(row[dateColIdx]).trim();
+            }
+
+            if (targetColIdx !== -1 && row[targetColIdx] !== undefined) {
+              const num = parseFloat(String(row[targetColIdx]).replace(/,/g, '').trim());
+              if (!isNaN(num) && num >= 0) val = num;
+            }
+
+            if (!dateVal) {
+              row.forEach((cell) => {
                 const str = String(cell).trim();
                 if (!dateVal && (str.match(/\d{4}-\d{2}-\d{2}/) || str.match(/\d{1,2}\/\d{1,2}/) || str.toLowerCase().includes('day'))) {
                   dateVal = str;
                 }
-                const num = parseFloat(str.replace(/,/g, ''));
-                if (!isNaN(num) && num >= 0) {
-                  if (type === 'hubtel') {
-                    if (isNaN(amountVal) || num > amountVal) amountVal = num;
-                  } else {
-                    if (isNaN(kwhVal) || num > kwhVal) kwhVal = num;
-                  }
-                }
-              }
-            });
-
-            if (type === 'hubtel' && !isNaN(amountVal) && amountVal > 0) {
-              totalAmount += amountVal;
-              totalCount += 1;
-              dailyRows.push({ day: dateVal || `Row ${idx}`, amount: amountVal });
-            } else if (type !== 'hubtel' && !isNaN(kwhVal) && kwhVal > 0) {
-              totalKwh += kwhVal;
-              totalCount += 1;
-              dailyRows.push({ day: dateVal || `Day ${dailyRows.length + 1}`, kwh: kwhVal });
+              });
             }
-          });
+
+            if (isNaN(val)) {
+              row.forEach((cell, cIdx) => {
+                if (cIdx === dateColIdx) return;
+                const num = parseFloat(String(cell).replace(/,/g, '').trim());
+                if (!isNaN(num) && num > 0 && num < 10000 && (isNaN(val) || num < val)) {
+                  val = num;
+                }
+              });
+            }
+
+            if (!isNaN(val) && val > 0) {
+              if (type === 'hubtel') {
+                totalAmount += val;
+                totalCount += 1;
+                dailyRows.push({ day: dateVal || `Row ${dailyRows.length + 1}`, amount: val });
+              } else {
+                totalKwh += val;
+                totalCount += 1;
+                dailyRows.push({ day: dateVal || `Day ${dailyRows.length + 1}`, kwh: val });
+              }
+            }
+          }
 
           const meta: UploadedFileMeta = {
             file,
