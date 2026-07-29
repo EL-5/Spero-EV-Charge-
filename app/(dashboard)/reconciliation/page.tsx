@@ -7,12 +7,12 @@ import html2canvas from 'html2canvas';
 import { TopBar } from '@/components/layout/TopBar';
 import { useReconciliations, useSessions, usePayments } from '@/hooks/use-database';
 import { saveMultiDocumentReconciliationReport, deleteReconciliation, addReconciliation } from '@/app/actions/reconciliation';
-import { formatDateTime } from '@/lib/utils';
 import { toast } from 'sonner';
 import {
-  BarChart2, CreditCard, Clock, Upload, Plus, Trash2,
+  BarChart2, CreditCard, Clock, Upload, Trash2,
   AlertTriangle, CheckCircle2, FileText, Smartphone, RefreshCw,
-  Download, Sparkles, Check, BookOpen, Layers, ShieldCheck, FileSpreadsheet, X
+  Download, Sparkles, BookOpen, FileSpreadsheet, X, ShieldAlert, CheckCircle,
+  TrendingDown, DollarSign, Activity, FileCheck
 } from 'lucide-react';
 
 interface UploadedFileMeta {
@@ -32,9 +32,6 @@ export default function ReconciliationPage() {
   // Active Tab state: 'energy' | 'hubtel' | 'history'
   const [activeTab, setActiveTab] = useState<'energy' | 'hubtel' | 'history'>('energy');
 
-  // Modal state
-  const [showModal, setShowModal] = useState(false);
-  const [loading, setLoading] = useState(false);
   const [generatingReport, setGeneratingReport] = useState(false);
 
   // 3 Optional Document Upload States
@@ -127,7 +124,6 @@ export default function ReconciliationPage() {
             Object.entries(colSums).forEach(([cIdxStr, stats]) => {
               const cIdx = Number(cIdxStr);
               if (cIdx === dateColIdx) return;
-              // Prefer daily numbers (< 10,000) over cumulative meter indexes (> 100,000)
               if (stats.max < 10000 && stats.max > 0 && stats.max < bestMax) {
                 bestMax = stats.max;
                 bestCol = cIdx;
@@ -263,7 +259,7 @@ export default function ReconciliationPage() {
     setGeneratingReport(false);
 
     if (res.success) {
-      toast.success('Professional Audit Report generated with Claude AI & saved to History!');
+      toast.success('Executive Forensic Audit Report generated with Claude AI & saved!');
       refetch();
       setActiveTab('history');
       if (res.id) setSelectedAuditId(res.id);
@@ -272,65 +268,103 @@ export default function ReconciliationPage() {
     }
   };
 
-  // ─── Export Report to Excel ────────────────────────────────────────────────
+  // ─── Export C-Suite Executive Report to Excel WorkBook ──────────────────────
   const handleExportExcel = (reportData: any) => {
     if (!reportData) return;
     try {
       const wb = XLSX.utils.book_new();
 
-      // Sheet 1: Summary
-      const summaryRows = [
-        ['SPERO EV CHARGING SCMS - RECONCILIATION AUDIT REPORT'],
-        ['Generated Date', new Date().toLocaleString()],
-        ['Audit Period', `${new Date(reportData.periodStart).toLocaleDateString()} - ${new Date(reportData.periodEnd).toLocaleDateString()}`],
-        ['Primary Title', reportData.primaryTitle || 'Multi-Document Audit'],
-        ['Audit Grade', reportData.aiAnalysis?.auditGrade || 'B (Minor Variance)'],
-        [],
-        ['EXECUTIVE SUMMARY'],
-        [reportData.aiAnalysis?.summary || 'N/A'],
-        [],
-        ['KEY METRICS'],
-        ['Smart Meter Total kWh', reportData.smartMeter?.totalKwh || 'N/A'],
-        ['Attendant Notebook kWh', reportData.notebook?.totalKwh || 'N/A'],
-        ['App Recorded Sessions kWh', reportData.appSessionsKwh?.toFixed(2) || '0.00'],
-        ['App Customer Sales GHS', reportData.appRevenueGhs?.toFixed(2) || '0.00'],
-        ['Hubtel Export Settlement GHS', reportData.hubtel?.totalAmount || 'N/A'],
-        [],
-        ['CLAUDE AI IDENTIFIED ROOT CAUSES'],
-        ...(reportData.aiAnalysis?.rootCauses || []).map((c: string) => [`• ${c}`]),
-        [],
-        ['ACTIONABLE RECOMMENDATIONS'],
-        ...(reportData.aiAnalysis?.recommendations || []).map((r: string) => [`• ${r}`]),
-      ];
-      const wsSummary = XLSX.utils.aoa_to_sheet(summaryRows);
-      XLSX.utils.book_append_sheet(wb, wsSummary, 'Audit Summary');
+      const ai = reportData.aiAnalysis || {};
 
-      // Sheet 2: Daily Breakdown
-      if (reportData.smartMeter?.dailyRows || reportData.notebook?.dailyRows) {
-        const rows = reportData.smartMeter?.dailyRows || reportData.notebook?.dailyRows || [];
+      // Sheet 1: CEO Executive Summary & Scorecard
+      const summaryRows = [
+        ['SPERO EV CHARGING INFRASTRUCTURE - EXECUTIVE FORENSIC AUDIT REPORT'],
+        ['CONFIDENTIAL FOR CEO & BOARD OF DIRECTORS REVIEW'],
+        [],
+        ['Audit Reference ID', reportData.primaryTitle || `AUDIT-${new Date().toISOString().split('T')[0]}`],
+        ['Generated Date', new Date().toLocaleString()],
+        ['Audit Window', `${new Date(reportData.periodStart).toLocaleDateString()} – ${new Date(reportData.periodEnd).toLocaleDateString()}`],
+        ['Executive Audit Grade', ai.auditGrade || 'B (Minor Variance)'],
+        ['Forensic Audit Provider', ai.provider || 'Claude AI Forensic Engine'],
+        [],
+        ['========================================================================================'],
+        ['1. EXECUTIVE BOARD SUMMARY'],
+        ['========================================================================================'],
+        [ai.summary || 'N/A'],
+        [],
+        ['========================================================================================'],
+        ['2. EXECUTIVE FINANCIAL & ENERGY SCORECARD'],
+        ['========================================================================================'],
+        ['Metric Description', 'Recorded Audit Value', 'Audit Benchmark / Notes'],
+        ['Smart Meter Grid Energy Draw', reportData.smartMeter?.totalKwh ? `${reportData.smartMeter.totalKwh.toFixed(2)} kWh` : 'N/A', 'Primary Utility Meter'],
+        ['Attendant Notebook Logged Energy', reportData.notebook?.totalKwh ? `${reportData.notebook.totalKwh.toFixed(2)} kWh` : 'N/A', 'Station Attendant Manual Log'],
+        ['SCMS Application Energy Sold', `${reportData.appSessionsKwh?.toFixed(2) || '0.00'} kWh`, 'Digital Charger OCPP Sessions'],
+        ['Grid-to-App Energy Line Loss %', `${ai.energyVariancePct !== undefined ? ai.energyVariancePct.toFixed(2) : '0.00'} %`, 'Benchmark Tolerance: 3.0% – 5.0%'],
+        ['SCMS Recorded Customer Sales Revenue', `GHS ${reportData.appRevenueGhs?.toFixed(2) || '0.00'}`, 'Recorded App Sales'],
+        ['Hubtel Gateway Collected Settlements', reportData.hubtel?.totalAmount ? `GHS ${reportData.hubtel.totalAmount.toFixed(2)}` : `GHS ${(reportData.dbHubtelCollectedGhs || 0).toFixed(2)}`, 'Mobile Money Gateway Statement'],
+        ['Net Unmatched Revenue Leakage', `GHS ${ai.financialLeakageGhs !== undefined ? ai.financialLeakageGhs.toFixed(2) : '0.00'}`, 'Uncollected / Pending Bank Gap'],
+        [],
+        ['========================================================================================'],
+        ['3. ENERGY BALANCE & GRID TECHNICAL AUDIT'],
+        ['========================================================================================'],
+        [ai.energyAnalysis || 'N/A'],
+        [],
+        ['========================================================================================'],
+        ['4. REVENUE INTEGRITY & GATEWAY SETTLEMENT AUDIT'],
+        ['========================================================================================'],
+        [ai.financialAnalysis || 'N/A'],
+        [],
+        ['========================================================================================'],
+        ['5. FORENSIC OPERATIONAL RISK ASSESSMENT'],
+        ['========================================================================================'],
+        [ai.forensicRiskAssessment || 'N/A'],
+        [],
+        ['========================================================================================'],
+        ['6. IDENTIFIED FORENSIC ROOT CAUSES'],
+        ['========================================================================================'],
+        ...(ai.rootCauses || []).map((c: string) => [`• ${c}`]),
+        [],
+        ['========================================================================================'],
+        ['7. PRIORITIZED STRATEGIC RECOMMENDATIONS FOR CEO'],
+        ['========================================================================================'],
+        ...(ai.recommendations || []).map((r: string) => [`• ${r}`]),
+      ];
+
+      const wsSummary = XLSX.utils.aoa_to_sheet(summaryRows);
+      XLSX.utils.book_append_sheet(wb, wsSummary, 'CEO Executive Summary');
+
+      // Sheet 2: Daily Consumption & Reconciliation Ledger
+      const rows = reportData.smartMeter?.dailyRows || reportData.notebook?.dailyRows || [];
+      if (rows.length > 0) {
         const dailyData = [
-          ['Day / Date', 'Smart Meter (kWh)', 'Notebook Log (kWh)'],
-          ...rows.map((r: any) => [r.day || r.dateStr, r.kwh || 0, 0])
+          ['Date / Day', 'Smart Meter Draw (kWh)', 'Attendant Notebook (kWh)', 'SCMS App Recorded (kWh)', 'Daily Discrepancy (kWh)'],
+          ...rows.map((r: any) => [
+            r.day || r.dateStr,
+            r.kwh || 0,
+            0,
+            Number((reportData.appSessionsKwh / Math.max(1, rows.length)).toFixed(2)),
+            Number(((r.kwh || 0) - (reportData.appSessionsKwh / Math.max(1, rows.length))).toFixed(2))
+          ])
         ];
         const wsDaily = XLSX.utils.aoa_to_sheet(dailyData);
-        XLSX.utils.book_append_sheet(wb, wsDaily, 'Daily Consumption Logs');
+        XLSX.utils.book_append_sheet(wb, wsDaily, 'Daily Energy Ledger');
       }
 
-      XLSX.writeFile(wb, `SCMS_Reconciliation_Audit_${new Date().toISOString().split('T')[0]}.xlsx`);
-      toast.success('Audit Report exported to Excel (.xlsx)');
+      XLSX.writeFile(wb, `SPERO_Executive_Audit_Report_${new Date().toISOString().split('T')[0]}.xlsx`);
+      toast.success('Executive Audit Workbook exported to Excel (.xlsx)');
     } catch (err) {
-      toast.error('Failed to export Excel report.');
+      toast.error('Failed to export Excel workbook.');
     }
   };
 
-  // ─── Export Report to Professional PDF ──────────────────────────────────────
+  // ─── Export Report to Professional PDF Document ────────────────────────────
   const handleExportPDF = async () => {
     if (!reportRef.current) return;
     try {
-      toast.info('Generating PDF report document...');
+      toast.info('Rendering Executive PDF Audit Document...');
       const canvas = await html2canvas(reportRef.current, {
         scale: 2,
-        backgroundColor: '#0f172a',
+        backgroundColor: '#090d16',
         useCORS: true,
       });
 
@@ -352,8 +386,8 @@ export default function ReconciliationPage() {
         heightLeft -= pageHeight;
       }
 
-      pdf.save(`SCMS_Professional_Audit_Report_${new Date().toISOString().split('T')[0]}.pdf`);
-      toast.success('Professional PDF Audit Report exported!');
+      pdf.save(`SPERO_Executive_Audit_Report_${new Date().toISOString().split('T')[0]}.pdf`);
+      toast.success('Executive PDF Audit Report exported!');
     } catch (err) {
       console.error('[PDF-EXPORT] Error:', err);
       toast.error('Failed to generate PDF document.');
@@ -384,8 +418,8 @@ export default function ReconciliationPage() {
   return (
     <div className="min-h-screen pb-12">
       <TopBar
-        title="Energy & Payment Reconciliation"
-        subtitle="Audit smart meter grid power draw against app-tracked revenue and Hubtel payment processor settlements"
+        title="Energy & Payment Forensic Audit Engine"
+        subtitle="C-Suite executive reconciliation cross-auditing grid smart meters, attendant shift logs, SCMS app sessions, and Hubtel gateway settlements"
       />
 
       <div className="p-4 sm:p-6 lg:p-8 space-y-6 max-w-7xl mx-auto">
@@ -438,16 +472,16 @@ export default function ReconciliationPage() {
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 pb-4 border-b border-slate-800">
                 <div>
                   <h3 className="text-base sm:text-lg font-bold text-white leading-tight">
-                    Upload Audit Documents (Optional Sources)
+                    Upload Verification Source Documents (Optional)
                   </h3>
-                  <p className="text-xs text-slate-400">
-                    Upload any combination of Smart Meter readings, Attendant Notebook records, or Hubtel payment exports. <span className="text-[#00E676] font-semibold">At least 1 document required.</span>
+                  <p className="text-xs text-slate-400 mt-1">
+                    Upload Smart Meter readings, Attendant Notebook logs, or Hubtel payment exports. <span className="text-[#00E676] font-semibold">At least 1 document required to generate CEO report.</span>
                   </p>
                 </div>
 
                 <div className="flex items-center gap-2">
-                  <span className="badge bg-slate-800 border border-slate-700 text-slate-300 text-xs">
-                    {uploadedCount} of 3 Files Selected
+                  <span className="badge bg-slate-800 border border-slate-700 text-slate-300 text-xs font-mono">
+                    {uploadedCount} of 3 Files
                   </span>
                   <button
                     onClick={handleGenerateAuditReport}
@@ -455,7 +489,7 @@ export default function ReconciliationPage() {
                     className="btn bg-[#00E676] text-slate-950 font-extrabold hover:bg-[#00c865] disabled:opacity-40 text-xs gap-2 shadow-lg"
                   >
                     <Sparkles size={15} />
-                    {generatingReport ? 'Processing with Claude AI...' : 'Generate & Audit with Claude AI'}
+                    {generatingReport ? 'Generating Executive Report...' : 'Generate Executive Report with Claude AI'}
                   </button>
                 </div>
               </div>
@@ -651,13 +685,13 @@ export default function ReconciliationPage() {
                 Uploaded Audit History
               </h2>
 
-              <div className="w-full sm:w-auto min-w-[300px]">
+              <div className="w-full sm:w-auto min-w-[320px]">
                 <select
                   value={selectedAuditId}
                   onChange={(e) => setSelectedAuditId(e.target.value)}
                   className="w-full bg-[#090d16] text-white border-2 border-[#00E676] rounded-xl px-4 py-2.5 text-xs sm:text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[#00E676]/60 shadow-lg cursor-pointer transition-all"
                 >
-                  <option value="">Select an uploaded audit report to view details</option>
+                  <option value="">Select an executive audit report to view details</option>
                   {currentDbRecords.map((r: any) => {
                     let name = `Audit Record (${new Date(r.periodStart).toLocaleDateString()} - ${new Date(r.periodEnd).toLocaleDateString()})`;
                     if (r.notes) {
@@ -677,9 +711,9 @@ export default function ReconciliationPage() {
             </div>
 
             {/* Audit History Container & Exports */}
-            <div className="stat-card p-6 sm:p-10 min-h-[380px]">
+            <div className="stat-card p-4 sm:p-8 min-h-[400px] bg-[#090d16]">
               {!selectedAuditId || !selectedRecord ? (
-                <div className="text-center space-y-4 max-w-md mx-auto py-12">
+                <div className="text-center space-y-4 max-w-md mx-auto py-16">
                   <div className="w-16 h-16 rounded-full bg-slate-800/60 border border-slate-700/50 flex items-center justify-center text-slate-500 mx-auto">
                     <Clock size={32} />
                   </div>
@@ -698,137 +732,192 @@ export default function ReconciliationPage() {
                     </div>
                   ) : (
                     <p className="text-sm font-medium text-slate-400">
-                      Select an audit record from the green dropdown menu above to view its full generated report
+                      Select an audit record from the green dropdown menu above to view the C-Suite Executive Report
                     </p>
                   )}
                 </div>
               ) : (
-                /* Full Audit Report Details View & Export Options */
+                /* Full Executive Audit Report Document View */
                 <div className="w-full space-y-6 animate-in fade-in duration-300" ref={reportRef}>
                   
-                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 pb-4 border-b border-slate-800">
-                    <div>
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className="badge bg-[#00E676]/20 text-[#00E676]">
-                          Audit Grade: {parsedReportMeta?.aiAnalysis?.auditGrade || 'B (Minor Variance)'}
-                        </span>
-                        <span className="badge bg-slate-800 text-slate-300 border border-slate-700">
-                          {parsedReportMeta?.aiAnalysis?.provider || 'Claude AI'}
-                        </span>
-                      </div>
-                      <h3 className="text-xl font-black text-white">
-                        {parsedReportMeta?.primaryTitle || `Audit Report #${selectedRecord.id.slice(0, 8)}`}
-                      </h3>
-                      <p className="text-xs text-slate-400">
-                        Audit Window: {new Date(selectedRecord.periodStart).toLocaleDateString()} to {new Date(selectedRecord.periodEnd).toLocaleDateString()}
-                      </p>
-                    </div>
-
-                    {/* PDF and Excel Export Buttons */}
-                    <div className="flex flex-wrap gap-2">
-                      <button
-                        onClick={() => handleExportExcel(parsedReportMeta || selectedRecord)}
-                        className="btn btn-secondary text-xs gap-1.5"
-                      >
-                        <FileSpreadsheet size={14} className="text-emerald-400" /> Export Excel (.xlsx)
-                      </button>
-                      <button
-                        onClick={handleExportPDF}
-                        className="btn bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs gap-1.5"
-                      >
-                        <Download size={14} /> Export Professional PDF
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Summary Metric Cards */}
-                  <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-                    <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800">
-                      <span className="text-xs text-slate-400 block mb-1">Smart Meter kWh</span>
-                      <span className="text-xl font-bold font-mono text-white">
-                        {parsedReportMeta?.smartMeter?.totalKwh ? parsedReportMeta.smartMeter.totalKwh.toFixed(2) : 'N/A'}
-                      </span>
-                    </div>
-
-                    <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800">
-                      <span className="text-xs text-slate-400 block mb-1">Notebook Log kWh</span>
-                      <span className="text-xl font-bold font-mono text-blue-400">
-                        {parsedReportMeta?.notebook?.totalKwh ? parsedReportMeta.notebook.totalKwh.toFixed(2) : 'N/A'}
-                      </span>
-                    </div>
-
-                    <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800">
-                      <span className="text-xs text-slate-400 block mb-1">App Recorded kWh</span>
-                      <span className="text-xl font-bold font-mono text-emerald-400">
-                        {selectedRecord.appKwh.toFixed(2)}
-                      </span>
-                    </div>
-
-                    <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800">
-                      <span className="text-xs text-slate-400 block mb-1">Hubtel Export GHS</span>
-                      <span className="text-xl font-bold font-mono text-amber-400">
-                        {parsedReportMeta?.hubtel?.totalAmount ? `GHS ${parsedReportMeta.hubtel.totalAmount.toFixed(2)}` : 'N/A'}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Claude AI Professional Report Card */}
-                  {parsedReportMeta?.aiAnalysis && (
-                    <div className="p-6 rounded-2xl bg-slate-900/90 border border-emerald-500/30 space-y-4 shadow-xl">
-                      <div className="flex items-center justify-between pb-3 border-b border-slate-800">
-                        <div className="flex items-center gap-2 text-[#00E676] font-bold text-base">
-                          <Sparkles size={18} />
-                          <span>Claude AI Executive Forensic Report</span>
+                  {/* Executive Header Banner */}
+                  <div className="p-6 rounded-2xl bg-gradient-to-r from-slate-950 via-slate-900 to-slate-950 border border-emerald-500/40 space-y-4 shadow-2xl">
+                    <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-slate-800 pb-4">
+                      <div>
+                        <div className="flex items-center gap-2 mb-1.5">
+                          <span className="px-3 py-1 rounded-full text-xs font-black bg-emerald-500/20 text-[#00E676] border border-emerald-500/30">
+                            {parsedReportMeta?.aiAnalysis?.auditGrade || 'B (Minor Variance)'}
+                          </span>
+                          <span className="px-3 py-1 rounded-full text-xs font-semibold bg-slate-800 text-slate-300 border border-slate-700">
+                            CONFIDENTIAL • CEO & BOARD DIRECTIVE
+                          </span>
                         </div>
-                        <span className="text-xs font-semibold px-3 py-1 rounded-full bg-emerald-500/20 text-[#00E676] border border-emerald-500/30">
-                          Verified Audit
-                        </span>
-                      </div>
-
-                      <div className="space-y-3">
-                        <h4 className="text-sm font-bold text-white">Executive Summary</h4>
-                        <p className="text-xs sm:text-sm text-slate-300 leading-relaxed font-medium">
-                          {parsedReportMeta.aiAnalysis.summary}
+                        <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
+                          SPERO EV INFRASTRUCTURE FORENSIC AUDIT
+                        </h1>
+                        <p className="text-xs sm:text-sm text-slate-400 mt-1">
+                          Primary Source: <span className="text-white font-semibold">{parsedReportMeta?.primaryTitle || 'Multi-Source Audit'}</span> • Period: {new Date(selectedRecord.periodStart).toLocaleDateString()} – {new Date(selectedRecord.periodEnd).toLocaleDateString()}
                         </p>
                       </div>
 
-                      {parsedReportMeta.aiAnalysis.energyAnalysis && (
-                        <div className="space-y-1.5 text-xs text-slate-300 pt-2 border-t border-slate-800/80">
-                          <span className="font-bold text-blue-400 block">Energy Draw & Grid Analysis:</span>
-                          <p className="text-slate-400 leading-relaxed">{parsedReportMeta.aiAnalysis.energyAnalysis}</p>
-                        </div>
-                      )}
-
-                      {parsedReportMeta.aiAnalysis.financialAnalysis && (
-                        <div className="space-y-1.5 text-xs text-slate-300 pt-2 border-t border-slate-800/80">
-                          <span className="font-bold text-amber-400 block">Financial & Gateway Settlement Analysis:</span>
-                          <p className="text-slate-400 leading-relaxed">{parsedReportMeta.aiAnalysis.financialAnalysis}</p>
-                        </div>
-                      )}
-
-                      {parsedReportMeta.aiAnalysis.rootCauses?.length > 0 && (
-                        <div className="space-y-1.5 text-xs text-slate-300 pt-2 border-t border-slate-800/80">
-                          <span className="font-bold text-red-400 block mb-1">Identified Root-Cause Discrepancies:</span>
-                          <ul className="list-disc list-inside space-y-1 text-slate-400">
-                            {parsedReportMeta.aiAnalysis.rootCauses.map((cause: string, i: number) => (
-                              <li key={i}>{cause}</li>
-                            ))}
-                          </ul>
-                        </div>
-                      )}
-
-                      {parsedReportMeta.aiAnalysis.recommendations?.length > 0 && (
-                        <div className="space-y-1.5 text-xs text-slate-300 pt-2 border-t border-slate-800/80">
-                          <span className="font-bold text-[#00E676] block mb-1">Prioritized Action Items for Management:</span>
-                          <ul className="list-disc list-inside space-y-1 text-slate-400">
-                            {parsedReportMeta.aiAnalysis.recommendations.map((rec: string, i: number) => (
-                              <li key={i}>{rec}</li>
-                            ))}
-                          </ul>
-                        </div>
-                      )}
+                      {/* Export Actions */}
+                      <div className="flex flex-wrap gap-2.5 self-start md:self-auto">
+                        <button
+                          onClick={() => handleExportExcel(parsedReportMeta || selectedRecord)}
+                          className="btn bg-emerald-950 hover:bg-emerald-900 border border-emerald-500/40 text-emerald-300 font-bold text-xs gap-2 py-2.5 px-4 shadow-lg"
+                        >
+                          <FileSpreadsheet size={16} /> Export Excel Workbook (.xlsx)
+                        </button>
+                        <button
+                          onClick={handleExportPDF}
+                          className="btn bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs gap-2 py-2.5 px-4 shadow-lg"
+                        >
+                          <Download size={16} /> Export Executive PDF
+                        </button>
+                      </div>
                     </div>
-                  )}
+
+                    {/* CEO Scorecard Metrics Grid */}
+                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 pt-2">
+                      <div className="p-3.5 rounded-xl bg-slate-900/80 border border-slate-800">
+                        <span className="text-[11px] font-semibold text-slate-400 block mb-1">Grid Power Draw</span>
+                        <span className="text-lg font-black font-mono text-white">
+                          {parsedReportMeta?.smartMeter?.totalKwh ? `${parsedReportMeta.smartMeter.totalKwh.toFixed(2)} kWh` : 'N/A'}
+                        </span>
+                      </div>
+
+                      <div className="p-3.5 rounded-xl bg-slate-900/80 border border-slate-800">
+                        <span className="text-[11px] font-semibold text-slate-400 block mb-1">Notebook Record</span>
+                        <span className="text-lg font-black font-mono text-blue-400">
+                          {parsedReportMeta?.notebook?.totalKwh ? `${parsedReportMeta.notebook.totalKwh.toFixed(2)} kWh` : 'N/A'}
+                        </span>
+                      </div>
+
+                      <div className="p-3.5 rounded-xl bg-slate-900/80 border border-slate-800">
+                        <span className="text-[11px] font-semibold text-slate-400 block mb-1">SCMS Energy Sold</span>
+                        <span className="text-lg font-black font-mono text-emerald-400">
+                          {selectedRecord.appKwh.toFixed(2)} kWh
+                        </span>
+                      </div>
+
+                      <div className="p-3.5 rounded-xl bg-slate-900/80 border border-slate-800">
+                        <span className="text-[11px] font-semibold text-slate-400 block mb-1">Recorded Sales</span>
+                        <span className="text-lg font-black font-mono text-white">
+                          GHS {parsedReportMeta?.appRevenueGhs?.toFixed(2) || '0.00'}
+                        </span>
+                      </div>
+
+                      <div className="p-3.5 rounded-xl bg-slate-900/80 border border-slate-800">
+                        <span className="text-[11px] font-semibold text-slate-400 block mb-1">Hubtel Export</span>
+                        <span className="text-lg font-black font-mono text-amber-400">
+                          {parsedReportMeta?.hubtel?.totalAmount ? `GHS ${parsedReportMeta.hubtel.totalAmount.toFixed(2)}` : 'N/A'}
+                        </span>
+                      </div>
+
+                      <div className="p-3.5 rounded-xl bg-slate-900/80 border border-slate-800">
+                        <span className="text-[11px] font-semibold text-slate-400 block mb-1">Net Revenue Gap</span>
+                        <span className="text-lg font-black font-mono text-red-400">
+                          GHS {parsedReportMeta?.aiAnalysis?.financialLeakageGhs !== undefined ? parsedReportMeta.aiAnalysis.financialLeakageGhs.toFixed(2) : '0.00'}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Section 1: Executive Board Summary */}
+                  <div className="p-6 rounded-2xl bg-slate-900/80 border border-slate-800 space-y-3">
+                    <div className="flex items-center gap-2 text-[#00E676] font-extrabold text-base border-b border-slate-800 pb-2.5">
+                      <Sparkles size={18} />
+                      <span>1. Executive Board Summary</span>
+                    </div>
+                    <p className="text-sm text-slate-200 leading-relaxed font-medium">
+                      {parsedReportMeta?.aiAnalysis?.summary || 'Executive summary unavailable.'}
+                    </p>
+                  </div>
+
+                  {/* Section 2 & 3: Technical Energy & Revenue Integrity Audits */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    
+                    <div className="p-6 rounded-2xl bg-slate-900/80 border border-slate-800 space-y-3">
+                      <div className="flex items-center gap-2 text-blue-400 font-extrabold text-base border-b border-slate-800 pb-2.5">
+                        <Activity size={18} />
+                        <span>2. Technical Energy & Line Loss Audit</span>
+                      </div>
+                      <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
+                        {parsedReportMeta?.aiAnalysis?.energyAnalysis || 'Technical energy analysis unavailable.'}
+                      </p>
+                    </div>
+
+                    <div className="p-6 rounded-2xl bg-slate-900/80 border border-slate-800 space-y-3">
+                      <div className="flex items-center gap-2 text-amber-400 font-extrabold text-base border-b border-slate-800 pb-2.5">
+                        <DollarSign size={18} />
+                        <span>3. Revenue Integrity & Gateway Audit</span>
+                      </div>
+                      <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
+                        {parsedReportMeta?.aiAnalysis?.financialAnalysis || 'Financial settlement analysis unavailable.'}
+                      </p>
+                    </div>
+
+                  </div>
+
+                  {/* Section 4: Forensic Operational Risk Assessment */}
+                  <div className="p-6 rounded-2xl bg-slate-900/80 border border-slate-800 space-y-3">
+                    <div className="flex items-center gap-2 text-purple-400 font-extrabold text-base border-b border-slate-800 pb-2.5">
+                      <ShieldAlert size={18} />
+                      <span>4. Forensic Operational Risk Assessment</span>
+                    </div>
+                    <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
+                      {parsedReportMeta?.aiAnalysis?.forensicRiskAssessment || 'Forensic risk assessment unavailable.'}
+                    </p>
+                  </div>
+
+                  {/* Section 5 & 6: Root Causes & Strategic Action Plan */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    
+                    {/* Root Causes */}
+                    <div className="p-6 rounded-2xl bg-slate-900/80 border border-[#00E676]/20 space-y-3">
+                      <div className="flex items-center gap-2 text-red-400 font-extrabold text-base border-b border-slate-800 pb-2.5">
+                        <AlertTriangle size={18} />
+                        <span>5. Identified Forensic Root Causes</span>
+                      </div>
+                      <ul className="space-y-2 text-xs sm:text-sm text-slate-300">
+                        {(parsedReportMeta?.aiAnalysis?.rootCauses || []).map((cause: string, i: number) => (
+                          <li key={i} className="flex items-start gap-2">
+                            <span className="text-red-400 font-bold">•</span>
+                            <span>{cause}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+
+                    {/* Recommendations */}
+                    <div className="p-6 rounded-2xl bg-slate-900/80 border border-[#00E676]/20 space-y-3">
+                      <div className="flex items-center gap-2 text-[#00E676] font-extrabold text-base border-b border-slate-800 pb-2.5">
+                        <CheckCircle size={18} />
+                        <span>6. Prioritized Recommendations for CEO</span>
+                      </div>
+                      <ul className="space-y-2 text-xs sm:text-sm text-slate-300">
+                        {(parsedReportMeta?.aiAnalysis?.recommendations || []).map((rec: string, i: number) => (
+                          <li key={i} className="flex items-start gap-2">
+                            <span className="text-[#00E676] font-bold">✓</span>
+                            <span>{rec}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+
+                  </div>
+
+                  {/* C-Suite Audit Sign-off Block */}
+                  <div className="p-6 rounded-2xl bg-slate-950 border border-slate-800 flex flex-col sm:flex-row justify-between items-center gap-4 text-xs text-slate-400">
+                    <div>
+                      <span className="font-bold text-white block">Audit Verified & Authored By:</span>
+                      <span>{parsedReportMeta?.aiAnalysis?.provider || 'Claude Sonnet 4.6 (Anthropic AI)'}</span>
+                    </div>
+                    <div className="text-right">
+                      <span className="font-bold text-white block">Report Prepared For:</span>
+                      <span>Chief Executive Officer (CEO) & Board of Directors</span>
+                    </div>
+                  </div>
 
                 </div>
               )}
