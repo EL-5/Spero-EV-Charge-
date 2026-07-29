@@ -31,31 +31,24 @@ export async function topUpWallet(formData: {
       return { success: false, error: `Top-up amount cannot exceed GHS ${MAX_TOPUP.toLocaleString()} per transaction.` };
     }
 
-    // 1. Get current balance
-    const { data: driver, error: fetchError } = await supabaseAdmin
-      .from('drivers')
-      .select('wallet_balance')
-      .eq('id', formData.driver_id)
+    // 1 & 2. Atomically read + bound-check + write the new balance (avoids
+    // lost updates when two adjustments to the same driver race each other)
+    const { data: adjustment, error: adjustError } = await supabaseAdmin
+      .rpc('adjust_wallet_balance', {
+        p_driver_id: formData.driver_id,
+        p_delta: formData.amount,
+      })
       .single();
 
-    if (fetchError || !driver) {
-      console.error('[WALLETS] Driver fetch error:', fetchError);
-      return { success: false, error: 'Driver not found. Please try again.' };
-    }
-
-    const balanceBefore = driver.wallet_balance || 0;
-    const balanceAfter = balanceBefore + formData.amount;
-
-    // 2. Update driver balance
-    const { error: updateError } = await supabaseAdmin
-      .from('drivers')
-      .update({ wallet_balance: balanceAfter })
-      .eq('id', formData.driver_id);
-
-    if (updateError) {
-      console.error('[WALLETS] Balance update error:', updateError);
+    if (adjustError || !adjustment) {
+      console.error('[WALLETS] Balance adjustment error:', adjustError);
       return { success: false, error: 'Failed to update wallet balance. Please try again.' };
     }
+
+    const { balance_before: balanceBefore, balance_after: balanceAfter } = adjustment as {
+      balance_before: number;
+      balance_after: number;
+    };
 
     // 3. Log transaction
     const { error: logError } = await supabaseAdmin.from('wallet_transactions').insert([

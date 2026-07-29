@@ -135,15 +135,26 @@ export async function processPayment(data: {
 
     // 0. Handle Wallet Deduction for registered drivers using wallet
     if (data.method === 'wallet' && session.driver_id) {
-      const { data: driver } = await supabaseAdmin.from('drivers').select('wallet_balance').eq('id', session.driver_id).single();
-      const currentBalance = driver?.wallet_balance || 0;
-      
-      if (currentBalance < data.amount) {
-        throw new Error(`Insufficient wallet balance. Available: GHS ${currentBalance.toFixed(2)}`);
+      // Atomic read + bound-check + write — avoids a lost update if another
+      // adjustment (top-up, refund) hits this driver's wallet concurrently.
+      const { data: adjustment, error: adjustError } = await supabaseAdmin
+        .rpc('adjust_wallet_balance', {
+          p_driver_id: session.driver_id,
+          p_delta: -data.amount,
+        })
+        .single();
+
+      if (adjustError || !adjustment) {
+        if (adjustError?.message?.includes('Insufficient wallet balance')) {
+          throw new Error(`Insufficient wallet balance. ${adjustError.message}`);
+        }
+        throw new Error(adjustError?.message || 'Failed to deduct wallet balance');
       }
 
-      const newBalance = currentBalance - data.amount;
-      await supabaseAdmin.from('drivers').update({ wallet_balance: newBalance }).eq('id', session.driver_id);
+      const { balance_before: currentBalance, balance_after: newBalance } = adjustment as {
+        balance_before: number;
+        balance_after: number;
+      };
 
       // Record transaction
       await supabaseAdmin.from('wallet_transactions').insert([{
@@ -239,21 +250,31 @@ export async function processPayment(data: {
 
     // 4. Handle Excess Payment (Credit to Wallet)
     if (excessAmount > 0 && session.driver_id) {
-      const { data: driver } = await supabaseAdmin.from('drivers').select('wallet_balance').eq('id', session.driver_id).single();
-      const currentBalance = driver?.wallet_balance || 0;
-      const newBalance = currentBalance + excessAmount;
+      const { data: adjustment, error: adjustError } = await supabaseAdmin
+        .rpc('adjust_wallet_balance', {
+          p_driver_id: session.driver_id,
+          p_delta: excessAmount,
+        })
+        .single();
 
-      await supabaseAdmin.from('drivers').update({ wallet_balance: newBalance }).eq('id', session.driver_id);
+      if (adjustError || !adjustment) {
+        console.error('[SESSIONS] Failed to credit excess payment to wallet:', adjustError);
+      } else {
+        const { balance_before: currentBalance, balance_after: newBalance } = adjustment as {
+          balance_before: number;
+          balance_after: number;
+        };
 
-      // Record transaction
-      await supabaseAdmin.from('wallet_transactions').insert([{
-        driver_id: session.driver_id,
-        type: 'credit',
-        amount: excessAmount,
-        balance_before: currentBalance,
-        balance_after: newBalance,
-        description: `Overpayment for Session ${session.receipt_number}`,
-      }]);
+        // Record transaction
+        await supabaseAdmin.from('wallet_transactions').insert([{
+          driver_id: session.driver_id,
+          type: 'credit',
+          amount: excessAmount,
+          balance_before: currentBalance,
+          balance_after: newBalance,
+          description: `Overpayment for Session ${session.receipt_number}`,
+        }]);
+      }
     }
 
     // 5. Trigger RemoteStartTransaction if a charger is mapped to this session
@@ -545,40 +566,36 @@ export async function stopSessionWithRefund(sessionId: string, actualUnitsConsum
 
     // If there is an unused balance to refund
     if (session.payment_status === 'paid' && refundAmount > 0.01 && session.driver_id) {
-      // 1. Fetch current driver wallet balance
-      const { data: driver } = await supabaseAdmin
-        .from('drivers')
-        .select('wallet_balance')
-        .eq('id', session.driver_id)
+      // Atomic read + write of the credit — avoids a lost update if the
+      // driver's wallet is adjusted concurrently (top-up, another session).
+      const { data: adjustment, error: walletUpdateError } = await supabaseAdmin
+        .rpc('adjust_wallet_balance', {
+          p_driver_id: session.driver_id,
+          p_delta: refundAmount,
+        })
         .single();
 
-      if (driver) {
-        const currentBalance = Number(driver.wallet_balance || 0);
-        const newBalance = currentBalance + refundAmount;
+      if (walletUpdateError || !adjustment) {
+        console.error('[REFUND] Failed to update wallet:', walletUpdateError);
+      } else {
+        const { balance_before: currentBalance, balance_after: newBalance } = adjustment as {
+          balance_before: number;
+          balance_after: number;
+        };
 
-        // 2. Perform the credit update
-        const { error: walletUpdateError } = await supabaseAdmin
-          .from('drivers')
-          .update({ wallet_balance: newBalance })
-          .eq('id', session.driver_id);
+        // Log wallet transaction
+        await supabaseAdmin.from('wallet_transactions').insert([{
+          driver_id: session.driver_id,
+          type: 'credit',
+          amount: refundAmount,
+          balance_before: currentBalance,
+          balance_after: newBalance,
+          description: `Refund of unused charging balance from Session ${session.receipt_number}`,
+          session_id: session.id,
+          created_by: session.attendant_id,
+        }]);
 
-        if (walletUpdateError) {
-          console.error('[REFUND] Failed to update wallet:', walletUpdateError);
-        } else {
-          // 3. Log wallet transaction
-          await supabaseAdmin.from('wallet_transactions').insert([{
-            driver_id: session.driver_id,
-            type: 'credit',
-            amount: refundAmount,
-            balance_before: currentBalance,
-            balance_after: newBalance,
-            description: `Refund of unused charging balance from Session ${session.receipt_number}`,
-            session_id: session.id,
-            created_by: session.attendant_id,
-          }]);
-          
-          updatePayload.payment_status = 'refunded';
-        }
+        updatePayload.payment_status = 'refunded';
       }
     }
 

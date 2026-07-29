@@ -706,13 +706,18 @@ async function completeChargingSessionRecord(sessionId, unitsConsumed) {
     };
 
     if (session.payment_status === 'paid' && refundAmount > 0.01 && session.driver_id) {
-      const { data: driver } = await supabase.from('drivers').select('wallet_balance').eq('id', session.driver_id).single();
-      if (driver) {
-        const currentBalance = Number(driver.wallet_balance || 0);
-        const newBalance = currentBalance + refundAmount;
-        
-        await supabase.from('drivers').update({ wallet_balance: newBalance }).eq('id', session.driver_id);
-        
+      // Atomic read + write of the credit — avoids a lost update if the
+      // driver's wallet is adjusted concurrently from the dashboard.
+      const { data: adjustment, error: adjustError } = await supabase
+        .rpc('adjust_wallet_balance', { p_driver_id: session.driver_id, p_delta: refundAmount })
+        .single();
+
+      if (adjustError || !adjustment) {
+        console.error('[OCPP-CSMS] Failed to credit wallet refund:', adjustError?.message);
+      } else {
+        const currentBalance = Number(adjustment.balance_before || 0);
+        const newBalance = Number(adjustment.balance_after || 0);
+
         await supabase.from('wallet_transactions').insert([{
           driver_id: session.driver_id,
           type: 'credit',
