@@ -592,27 +592,36 @@ export function useReconciliations() {
       const { data, error } = await supabase
         .from('energy_reconciliation')
         .select(`
-          id, period_start, period_end, meter_kwh, app_kwh,
-          variance_kwh, variance_percentage, notes, created_by, created_at,
-          users:created_by (name)
+          *,
+          profiles:created_by (name)
         `)
         .order('period_start', { ascending: false });
       
-      if (error) throw error;
+      if (error) {
+        console.error('[USE-RECONCILIATIONS] Error:', error);
+        throw error;
+      }
       
-      return (data || []).map((r: any) => ({
-        id: r.id,
-        periodStart: r.period_start,
-        periodEnd: r.period_end,
-        meterKwh: Number(r.meter_kwh),
-        appKwh: Number(r.app_kwh),
-        varianceKwh: Number(r.variance_kwh),
-        variancePercentage: Number(r.variance_percentage),
-        notes: r.notes,
-        createdBy: r.created_by,
-        createdByName: r.users?.name || 'Unknown',
-        createdAt: r.created_at,
-      }));
+      return (data || []).map((r: any) => {
+        const meter = Number(r.meter_kwh || 0);
+        const app = Number(r.app_kwh || 0);
+        const varKwh = r.variance_kwh !== null && r.variance_kwh !== undefined ? Number(r.variance_kwh) : (meter - app);
+        const varPct = r.variance_percentage !== null && r.variance_percentage !== undefined ? Number(r.variance_percentage) : (meter > 0 ? (varKwh / meter) * 100 : 0);
+
+        return {
+          id: r.id,
+          periodStart: r.period_start,
+          periodEnd: r.period_end,
+          meterKwh: meter,
+          appKwh: app,
+          varianceKwh: Number(varKwh.toFixed(2)),
+          variancePercentage: Number(varPct.toFixed(2)),
+          notes: r.notes,
+          createdBy: r.created_by,
+          createdByName: (r as any).profiles?.name || 'Admin',
+          createdAt: r.created_at,
+        };
+      });
     },
   });
 }
