@@ -19,36 +19,48 @@ export async function recordDebtPayment(payload: {
     const user = await requireAuth(['super_admin', 'manager']);
     const { driverId, amount, method } = payload;
 
-    // Fetch current driver state
-    const { data: driver, error: fetchErr } = await supabaseAdmin
-      .from('drivers')
-      .select('debt_balance, wallet_balance')
-      .eq('id', driverId)
+    if (!Number.isFinite(amount) || amount <= 0) {
+      return { success: false, error: 'Enter a valid repayment amount.' };
+    }
+
+    // Atomic read + floor-at-zero + write — avoids a lost update if the
+    // driver's debt is adjusted concurrently (another repayment, a new debt).
+    const { data: adjustment, error: adjustError } = await supabaseAdmin
+      .rpc('adjust_debt_balance', {
+        p_driver_id: driverId,
+        p_delta: -amount,
+      })
       .single();
 
-    if (fetchErr || !driver) return { success: false, error: 'Driver not found' };
+    if (adjustError || !adjustment) {
+      console.error('[DEBTS] recordDebtPayment adjust error:', adjustError);
+      return { success: false, error: 'Driver not found or failed to update debt balance.' };
+    }
 
-    const newDebt = Math.max(0, Number(driver.debt_balance) - amount);
+    const { balance_before: debtBefore, balance_after: debtAfter } = adjustment as {
+      balance_before: number;
+      balance_after: number;
+    };
 
-    // Update driver debt balance
-    const { error: updateErr } = await supabaseAdmin
-      .from('drivers')
-      .update({ debt_balance: newDebt })
-      .eq('id', driverId);
-
-    if (updateErr) return { success: false, error: updateErr.message };
+    if (amount > debtBefore + 0.01) {
+      console.warn(
+        `[DEBTS] Repayment of GHS ${amount.toFixed(2)} exceeds outstanding debt of GHS ${debtBefore.toFixed(2)} for driver ${driverId} — floored at zero.`
+      );
+    }
 
     // Get staff name for notification (using verified user id)
     const { data: staff } = await supabaseAdmin.from('profiles').select('name').eq('id', user.id).single();
     const { data: driverInfo } = await supabaseAdmin.from('drivers').select('name').eq('id', driverId).single();
 
-    // Log payment in wallet_transactions
+    // Log payment in wallet_transactions — balance_before/after here reflect
+    // the debt balance change (debt going down), not the wallet balance,
+    // which this operation never touches.
     await supabaseAdmin.from('wallet_transactions').insert({
       driver_id: driverId,
       type: 'credit',
       amount,
-      balance_before: driver.wallet_balance,
-      balance_after: driver.wallet_balance,
+      balance_before: debtBefore,
+      balance_after: debtAfter,
       description: `Debt repayment via ${method} — GHS ${amount.toFixed(2)}`,
       created_by: user.id,
     });

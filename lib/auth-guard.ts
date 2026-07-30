@@ -70,6 +70,54 @@ export async function requireAuth(allowedRoles?: string[]): Promise<Authenticate
   };
 }
 
+export interface AuthenticatedDriver {
+  id: string;
+  name: string;
+  phone: string;
+  isActive: boolean;
+}
+
+/**
+ * Verifies the caller is a signed-in driver.
+ * Drivers are NOT rows in `profiles` (registerDriver deletes the trigger-created
+ * profile row so the driver role can bypass the profiles_role_check constraint —
+ * see app/actions/driver-auth.ts), so requireAuth() cannot be reused here; identity
+ * is looked up in the `drivers` table by the authenticated Supabase user id instead.
+ * Throws an Error (do NOT catch — let the action return { success: false }) if unauthorized.
+ */
+export async function requireDriverAuth(): Promise<AuthenticatedDriver> {
+  const supabase = await getServerSupabase();
+  const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser();
+
+  if (userError || !user) {
+    throw new Error('Unauthenticated: You must be signed in to perform this action.');
+  }
+
+  const { data: driver, error: driverError } = await supabaseAdmin
+    .from('drivers')
+    .select('id, name, phone, is_active')
+    .eq('id', user.id)
+    .single();
+
+  if (driverError || !driver) {
+    throw new Error('Unauthenticated: Driver profile not found.');
+  }
+
+  if (!driver.is_active) {
+    throw new Error('Forbidden: Your account has been deactivated. Contact a system administrator.');
+  }
+
+  return {
+    id: driver.id,
+    name: driver.name,
+    phone: driver.phone,
+    isActive: driver.is_active,
+  };
+}
+
 /**
  * Safe wrapper that catches auth errors and returns a standard error response.
  * Use this when you want to return { success: false, error } instead of throwing.

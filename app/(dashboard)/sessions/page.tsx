@@ -721,7 +721,7 @@ export default function SessionsPage() {
         {/* ─── SESSION DETAILS & ACTIONS MODAL ─── */}
         {selected && !showNew && !isCompleting && !isPaying && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.5)' }}>
-            <div className="stat-card max-w-lg w-full overflow-hidden">
+            <div className="stat-card max-w-lg w-full" style={{ maxHeight: '92vh', overflowY: 'auto' }}>
               <div className="flex items-center justify-between p-6 pb-2">
                 <div>
                   <h2 className="font-bold text-xl">Session Summary</h2>
@@ -865,7 +865,7 @@ export default function SessionsPage() {
         {/* ─── COMPLETE SESSION FORM ─── */}
         {isCompleting && selected && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.5)' }}>
-            <div className="stat-card max-w-md w-full">
+            <div className="stat-card max-w-md w-full" style={{ maxHeight: '92vh', overflowY: 'auto' }}>
               <h2 className="font-bold text-lg mb-4">Finalize Session</h2>
               <div className="space-y-4">
                 {selected.mode === 'prepaid' ? (
@@ -1060,7 +1060,7 @@ export default function SessionsPage() {
         {/* ─── PAYMENT SUCCESS & RECEIPT MODAL ─── */}
         {showSuccess && completedPayment && (
           <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300">
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-[360px] overflow-hidden border border-slate-200 animate-in zoom-in-95 duration-300">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-[360px] overflow-y-auto border border-slate-200 animate-in zoom-in-95 duration-300" style={{ maxHeight: '95vh' }}>
               <div className="p-6 text-center bg-blue-600 text-white">
                 <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-4 animate-bounce">
                   <CheckCircle size={40} className="text-white" />
@@ -1194,16 +1194,43 @@ export default function SessionsPage() {
                             if (!proofFile || !completedPayment) return;
                             setIsUploadingProof(true);
                             try {
-                              const reader = new FileReader();
-                              reader.readAsDataURL(proofFile);
-                              reader.onload = async () => {
-                                const base64 = reader.result as string;
-                                const ext = proofFile.name.split('.').pop() || 'jpg';
+                              const img = new Image();
+                              const objectUrl = URL.createObjectURL(proofFile);
+                              img.src = objectUrl;
+                              img.onload = async () => {
+                                URL.revokeObjectURL(objectUrl);
+                                const canvas = document.createElement('canvas');
+                                const ctx = canvas.getContext('2d');
+                                const MAX_WIDTH = 1000;
+                                const MAX_HEIGHT = 1000;
+                                let width = img.width;
+                                let height = img.height;
+                                
+                                if (width > height) {
+                                  if (width > MAX_WIDTH) {
+                                    height *= MAX_WIDTH / width;
+                                    width = MAX_WIDTH;
+                                  }
+                                } else {
+                                  if (height > MAX_HEIGHT) {
+                                    width *= MAX_HEIGHT / height;
+                                    height = MAX_HEIGHT;
+                                  }
+                                }
+                                
+                                canvas.width = width;
+                                canvas.height = height;
+                                ctx?.drawImage(img, 0, 0, width, height);
+                                
+                                // Compress image to JPEG at 60% quality to avoid 1MB server action limits
+                                const compressedBase64 = canvas.toDataURL('image/jpeg', 0.6);
+                                const ext = 'jpg';
+                                
                                 const res = await uploadPaymentProof({
                                   session_id: completedPayment.id,
                                   receipt_number: completedPayment.receiptNumber,
-                                  image_base64: base64,
-                                  image_mime_type: proofFile.type,
+                                  image_base64: compressedBase64,
+                                  image_mime_type: 'image/jpeg',
                                   image_extension: ext,
                                   sms_text: proofSmsText || undefined,
                                 });
@@ -1214,6 +1241,10 @@ export default function SessionsPage() {
                                   toast.error('Upload failed: ' + res.error);
                                 }
                                 setIsUploadingProof(false);
+                              };
+                              img.onerror = () => {
+                                setIsUploadingProof(false);
+                                toast.error('Failed to process image');
                               };
                             } catch (err) {
                               setIsUploadingProof(false);
