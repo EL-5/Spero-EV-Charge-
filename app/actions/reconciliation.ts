@@ -3,7 +3,7 @@
 import { supabaseAdmin } from '@/lib/supabase-server';
 import { revalidatePath } from 'next/cache';
 import { requireAuth } from '@/lib/auth-guard';
-import { analyzeReconciliationWithClaude, ReconciliationAnalysisResult, FileDataPayload } from '@/lib/claude';
+import { ReconciliationAnalysisResult, FileDataPayload, generateSimpleAnalysis } from '@/lib/analysis';
 
 export interface MultiDocReportPayload {
   periodStart: string;
@@ -59,7 +59,7 @@ export async function addReconciliation(formData: {
 
 /**
  * Processes multi-document uploads (Smart Meter Log, Attendant Notebook Log, Hubtel Export),
- * cross-reconciles against live app database sessions & payments, runs Claude AI, and stores in history.
+ * cross-reconciles against live app database sessions & payments, and stores a simple analysis in history.
  */
 export async function saveMultiDocumentReconciliationReport(payload: MultiDocReportPayload) {
   try {
@@ -94,7 +94,7 @@ export async function saveMultiDocumentReconciliationReport(payload: MultiDocRep
       .filter(p => p.status === 'success' && (p.method === 'mtn' || p.method === 'telecel' || p.method === 'airteltigo'))
       .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
 
-    // 3. Format file payloads for Claude AI
+    // 3. Format file payloads
     const smartMeterPayload: FileDataPayload | undefined = payload.smartMeter ? {
       fileName: payload.smartMeter.fileName,
       totalKwh: payload.smartMeter.totalKwh,
@@ -114,8 +114,8 @@ export async function saveMultiDocumentReconciliationReport(payload: MultiDocRep
       totalCount: payload.hubtel.totalCount,
     } : undefined;
 
-    // 4. Invoke Claude API AI Analysis
-    const aiAnalysis: ReconciliationAnalysisResult = await analyzeReconciliationWithClaude({
+    // 4. Run simple deterministic analysis (no external AI call)
+    const analysis: ReconciliationAnalysisResult = generateSimpleAnalysis({
       periodStart: payload.periodStart,
       periodEnd: payload.periodEnd,
       smartMeter: smartMeterPayload,
@@ -126,7 +126,6 @@ export async function saveMultiDocumentReconciliationReport(payload: MultiDocRep
       dbHubtelCollectedGhs: dbHubtelCollected,
     });
 
-    // Determine primary display title and meter kWh value
     const primaryTitle = [
       payload.smartMeter?.fileName,
       payload.notebook?.fileName,
@@ -146,7 +145,7 @@ export async function saveMultiDocumentReconciliationReport(payload: MultiDocRep
       appSessionsKwh: totalAppKwh,
       appRevenueGhs: totalAppRevenue,
       dbHubtelCollectedGhs: dbHubtelCollected,
-      aiAnalysis,
+      aiAnalysis: analysis,
       userNotes: payload.notes || '',
       createdByName: user.email || 'Admin',
       createdAt: new Date().toISOString(),

@@ -288,7 +288,7 @@ export default function ReconciliationPage() {
     setGeneratingReport(false);
 
     if (res.success) {
-      toast.success('Executive Forensic Audit Report generated with Claude AI & saved!');
+      toast.success('Audit Report generated & saved!');
       refetch();
       setActiveTab('history');
       if (res.id) setSelectedAuditId(res.id);
@@ -307,14 +307,14 @@ export default function ReconciliationPage() {
 
       // Sheet 1: CEO Executive Summary & Scorecard
       const summaryRows = [
-        ['SPERO EV CHARGING INFRASTRUCTURE - EXECUTIVE FORENSIC AUDIT REPORT'],
-        ['CONFIDENTIAL FOR CEO & BOARD OF DIRECTORS REVIEW'],
+        ['SPERO EV CHARGING STATION — ENERGY & PAYMENT RECONCILIATION REPORT'],
+        ['CONFIDENTIAL — INTERNAL MANAGEMENT REVIEW'],
         [],
         ['Audit Reference ID', reportData.primaryTitle || `AUDIT-${new Date().toISOString().split('T')[0]}`],
         ['Generated Date', new Date().toLocaleString()],
         ['Audit Window', `${new Date(reportData.periodStart).toLocaleDateString()} – ${new Date(reportData.periodEnd).toLocaleDateString()}`],
-        ['Executive Audit Grade', ai.auditGrade || 'B (Minor Variance)'],
-        ['Forensic Audit Provider', ai.provider || 'Claude AI Forensic Engine'],
+        ['Audit Grade', ai.auditGrade || 'B (Minor Variance)'],
+        ['Analysis Engine', ai.provider || 'SCMS Automated Analysis Engine'],
         [],
         ['========================================================================================'],
         ['1. EXECUTIVE BOARD SUMMARY'],
@@ -633,7 +633,7 @@ export default function ReconciliationPage() {
                     className="btn bg-[#00E676] text-slate-950 font-extrabold hover:bg-[#00c865] disabled:opacity-40 text-xs gap-2 shadow-lg"
                   >
                     <Sparkles size={15} />
-                    {generatingReport ? 'Generating Executive Report...' : 'Generate Executive Report with Claude AI'}
+                    {generatingReport ? 'Generating Report...' : 'Generate Audit Report'}
                   </button>
                 </div>
               </div>
@@ -1334,7 +1334,7 @@ export default function ReconciliationPage() {
                   <div className="p-6 rounded-2xl bg-slate-950 border border-slate-800 flex flex-col sm:flex-row justify-between items-center gap-4 text-xs text-slate-400">
                     <div>
                       <span className="font-bold text-white block">Audit Verified & Authored By:</span>
-                      <span>{parsedReportMeta?.aiAnalysis?.provider || 'Claude Sonnet 4.6 (Anthropic AI)'}</span>
+                      <span>{parsedReportMeta?.aiAnalysis?.provider || 'SCMS Automated Reconciliation Engine'}</span>
                     </div>
                     <div className="text-right">
                       <span className="font-bold text-white block">Report Prepared For:</span>

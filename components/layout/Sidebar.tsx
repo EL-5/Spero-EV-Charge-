@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation';
 import {
   LayoutDashboard, Users, Car, Zap, CreditCard, Wallet,
   AlertTriangle, Clock, BarChart3, FileText, UserCog,
-  Settings, ChevronLeft, ChevronRight, LogOut, Bolt, Smartphone, Activity
+  Settings, ChevronLeft, ChevronRight, LogOut, Smartphone, Activity
 } from 'lucide-react';
 import { useUIStore } from '@/store/ui';
 import { useAuthStore } from '@/store/auth';
@@ -13,8 +13,6 @@ import { useSettings } from '@/hooks/use-database';
 
 const navItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ['super_admin', 'manager', 'accountant', 'finance', 'attendant'] },
-  { href: '/chargers', label: 'Chargers', icon: Bolt, roles: ['super_admin', 'manager', 'attendant'] },
-  { href: '/chargers/setup-guide', label: 'OCPP Setup Guide', icon: FileText, roles: ['super_admin', 'manager', 'attendant'] },
   { href: '/drivers', label: 'Drivers', icon: Users, roles: ['super_admin', 'manager', 'attendant'] },
   { href: '/vehicles', label: 'Vehicles', icon: Car, roles: ['super_admin', 'manager', 'attendant'] },
   { href: '/sessions', label: 'Sessions', icon: Zap, roles: ['super_admin', 'manager', 'attendant'] },

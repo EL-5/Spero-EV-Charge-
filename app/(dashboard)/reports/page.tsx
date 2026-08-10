@@ -13,6 +13,7 @@ const reportTypes = [
   { id: 'weekly', label: 'Weekly Summary', icon: TrendingUp, desc: 'Sessions and revenue by week' },
   { id: 'monthly', label: 'Monthly Financial Report', icon: Calendar, desc: 'Full monthly financial summary' },
   { id: 'sessions', label: 'Session Report', icon: Zap, desc: 'All charging sessions with details' },
+  { id: 'pending_sessions', label: 'Pending Sessions', icon: Filter, desc: 'Sessions awaiting payment or unpaid' },
   { id: 'audit', label: 'Audit Trail Report', icon: FileText, desc: 'Activity log and fraud detection' },
   { id: 'shift', label: 'Shift Reconciliation', icon: FileText, desc: 'Cash and payment reconciliation by shift' },
 ];
@@ -43,11 +44,16 @@ export default function ReportsPage() {
     const to = new Date(dateTo);
     to.setHours(23, 59, 59, 999);
     
-    // Basic date filtering
     const inRange = d >= from && d <= to;
     if (!inRange) return false;
 
-    // Optional: Type specific filtering if needed in future
+    if (selectedReport === 'pending_sessions') {
+      // Sessions pending payment: status is pending_payment, OR completed but unpaid
+      return s.status === 'pending_payment' ||
+             (s.status === 'completed' && (!s.paymentStatus || s.paymentStatus === 'unpaid')) ||
+             (s.status === 'active' && (s.prepaidAmount || 0) > 0);
+    }
+
     return s.status === 'completed';
   });
 
@@ -71,6 +77,18 @@ export default function ReportsPage() {
     } else if (selectedReport === 'audit') {
       headers = ['Event', 'User', 'Details', 'Date'];
       rows = reportData.map(s => ['Session Completed', s.attendantName, `Receipt ${s.receiptNumber} - ${formatCurrency(s.totalAmount || 0)}`, formatDate(s.createdAt)]);
+    } else if (selectedReport === 'pending_sessions') {
+      headers = ['Receipt #', 'Driver', 'Vehicle', 'Mode', 'Status', 'Energy (kWh)', 'Amount Due (GHS)', 'Started At'];
+      rows = reportData.map((s: any) => [
+        s.receiptNumber || '',
+        s.driverName || 'Unknown',
+        s.vehiclePlate || '—',
+        s.mode || '',
+        s.status || '',
+        s.unitsConsumed || '',
+        s.totalAmount || s.prepaidAmount || 0,
+        formatDate(s.startTime || s.createdAt),
+      ]);
     } else {
       headers = ['Receipt #', 'Driver', 'Units (kWh)', 'Rate', 'Amount', 'Date'];
       rows = reportData.map(s => [
@@ -234,7 +252,7 @@ export default function ReportsPage() {
                   className="btn btn-primary gap-2" 
                   disabled={(selectedReport === 'shift' ? filteredPayments.length : reportData.length) === 0}
                 >
-                  <Download size={15} /> Export CSV
+                  <Download size={15} /> {selectedReport === 'pending_sessions' ? 'Export Pending CSV' : 'Export CSV'}
                 </button>
                 <button 
                   onClick={exportPDF} 
@@ -345,6 +363,43 @@ export default function ReportsPage() {
                           <td style={{ color: '#1e293b' }}>{s.attendantName}</td>
                           <td className="text-xs" style={{ color: '#475569' }}>Receipt {s.receiptNumber} - {formatCurrency(s.totalAmount)}</td>
                           <td className="text-xs" style={{ color: '#64748b' }}>{formatDate(s.createdAt)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+) : selectedReport === 'pending_sessions' ? (
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Receipt #</th>
+                        <th>Driver</th>
+                        <th>Vehicle</th>
+                        <th>Mode</th>
+                        <th>Status</th>
+                        <th>Energy</th>
+                        <th>Amount Due</th>
+                        <th>Started</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {reportData.map((s: any) => (
+                        <tr key={s.id}>
+                          <td className="font-mono text-xs" style={{ color: '#2563eb' }}>{s.receiptNumber}</td>
+                          <td style={{ color: '#1e293b' }}>{s.driverName || 'Unknown'}</td>
+                          <td style={{ color: '#475569' }}>{s.vehiclePlate || '—'}</td>
+                          <td style={{ color: '#475569' }} className="capitalize">{s.mode}</td>
+                          <td>
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
+                              s.status === 'pending_payment' ? 'bg-red-100 text-red-700' :
+                              s.status === 'active' ? 'bg-amber-100 text-amber-700' :
+                              'bg-orange-100 text-orange-700'
+                            }`}>
+                              {s.status === 'pending_payment' ? 'Pending' : s.status}
+                            </span>
+                          </td>
+                          <td style={{ color: '#475569' }}>{s.unitsConsumed ? `${s.unitsConsumed.toFixed(1)} kWh` : '—'}</td>
+                          <td className="font-bold" style={{ color: '#dc2626' }}>{formatCurrency(s.totalAmount || s.prepaidAmount || 0)}</td>
+                          <td className="text-xs" style={{ color: '#64748b' }}>{formatDate(s.startTime || s.createdAt)}</td>
                         </tr>
                       ))}
                     </tbody>
