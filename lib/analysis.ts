@@ -100,6 +100,14 @@ export function generateSimpleAnalysis(input: ReconciliationAnalysisInput): Reco
     }
   }
 
+  // Timezone variance notice for Chinese-made machines (UTC+8 CST vs Ghana GMT)
+  rootCauses.push(
+    `Machine Timezone Offset (UTC+8): Chinese-made charging machine logs are timestamped in Chinese Standard Time (+8h ahead of GMT). This naturally shifts evening sessions (after 16:00 GMT) to the following calendar day, distorting daily comparisons. Grand totals remain the source of truth.`
+  );
+  recommendations.push(
+    'Operational: Reconcile daily machine readings against the Grand Total rather than individual daily columns, as timezone boundaries naturally smooth out over the full billing cycle.'
+  );
+
   if (hubtelGhs > 0 || financialLeakageGhs > 10) {
     rootCauses.push(
       `Financial Settlement Gap: Sales of GHS ${input.appRevenueGhs.toFixed(2)} show an unmatched gap of GHS ${financialLeakageGhs.toFixed(2)} against gateway records.`
@@ -126,17 +134,19 @@ export function generateSimpleAnalysis(input: ReconciliationAnalysisInput): Reco
       ? ` Revenue gap of GHS ${financialLeakageGhs.toFixed(2)} requires follow-up.`
       : ' No significant financial gap detected.');
 
+  const machineTimezoneNote = ` Note: Charging machines utilize Chinese Standard Time (UTC+8), causing evening sessions completed in Ghana (after 16:00 GMT) to slide to the next day in machine logs. Grand totals smooth out this boundary error.`;
+
   const energyAnalysis =
     smartMeterKwh > 0
       ? `Smart meter recorded ${smartMeterKwh.toFixed(2)} kWh grid draw vs ${input.appSessionsKwh.toFixed(2)} kWh in SCMS sessions. ` +
         `Variance: ${energyVarianceKwh > 0 ? '+' : ''}${energyVarianceKwh.toFixed(2)} kWh (${energyVariancePct.toFixed(1)}%). ` +
         (isHighVariance
           ? 'This exceeds the standard 3–5% transformer line loss benchmark and requires investigation.'
-          : 'This is within the standard 3–5% transformer line loss benchmark.')
+          : 'This is within the standard 3–5% transformer line loss benchmark.') + machineTimezoneNote
       : notebookKwh > 0
       ? `Attendant notebook logged ${notebookKwh.toFixed(2)} kWh vs ${input.appSessionsKwh.toFixed(2)} kWh in SCMS sessions. ` +
-        `Difference: ${Math.abs(notebookKwh - input.appSessionsKwh).toFixed(2)} kWh.`
-      : `No external meter source uploaded. SCMS recorded ${input.appSessionsKwh.toFixed(2)} kWh across sessions in this period.`;
+        `Difference: ${Math.abs(notebookKwh - input.appSessionsKwh).toFixed(2)} kWh.` + machineTimezoneNote
+      : `No external meter source uploaded. SCMS recorded ${input.appSessionsKwh.toFixed(2)} kWh across sessions in this period.` + machineTimezoneNote;
 
   const financialAnalysis =
     `App-recorded customer sales: GHS ${input.appRevenueGhs.toFixed(2)}. ` +
