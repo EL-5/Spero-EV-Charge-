@@ -1,17 +1,35 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useDrivers, useWalletTransactions } from '@/hooks/use-database';
-import { Wallet, ArrowDownLeft, ArrowUpRight, Plus, RefreshCw, CreditCard, ShieldCheck } from 'lucide-react';
+import { Wallet, ArrowDownLeft, ArrowUpRight, Plus, RefreshCw, CreditCard, ShieldCheck, Clock, CheckCircle, XCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { useRouter } from 'next/navigation';
-import { requestWalletTopUp } from '@/app/actions/wallets';
+import { requestWalletTopUp, getMyWalletTopUpRequests } from '@/app/actions/wallets';
+
+interface TopUpRequest {
+  id: string;
+  amount: number;
+  method: string;
+  reference: string | null;
+  status: 'pending' | 'approved' | 'rejected';
+  requested_at: string;
+  rejection_reason: string | null;
+}
+
+const requestStatusConfig = {
+  pending: { label: 'Pending Approval', icon: Clock, color: 'text-amber-400', bg: 'bg-amber-500/10 border-amber-500/20' },
+  approved: { label: 'Approved', icon: CheckCircle, color: 'text-emerald-400', bg: 'bg-emerald-500/10 border-emerald-500/20' },
+  rejected: { label: 'Rejected', icon: XCircle, color: 'text-rose-400', bg: 'bg-rose-500/10 border-rose-500/20' },
+};
 
 export default function DriverWalletPage() {
   const [activeDriverId, setActiveDriverId] = useState<string>('');
   const [topUpAmount, setTopUpAmount] = useState('');
   const [loading, setLoading] = useState(false);
+  const [myRequests, setMyRequests] = useState<TopUpRequest[]>([]);
+  const [loadingRequests, setLoadingRequests] = useState(false);
 
   const { data: drivers } = useDrivers();
   const { data: transactions } = useWalletTransactions(activeDriverId);
@@ -26,6 +44,20 @@ export default function DriverWalletPage() {
       }
     });
   }, [router]);
+
+  const fetchMyRequests = useCallback(async () => {
+    setLoadingRequests(true);
+    try {
+      const res = await getMyWalletTopUpRequests();
+      if (res.success) setMyRequests((res.data || []) as TopUpRequest[]);
+    } finally {
+      setLoadingRequests(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (activeDriverId) fetchMyRequests();
+  }, [activeDriverId, fetchMyRequests]);
 
   const currentDriver = drivers?.find(d => d.id === activeDriverId);
 
@@ -52,6 +84,8 @@ export default function DriverWalletPage() {
 
       toast.success(`Request for GHS ${amount} submitted. Awaiting staff approval.`, { id: 'topup' });
       setTopUpAmount('');
+      // Refresh the requests list
+      fetchMyRequests();
     } catch (err: any) {
       toast.error(err.message || 'An unexpected error occurred.', { id: 'topup' });
     } finally {
@@ -67,7 +101,7 @@ export default function DriverWalletPage() {
         <div className="absolute bottom-0 right-0 -mr-16 -mb-16 w-48 h-48 rounded-full bg-blue-500/10 blur-3xl"></div>
         <div className="relative z-10">
           <h1 className="text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-cyan-500 mb-1">Wallet</h1>
-          <p className="text-slate-400 text-xs">Manage funds & top-ups</p>
+          <p className="text-slate-400 text-xs">Manage funds &amp; top-ups</p>
         </div>
       </div>
 
@@ -119,6 +153,9 @@ export default function DriverWalletPage() {
         <h3 className="text-xs font-black text-white uppercase tracking-widest mb-5 flex items-center gap-2">
           <CreditCard size={16} className="text-blue-400" /> Mobile Money Top Up
         </h3>
+        <p className="text-slate-400 text-xs mb-4">
+          Pay your attendant via MoMo or cash, then submit a request below. Staff will approve and credit your wallet.
+        </p>
         <form onSubmit={handleTopUpRequest} className="flex flex-col sm:flex-row gap-4">
           <div className="relative flex-1">
             <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 font-black text-xs uppercase tracking-widest">GHS</span>
@@ -138,6 +175,53 @@ export default function DriverWalletPage() {
             {loading ? <RefreshCw size={16} className="animate-spin" /> : <><Plus size={16} /> Top Up</>}
           </button>
         </form>
+      </div>
+
+      {/* My Top-Up Requests */}
+      <div className="bg-slate-900/40 backdrop-blur-md rounded-3xl p-6 border border-slate-800">
+        <div className="flex items-center justify-between mb-5">
+          <h3 className="text-xs font-black text-white uppercase tracking-widest">My Top-Up Requests</h3>
+          <button
+            onClick={fetchMyRequests}
+            disabled={loadingRequests}
+            className="p-1.5 rounded-xl bg-slate-800 text-slate-400 hover:text-white transition-colors"
+          >
+            <RefreshCw size={13} className={loadingRequests ? 'animate-spin' : ''} />
+          </button>
+        </div>
+        {loadingRequests ? (
+          <div className="text-center py-8 text-slate-500 text-xs">
+            <RefreshCw size={20} className="mx-auto mb-2 animate-spin opacity-30" />
+          </div>
+        ) : myRequests.length === 0 ? (
+          <div className="text-center py-8 text-slate-600 text-xs bg-black/20 rounded-2xl border border-slate-800 border-dashed">
+            No top-up requests yet. Submit one above.
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {myRequests.slice(0, 5).map(req => {
+              const cfg = requestStatusConfig[req.status];
+              const StatusIcon = cfg.icon;
+              return (
+                <div key={req.id} className={`flex justify-between items-start p-4 rounded-2xl border ${cfg.bg}`}>
+                  <div className="flex items-center gap-3">
+                    <StatusIcon size={16} className={cfg.color} />
+                    <div>
+                      <p className="text-sm font-bold text-white">GHS {Number(req.amount).toFixed(2)}</p>
+                      <p className="text-[10px] text-slate-500 mt-0.5 font-mono">
+                        {new Date(req.requested_at).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}
+                      </p>
+                      {req.rejection_reason && (
+                        <p className="text-[10px] text-rose-400 mt-0.5">Reason: {req.rejection_reason}</p>
+                      )}
+                    </div>
+                  </div>
+                  <span className={`text-[10px] font-black uppercase tracking-widest ${cfg.color}`}>{cfg.label}</span>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* Transactions List */}

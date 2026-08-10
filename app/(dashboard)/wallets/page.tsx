@@ -1,12 +1,13 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { TopBar } from '@/components/layout/TopBar';
 import { formatCurrency, formatDateTime } from '@/lib/utils';
-import { Search, Plus, ArrowUpCircle, ArrowDownCircle, Gift } from 'lucide-react';
+import { Search, Plus, ArrowUpCircle, ArrowDownCircle, Gift, Clock, CheckCircle, XCircle, RefreshCw, AlertTriangle } from 'lucide-react';
 import type { Driver } from '@/lib/types';
 import { useDrivers, useWalletTransactions } from '@/hooks/use-database';
-import { topUpWallet } from '@/app/actions/wallets';
+import { topUpWallet, getPendingWalletTopUpRequests, approveWalletTopUpRequest, rejectWalletTopUpRequest } from '@/app/actions/wallets';
 import { useAuthStore } from '@/store/auth';
+import { toast } from 'sonner';
 
 const txTypeColors: Record<string, string> = {
   credit: 'bg-green-100 text-green-700',
@@ -22,6 +23,18 @@ const txTypeIcons: Record<string, React.ReactNode> = {
   bonus: <Gift size={14} />,
 };
 
+interface TopUpRequest {
+  id: string;
+  driver_id: string;
+  amount: number;
+  method: string;
+  reference: string | null;
+  status: 'pending' | 'approved' | 'rejected';
+  requested_at: string;
+  reviewed_at: string | null;
+  rejection_reason: string | null;
+  drivers?: { name: string; phone: string } | null;
+}
 
 export default function WalletsPage() {
   const { user } = useAuthStore();
@@ -31,7 +44,7 @@ export default function WalletsPage() {
   const [search, setSearch] = useState('');
   const [showTopUp, setShowTopUp] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState<'balances' | 'transactions'>('balances');
+  const [activeTab, setActiveTab] = useState<'balances' | 'transactions' | 'requests'>('balances');
   const [formData, setFormData] = useState({
     driver_id: '',
     amount: 0,
@@ -41,8 +54,33 @@ export default function WalletsPage() {
   const [showSuccess, setShowSuccess] = useState(false);
   const [successMessage, setSuccessMessage] = useState({ title: '', message: '' });
 
+  // Pending top-up requests state
+  const [pendingRequests, setPendingRequests] = useState<TopUpRequest[]>([]);
+  const [loadingRequests, setLoadingRequests] = useState(false);
+  const [rejectingId, setRejectingId] = useState<string | null>(null);
+  const [rejectReason, setRejectReason] = useState('');
+  const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
+
   const currentDrivers = drivers || [];
   const currentTransactions = transactions || [];
+
+  const fetchPendingRequests = useCallback(async () => {
+    setLoadingRequests(true);
+    try {
+      const res = await getPendingWalletTopUpRequests();
+      if (res.success) {
+        setPendingRequests((res.data || []) as TopUpRequest[]);
+      }
+    } finally {
+      setLoadingRequests(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (activeTab === 'requests') {
+      fetchPendingRequests();
+    }
+  }, [activeTab, fetchPendingRequests]);
 
   const handleTopUp = async () => {
     setLoading(true);
@@ -58,6 +96,43 @@ export default function WalletsPage() {
       setShowSuccess(true);
     } else {
       alert('Error: ' + res.error);
+    }
+  };
+
+  const handleApprove = async (requestId: string, amount: number, driverName: string) => {
+    if (!window.confirm(`Approve GHS ${amount.toFixed(2)} top-up for ${driverName}? This will immediately credit their wallet.`)) return;
+    setActionLoadingId(requestId);
+    try {
+      const res = await approveWalletTopUpRequest(requestId);
+      if (res.success) {
+        toast.success(`✓ Top-up of GHS ${amount.toFixed(2)} approved for ${driverName}`);
+        setPendingRequests(prev => prev.filter(r => r.id !== requestId));
+      } else {
+        toast.error('Failed to approve: ' + res.error);
+      }
+    } finally {
+      setActionLoadingId(null);
+    }
+  };
+
+  const handleReject = async (requestId: string, driverName: string) => {
+    if (!rejectReason.trim()) {
+      toast.error('Please enter a rejection reason.');
+      return;
+    }
+    setActionLoadingId(requestId);
+    try {
+      const res = await rejectWalletTopUpRequest(requestId, rejectReason);
+      if (res.success) {
+        toast.success(`Request from ${driverName} rejected.`);
+        setPendingRequests(prev => prev.filter(r => r.id !== requestId));
+        setRejectingId(null);
+        setRejectReason('');
+      } else {
+        toast.error('Failed to reject: ' + res.error);
+      }
+    } finally {
+      setActionLoadingId(null);
     }
   };
 
@@ -82,7 +157,7 @@ export default function WalletsPage() {
 
   return (
     <div>
-      <TopBar title="Wallets" subtitle="Driver wallet balances and transaction history" />
+      <TopBar title="Wallets" subtitle="Driver wallet balances, transactions and top-up requests" />
       <div className="p-6 space-y-6">
 
         {/* Summary */}
@@ -100,25 +175,30 @@ export default function WalletsPage() {
             <div className="text-sm mt-1" style={{ color: 'var(--muted-foreground)' }}>Top-ups</div>
           </div>
           <div className="stat-card">
-            <div className="text-2xl font-bold" style={{ color: '#d97706' }}>{currentTransactions.filter((t: any) => t.type === 'bonus').length}</div>
-            <div className="text-sm mt-1" style={{ color: 'var(--muted-foreground)' }}>Bonus Credits</div>
+            <div className="text-2xl font-bold" style={{ color: '#d97706' }}>{pendingRequests.length > 0 ? pendingRequests.length : currentTransactions.filter((t: any) => t.type === 'bonus').length}</div>
+            <div className="text-sm mt-1" style={{ color: 'var(--muted-foreground)' }}>{pendingRequests.length > 0 ? 'Pending Requests' : 'Bonus Credits'}</div>
           </div>
         </div>
 
         {/* Tabs */}
         <div className="flex gap-1 p-1 rounded-xl" style={{ background: 'var(--muted)' }}>
-          {(['balances', 'transactions'] as const).map(tab => (
+          {(['balances', 'transactions', 'requests'] as const).map(tab => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
-              className="flex-1 py-2 text-sm font-medium rounded-lg transition-all capitalize"
+              className="flex-1 py-2 text-sm font-medium rounded-lg transition-all capitalize relative"
               style={{
                 background: activeTab === tab ? 'var(--card)' : 'transparent',
                 color: activeTab === tab ? 'var(--foreground)' : 'var(--muted-foreground)',
                 boxShadow: activeTab === tab ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
               }}
             >
-              {tab}
+              {tab === 'requests' ? 'Pending Requests' : tab}
+              {tab === 'requests' && pendingRequests.length > 0 && (
+                <span className="ml-1.5 inline-flex items-center justify-center w-5 h-5 text-[10px] font-black bg-red-500 text-white rounded-full">
+                  {pendingRequests.length}
+                </span>
+              )}
             </button>
           ))}
         </div>
@@ -257,6 +337,141 @@ export default function WalletsPage() {
                 </tbody>
               </table>
             </div>
+          </div>
+        )}
+
+        {/* ─── PENDING TOP-UP REQUESTS TAB ─── */}
+        {activeTab === 'requests' && (
+          <div className="stat-card overflow-hidden">
+            <div className="flex items-center justify-between p-4 border-b" style={{ borderColor: 'var(--border)' }}>
+              <div>
+                <h3 className="font-semibold" style={{ color: 'var(--foreground)' }}>Pending Driver Top-Up Requests</h3>
+                <p className="text-xs mt-0.5" style={{ color: 'var(--muted-foreground)' }}>
+                  Drivers have paid cash or MoMo — verify payment received before approving.
+                </p>
+              </div>
+              <button
+                onClick={fetchPendingRequests}
+                disabled={loadingRequests}
+                className="btn btn-secondary btn-sm gap-1"
+              >
+                <RefreshCw size={13} className={loadingRequests ? 'animate-spin' : ''} /> Refresh
+              </button>
+            </div>
+
+            {loadingRequests ? (
+              <div className="p-12 text-center text-sm" style={{ color: 'var(--muted-foreground)' }}>
+                <RefreshCw size={24} className="mx-auto mb-3 animate-spin opacity-30" />
+                Loading requests...
+              </div>
+            ) : pendingRequests.length === 0 ? (
+              <div className="p-12 text-center">
+                <CheckCircle size={32} className="mx-auto mb-3 text-green-400 opacity-60" />
+                <p className="font-semibold text-sm" style={{ color: 'var(--foreground)' }}>All caught up!</p>
+                <p className="text-xs mt-1" style={{ color: 'var(--muted-foreground)' }}>No pending top-up requests from drivers.</p>
+              </div>
+            ) : (
+              <div className="divide-y" style={{ borderColor: 'var(--border)' }}>
+                {pendingRequests.map(req => {
+                  const isRejecting = rejectingId === req.id;
+                  const isActionLoading = actionLoadingId === req.id;
+                  const driverName = req.drivers?.name || 'Unknown Driver';
+                  const driverPhone = req.drivers?.phone || '';
+
+                  return (
+                    <div key={req.id} className="p-4 space-y-3">
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center text-amber-700 font-black text-sm flex-shrink-0">
+                            {driverName[0]}
+                          </div>
+                          <div>
+                            <div className="font-semibold text-sm" style={{ color: 'var(--foreground)' }}>{driverName}</div>
+                            <div className="text-xs" style={{ color: 'var(--muted-foreground)' }}>{driverPhone}</div>
+                          </div>
+                        </div>
+                        <div className="text-right flex-shrink-0">
+                          <div className="text-xl font-black text-green-600">{formatCurrency(req.amount)}</div>
+                          <div className="text-xs" style={{ color: 'var(--muted-foreground)' }}>
+                            via {req.method === 'momo_manual' ? 'Mobile Money' : 'Cash'}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-4 text-xs" style={{ color: 'var(--muted-foreground)' }}>
+                        <span className="flex items-center gap-1">
+                          <Clock size={11} />
+                          {formatDateTime(req.requested_at)}
+                        </span>
+                        {req.reference && (
+                          <span className="font-mono bg-slate-100 px-2 py-0.5 rounded text-slate-600">
+                            Ref: {req.reference}
+                          </span>
+                        )}
+                        <span className="badge bg-amber-100 text-amber-700 flex items-center gap-1">
+                          <AlertTriangle size={10} /> Pending
+                        </span>
+                      </div>
+
+                      {/* Reject reason input */}
+                      {isRejecting && (
+                        <div className="flex gap-2">
+                          <input
+                            className="form-input flex-1 text-sm"
+                            placeholder="Rejection reason (required)..."
+                            value={rejectReason}
+                            onChange={e => setRejectReason(e.target.value)}
+                            autoFocus
+                          />
+                        </div>
+                      )}
+
+                      {/* Action buttons */}
+                      <div className="flex gap-2">
+                        {!isRejecting ? (
+                          <>
+                            <button
+                              onClick={() => handleApprove(req.id, req.amount, driverName)}
+                              disabled={isActionLoading}
+                              className="btn btn-primary btn-sm flex-1 gap-1"
+                            >
+                              {isActionLoading ? <RefreshCw size={13} className="animate-spin" /> : <CheckCircle size={13} />}
+                              Approve & Credit Wallet
+                            </button>
+                            <button
+                              onClick={() => { setRejectingId(req.id); setRejectReason(''); }}
+                              disabled={isActionLoading}
+                              className="btn btn-secondary btn-sm gap-1"
+                              style={{ color: '#dc2626' }}
+                            >
+                              <XCircle size={13} /> Reject
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            <button
+                              onClick={() => handleReject(req.id, driverName)}
+                              disabled={isActionLoading || !rejectReason.trim()}
+                              className="btn btn-sm flex-1 gap-1"
+                              style={{ background: '#dc2626', color: 'white' }}
+                            >
+                              {isActionLoading ? <RefreshCw size={13} className="animate-spin" /> : <XCircle size={13} />}
+                              Confirm Rejection
+                            </button>
+                            <button
+                              onClick={() => { setRejectingId(null); setRejectReason(''); }}
+                              className="btn btn-secondary btn-sm"
+                            >
+                              Cancel
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         )}
 
