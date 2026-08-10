@@ -476,6 +476,27 @@ export default function ReconciliationPage() {
   });
   const dailyRows = Object.values(dailyRowsMap).sort((a, b) => b.date.localeCompare(a.date));
 
+  const totalSmartMeter = dailyRows.reduce((sum, r) => sum + r.smartMeter, 0);
+  const totalMachine = dailyRows.reduce((sum, r) => sum + r.machine, 0);
+  const totalNotebook = dailyRows.reduce((sum, r) => sum + r.notebook, 0);
+  const totalAppKwh = dailyRows.reduce((sum, r) => sum + r.appKwh, 0);
+
+  const smartMeterTotalVariance = totalSmartMeter > 0 ? totalSmartMeter - totalAppKwh : 0;
+  const machineTotalVariance = totalMachine > 0 ? totalMachine - totalAppKwh : 0;
+  const notebookTotalVariance = totalNotebook > 0 ? totalNotebook - totalAppKwh : 0;
+
+  const smartMeterTotalPct = totalAppKwh > 0 ? (Math.abs(smartMeterTotalVariance) / totalAppKwh) * 100 : 0;
+  const machineTotalPct = totalAppKwh > 0 ? (Math.abs(machineTotalVariance) / totalAppKwh) * 100 : 0;
+  const notebookTotalPct = totalAppKwh > 0 ? (Math.abs(notebookTotalVariance) / totalAppKwh) * 100 : 0;
+
+  const maxTotalPct = Math.max(
+    totalSmartMeter > 0 ? smartMeterTotalPct : 0,
+    totalMachine > 0 ? machineTotalPct : 0,
+    totalNotebook > 0 ? notebookTotalPct : 0
+  );
+
+  const grandTotalStatus = maxTotalPct <= 5 ? 'good' : maxTotalPct <= 15 ? 'warning' : 'critical';
+
   const handleAddKwhReading = async () => {
     const val = parseFloat(kwhValue);
     if (!kwhDate) return toast.error('Please select a date.');
@@ -992,6 +1013,57 @@ export default function ReconciliationPage() {
                           </>
                         );
                       })}
+                      {/* Grand Total Row */}
+                      {dailyRows.length > 0 && (
+                        <tr className="bg-slate-900/90 font-extrabold border-t-2 border-slate-700">
+                          <td className="px-4 py-4"></td>
+                          <td className="px-4 py-4 text-white text-sm uppercase tracking-wider">
+                            Grand Total
+                          </td>
+                          <td className="px-4 py-4 text-right font-mono text-emerald-300 text-sm">
+                            {totalSmartMeter > 0 ? `${totalSmartMeter.toFixed(3)} kWh` : <span className="text-slate-600">—</span>}
+                            {totalSmartMeter > 0 && (
+                              <div className={`text-xs font-bold ${varianceClass(smartMeterTotalVariance, totalAppKwh)}`}>
+                                {smartMeterTotalVariance >= 0 ? '+' : ''}{smartMeterTotalVariance.toFixed(3)} ({smartMeterTotalVariance >= 0 ? '+' : ''}{smartMeterTotalPct.toFixed(1)}%)
+                              </div>
+                            )}
+                          </td>
+                          <td className="px-4 py-4 text-right font-mono text-purple-300 text-sm">
+                            {totalMachine > 0 ? `${totalMachine.toFixed(3)} kWh` : <span className="text-slate-600">—</span>}
+                            {totalMachine > 0 && (
+                              <div className={`text-xs font-bold ${varianceClass(machineTotalVariance, totalAppKwh)}`}>
+                                {machineTotalVariance >= 0 ? '+' : ''}{machineTotalVariance.toFixed(3)} ({machineTotalVariance >= 0 ? '+' : ''}{machineTotalPct.toFixed(1)}%)
+                              </div>
+                            )}
+                          </td>
+                          <td className="px-4 py-4 text-right font-mono text-blue-300 text-sm">
+                            {totalNotebook > 0 ? `${totalNotebook.toFixed(3)} kWh` : <span className="text-slate-600">—</span>}
+                            {totalNotebook > 0 && (
+                              <div className={`text-xs font-bold ${varianceClass(notebookTotalVariance, totalAppKwh)}`}>
+                                {notebookTotalVariance >= 0 ? '+' : ''}{notebookTotalVariance.toFixed(3)} ({notebookTotalVariance >= 0 ? '+' : ''}{notebookTotalPct.toFixed(1)}%)
+                              </div>
+                            )}
+                          </td>
+                          <td className="px-4 py-4 text-right font-mono text-[#00E676] text-sm">
+                            {totalAppKwh > 0 ? `${totalAppKwh.toFixed(3)} kWh` : <span className="text-slate-600">0.000</span>}
+                          </td>
+                          <td className="px-4 py-4 text-center">
+                            {grandTotalStatus === 'good' ? (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-black bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                                <CheckCircle size={11} /> Good
+                              </span>
+                            ) : grandTotalStatus === 'warning' ? (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-black bg-amber-500/15 text-amber-400 border border-amber-500/30">
+                                <AlertTriangle size={11} /> Warning
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-black bg-red-500/15 text-red-400 border border-red-500/30">
+                                <ShieldAlert size={11} /> Critical
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      )}
                     </tbody>
                   </table>
                 </div>
