@@ -25,21 +25,40 @@ export default function DebtsPage() {
   const allDrivers = drivers || [];
   const allSessions = sessions || [];
 
-  // Drivers with outstanding debt
-  const debtors = allDrivers.filter((d: Driver) => d.debtBalance > 0);
-  const totalDebt = debtors.reduce((sum: number, d: Driver) => sum + d.debtBalance, 0);
-
-  // Sessions that are pending payment (status = 'pending_payment' or 'active' with a non-zero amount)
-  const pendingSessions = allSessions.filter((s: any) =>
-    s.status === 'pending_payment' || (s.status === 'active' && (s.prepaidAmount || 0) > 0)
+  // Unified pending payment sessions definition (66 sessions total)
+  const allPendingPaymentSessions = allSessions.filter((s: any) =>
+    s.status === 'pending_payment' ||
+    (s.status === 'completed' && (s.paymentStatus === 'unpaid' || !s.paymentStatus || s.paymentStatus === ''))
   );
 
-  // Completed sessions that have no recorded payment (paymentStatus = 'unpaid')
-  const unpaidCompletedSessions = allSessions.filter((s: any) =>
-    s.status === 'completed' && (s.paymentStatus === 'unpaid' || !s.paymentStatus || s.paymentStatus === '')
-  );
+  // Group pending session amounts by driverId
+  const pendingDebtByDriver: Record<string, number> = {};
+  allPendingPaymentSessions.forEach((s: any) => {
+    if (s.driverId) {
+      const amount = s.totalAmount || s.prepaidAmount || 0;
+      pendingDebtByDriver[s.driverId] = (pendingDebtByDriver[s.driverId] || 0) + amount;
+    }
+  });
 
-  const allPendingPaymentSessions = [...pendingSessions, ...unpaidCompletedSessions];
+  // Map drivers to dynamically calculate their debt balance (column + pending sessions)
+  const driversWithDynamicDebt = allDrivers.map((d: Driver) => {
+    const sessionDebt = pendingDebtByDriver[d.id] || 0;
+    return {
+      ...d,
+      debtBalance: d.debtBalance + sessionDebt,
+    };
+  });
+
+  // Debtors list: drivers with dynamic debt > 0
+  const debtors = driversWithDynamicDebt.filter((d: any) => d.debtBalance > 0);
+
+  // Total Outstanding Debt Card: sums registered driver debts + unregistered/guest pending session debts
+  const registeredDriversDebt = debtors.reduce((sum: number, d: any) => sum + d.debtBalance, 0);
+  const unregisteredPendingDebt = allPendingPaymentSessions
+    .filter((s: any) => !s.driverId || !allDrivers.some(d => d.id === s.driverId))
+    .reduce((sum: number, s: any) => sum + (s.totalAmount || s.prepaidAmount || 0), 0);
+
+  const totalDebt = registeredDriversDebt + unregisteredPendingDebt;
 
   const filteredPending = allPendingPaymentSessions.filter((s: any) =>
     search.trim() === '' ||

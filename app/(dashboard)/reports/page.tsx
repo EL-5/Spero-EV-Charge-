@@ -48,10 +48,9 @@ export default function ReportsPage() {
     if (!inRange) return false;
 
     if (selectedReport === 'pending_sessions') {
-      // Sessions pending payment: status is pending_payment, OR completed but unpaid
+      // Sessions pending payment: status is pending_payment, OR completed but unpaid (exact unified logic)
       return s.status === 'pending_payment' ||
-             (s.status === 'completed' && (!s.paymentStatus || s.paymentStatus === 'unpaid')) ||
-             (s.status === 'active' && (s.prepaidAmount || 0) > 0);
+             (s.status === 'completed' && (!s.paymentStatus || s.paymentStatus === 'unpaid' || s.paymentStatus === ''));
     }
 
     return s.status === 'completed';

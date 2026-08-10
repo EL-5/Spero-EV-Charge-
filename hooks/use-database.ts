@@ -53,8 +53,6 @@ export function useDashboardStats(options: { attendantId?: string } = {}) {
 
       let sessionQuery = supabase.from('sessions').select('*', { count: 'exact', head: true }).eq('status', 'completed').gte('created_at', todayISO);
       let activeQuery = supabase.from('sessions').select('*', { count: 'exact', head: true }).eq('status', 'active');
-      // FIX: Count BOTH 'active' and 'pending_payment' as pending — previously only 'active' was counted
-      let pendingQuery = supabase.from('sessions').select('*', { count: 'exact', head: true }).in('status', ['active', 'pending_payment']);
       let revenueQuery = supabase.from('payments').select('amount').gte('created_at', todayISO);
       let unitsQuery = supabase.from('sessions').select('units_consumed').eq('status', 'completed').gte('created_at', todayISO);
       let allTimeUnitsQuery = supabase.from('sessions').select('units_consumed').eq('status', 'completed');
@@ -62,21 +60,53 @@ export function useDashboardStats(options: { attendantId?: string } = {}) {
       if (options.attendantId) {
         sessionQuery = sessionQuery.eq('attendant_id', options.attendantId);
         activeQuery = activeQuery.eq('attendant_id', options.attendantId);
-        pendingQuery = pendingQuery.eq('attendant_id', options.attendantId);
         revenueQuery = revenueQuery.eq('attendant_id', options.attendantId);
         unitsQuery = unitsQuery.eq('attendant_id', options.attendantId);
         allTimeUnitsQuery = allTimeUnitsQuery.eq('attendant_id', options.attendantId);
       }
 
-      const { count: sessionCount } = await sessionQuery;
-      const { count: activeCount } = await activeQuery;
-      const { count: pendingCount } = await pendingQuery;
-      const { count: driverCount } = await supabase.from('drivers').select('*', { count: 'exact', head: true });
-      const { count: vehicleCount } = await supabase.from('vehicles').select('*', { count: 'exact', head: true });
-      
-      const { data: revenueData } = await revenueQuery;
-      const { data: unitsData } = await unitsQuery;
-      const { data: allTimeUnitsData } = await allTimeUnitsQuery;
+      // Fetch all sessions to calculate pending counts and amounts dynamically
+      let unpaidSessionsQuery = supabase
+        .from('sessions')
+        .select('status, payment_status, total_amount, prepaid_amount');
+
+      if (options.attendantId) {
+        unpaidSessionsQuery = unpaidSessionsQuery.eq('attendant_id', options.attendantId);
+      }
+
+      const [
+        { count: sessionCount },
+        { count: activeCount },
+        { data: allUnpaidData },
+        { count: driverCount },
+        { count: vehicleCount },
+        { data: revenueData },
+        { data: unitsData },
+        { data: allTimeUnitsData }
+      ] = await Promise.all([
+        sessionQuery,
+        activeQuery,
+        unpaidSessionsQuery,
+        supabase.from('drivers').select('*', { count: 'exact', head: true }),
+        supabase.from('vehicles').select('*', { count: 'exact', head: true }),
+        revenueQuery,
+        unitsQuery,
+        allTimeUnitsQuery
+      ]);
+
+      const pendingSessionsFiltered = (allUnpaidData || []).filter(s =>
+        s.status === 'pending_payment' ||
+        (s.status === 'completed' && (s.payment_status === 'unpaid' || !s.payment_status))
+      );
+
+      const pendingCount = pendingSessionsFiltered.length;
+      const totalPendingAmount = pendingSessionsFiltered.reduce((sum, s) =>
+        sum + (s.total_amount || s.prepaid_amount || 0), 0
+      );
+
+      // Sum all driver database debt balances
+      const { data: driversDebtData } = await supabase.from('drivers').select('debt_balance');
+      const totalDriversDebt = driversDebtData?.reduce((sum, d) => sum + (Number(d.debt_balance) || 0), 0) || 0;
       
       const totalRevenue = revenueData?.reduce((acc, p) => acc + (p.amount || 0), 0) || 0;
       const totalUnits = unitsData?.reduce((acc, s) => acc + (Number(s.units_consumed) || 0), 0) || 0;
@@ -88,13 +118,15 @@ export function useDashboardStats(options: { attendantId?: string } = {}) {
         revenueToday: totalRevenue,
         totalSessions: sessionCount || 0,
         activeSessions: activeCount || 0,
-        pendingPayments: pendingCount || 0, // FIX: now includes both active + pending_payment
+        pendingPayments: pendingCount || 0,
         totalDrivers: driverCount || 0,
         totalVehicles: vehicleCount || 0,
         unitsSoldToday: totalUnits,
         totalUnitsAllTime: totalUnitsAllTime,
         averageUnitsPerSession: averageUnitsPerSession,
-      } as Partial<DashboardStats> & { unitsSoldToday: number; totalUnitsAllTime: number; averageUnitsPerSession: number; };
+        totalReceivables: totalDriversDebt + totalPendingAmount,
+        pendingPaymentsAmount: totalPendingAmount,
+      } as any;
     },
   });
 }

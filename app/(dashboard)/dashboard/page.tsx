@@ -301,8 +301,7 @@ export default function DashboardPage() {
             </div>
             <div className="stat-card">
               <div className="text-sm text-slate-500 mb-1">Pending Payments</div>
-              {/* FIX: Count both 'active' and 'pending_payment' sessions */}
-              <div className="text-xl font-bold text-red-600">{displaySessions.filter((s: any) => s.status === 'active' || s.status === 'pending_payment').length}</div>
+              <div className="text-xl font-bold text-red-600">{stats.pendingPayments || 0}</div>
             </div>
           </div>
 
@@ -532,7 +531,7 @@ export default function DashboardPage() {
 
   if (isAccountant) {
     const netRevenue = totalRevenue * 0.985; // Example 1.5% processing fee estimation
-    const totalReceivables = drivers?.reduce((sum:any, d:any) => sum + d.debtBalance, 0) || 0;
+    const totalReceivables = stats.totalReceivables || 0;
     
     return (
       <div>
