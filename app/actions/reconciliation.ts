@@ -193,3 +193,47 @@ export async function deleteReconciliation(id: string) {
     return { success: false, error: error.message || 'Failed to delete record.' };
   }
 }
+
+// ─── Daily kWh Readings ──────────────────────────────────────────────────────
+
+export async function addKwhDailyReading(formData: {
+  reading_date: string;
+  source: 'smart_meter' | 'machine' | 'notebook';
+  kwh: number;
+  notes?: string;
+}) {
+  try {
+    const user = await requireAuth(['super_admin', 'manager', 'finance']);
+
+    const { error } = await supabaseAdmin
+      .from('kwh_daily_readings')
+      .insert([{
+        reading_date: formData.reading_date,
+        source: formData.source,
+        kwh: formData.kwh,
+        notes: formData.notes || null,
+        created_by: user.id,
+      }]);
+
+    if (error) throw error;
+
+    revalidatePath('/reconciliation');
+    return { success: true };
+  } catch (error: any) {
+    console.error('[KWH-DAILY] add error:', error);
+    return { success: false, error: error.message || 'Failed to add kWh reading.' };
+  }
+}
+
+export async function deleteKwhDailyReading(id: string) {
+  try {
+    await requireAuth(['super_admin', 'manager', 'finance']);
+    const { error } = await supabaseAdmin.from('kwh_daily_readings').delete().eq('id', id);
+    if (error) throw error;
+    revalidatePath('/reconciliation');
+    return { success: true };
+  } catch (error: any) {
+    console.error('[KWH-DAILY] delete error:', error);
+    return { success: false, error: error.message || 'Failed to delete reading.' };
+  }
+}

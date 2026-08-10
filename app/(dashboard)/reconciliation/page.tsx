@@ -5,14 +5,14 @@ import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import { TopBar } from '@/components/layout/TopBar';
-import { useReconciliations, useSessions, usePayments } from '@/hooks/use-database';
-import { saveMultiDocumentReconciliationReport, deleteReconciliation, addReconciliation } from '@/app/actions/reconciliation';
+import { useReconciliations, useSessions, usePayments, useKwhDailyReadings } from '@/hooks/use-database';
+import { saveMultiDocumentReconciliationReport, deleteReconciliation, addReconciliation, addKwhDailyReading, deleteKwhDailyReading } from '@/app/actions/reconciliation';
 import { toast } from 'sonner';
 import {
   BarChart2, CreditCard, Clock, Upload, Trash2,
   AlertTriangle, CheckCircle2, FileText, Smartphone, RefreshCw,
   Download, Sparkles, BookOpen, FileSpreadsheet, X, ShieldAlert, CheckCircle,
-  TrendingDown, DollarSign, Activity, FileCheck
+  TrendingDown, DollarSign, Activity, FileCheck, Zap, ChevronDown, ChevronRight, PlusCircle, FlaskConical
 } from 'lucide-react';
 
 interface UploadedFileMeta {
@@ -24,15 +24,44 @@ interface UploadedFileMeta {
   dailyRows?: Array<{ day: string; dateStr?: string; kwh?: number; amount?: number }>;
 }
 
+// ─── Types ────────────────────────────────────────────────────────────────────
+interface DailyKwhRow {
+  date: string;
+  smartMeter: number;
+  machine: number;
+  notebook: number;
+  appKwh: number;
+  entries: Array<{ id: string; source: 'smart_meter' | 'machine' | 'notebook'; kwh: number; notes: string | null }>;
+}
+
+interface AnalysisResult {
+  date: string;
+  smartMeterVariance: number;
+  machineVariance: number;
+  notebookVariance: number;
+  status: 'good' | 'warning' | 'critical';
+}
+
 export default function ReconciliationPage() {
   const { data: reconciliations, isLoading, refetch } = useReconciliations();
   const { data: sessions } = useSessions({ loadAll: true });
   const { data: payments } = usePayments();
+  const { data: kwhReadings, refetch: refetchKwh } = useKwhDailyReadings();
 
-  // Active Tab state: 'energy' | 'hubtel' | 'history'
-  const [activeTab, setActiveTab] = useState<'energy' | 'hubtel' | 'history'>('energy');
+  // Active Tab state: 'energy' | 'hubtel' | 'daily' | 'history'
+  const [activeTab, setActiveTab] = useState<'energy' | 'hubtel' | 'daily' | 'history'>('energy');
 
   const [generatingReport, setGeneratingReport] = useState(false);
+
+  // ─── Daily kWh state ────────────────────────────────────────────────────────
+  const [kwhDate, setKwhDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [kwhSource, setKwhSource] = useState<'smart_meter' | 'machine' | 'notebook'>('smart_meter');
+  const [kwhValue, setKwhValue] = useState('');
+  const [kwhNotes, setKwhNotes] = useState('');
+  const [savingKwh, setSavingKwh] = useState(false);
+  const [expandedDates, setExpandedDates] = useState<Set<string>>(new Set());
+  const [analysisResult, setAnalysisResult] = useState<AnalysisResult[] | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   // 3 Optional Document Upload States
   const [meterFile, setMeterFile] = useState<UploadedFileMeta | null>(null);
@@ -415,6 +444,109 @@ export default function ReconciliationPage() {
   const liveGapAmount = Math.max(0, totalAppRevenueLive - hubtelCollectedLive);
   const liveGapPct = totalAppRevenueLive > 0 ? (liveGapAmount / totalAppRevenueLive) * 100 : 0;
 
+  // ─── Daily kWh helpers ──────────────────────────────────────────────────────
+
+  // Compute app kWh per calendar date from sessions
+  const appKwhByDate: Record<string, number> = {};
+  (sessions || []).forEach(s => {
+    if (!s.unitsConsumed) return;
+    const d = (s.createdAt || '').slice(0, 10);
+    if (!d) return;
+    appKwhByDate[d] = (appKwhByDate[d] || 0) + Number(s.unitsConsumed);
+  });
+
+  // Build grouped table rows from kwh readings
+  const dailyRowsMap: Record<string, DailyKwhRow> = {};
+  (kwhReadings || []).forEach(r => {
+    if (!dailyRowsMap[r.readingDate]) {
+      dailyRowsMap[r.readingDate] = {
+        date: r.readingDate,
+        smartMeter: 0,
+        machine: 0,
+        notebook: 0,
+        appKwh: Number((appKwhByDate[r.readingDate] || 0).toFixed(3)),
+        entries: [],
+      };
+    }
+    const row = dailyRowsMap[r.readingDate];
+    if (r.source === 'smart_meter') row.smartMeter += r.kwh;
+    else if (r.source === 'machine') row.machine += r.kwh;
+    else if (r.source === 'notebook') row.notebook += r.kwh;
+    row.entries.push({ id: r.id, source: r.source, kwh: r.kwh, notes: r.notes });
+  });
+  const dailyRows = Object.values(dailyRowsMap).sort((a, b) => b.date.localeCompare(a.date));
+
+  const handleAddKwhReading = async () => {
+    const val = parseFloat(kwhValue);
+    if (!kwhDate) return toast.error('Please select a date.');
+    if (isNaN(val) || val <= 0) return toast.error('Please enter a valid kWh value greater than 0.');
+    setSavingKwh(true);
+    const res = await addKwhDailyReading({
+      reading_date: kwhDate,
+      source: kwhSource,
+      kwh: val,
+      notes: kwhNotes.trim() || undefined,
+    });
+    setSavingKwh(false);
+    if (res.success) {
+      toast.success('kWh reading saved!');
+      setKwhValue('');
+      setKwhNotes('');
+      refetchKwh();
+    } else {
+      toast.error(res.error || 'Failed to save reading.');
+    }
+  };
+
+  const handleDeleteKwhReading = async (id: string) => {
+    setDeletingId(id);
+    const res = await deleteKwhDailyReading(id);
+    setDeletingId(null);
+    if (res.success) {
+      toast.success('Reading deleted.');
+      refetchKwh();
+    } else {
+      toast.error(res.error || 'Failed to delete.');
+    }
+  };
+
+  const handleAnalyze = () => {
+    if (dailyRows.length === 0) return toast.error('No readings to analyze yet.');
+    const results: AnalysisResult[] = dailyRows.map(row => {
+      const refs = [row.smartMeter, row.machine, row.notebook].filter(v => v > 0);
+      const maxVariance = refs.length > 0
+        ? Math.max(...refs.map(v => Math.abs(v - row.appKwh)))
+        : 0;
+      const maxPct = refs.length > 0 && row.appKwh > 0
+        ? (maxVariance / row.appKwh) * 100
+        : 0;
+      return {
+        date: row.date,
+        smartMeterVariance: row.smartMeter > 0 ? row.smartMeter - row.appKwh : 0,
+        machineVariance: row.machine > 0 ? row.machine - row.appKwh : 0,
+        notebookVariance: row.notebook > 0 ? row.notebook - row.appKwh : 0,
+        status: maxPct <= 5 ? 'good' : maxPct <= 15 ? 'warning' : 'critical',
+      };
+    });
+    setAnalysisResult(results);
+    toast.success('Analysis complete!');
+  };
+
+  const sourceLabel = (s: string) =>
+    s === 'smart_meter' ? 'Smart Meter' : s === 'machine' ? 'Charging Machine' : 'Attendant Notebook';
+  const sourceBadgeClass = (s: string) =>
+    s === 'smart_meter' ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
+      : s === 'machine' ? 'bg-purple-500/20 text-purple-400 border-purple-500/30'
+      : 'bg-blue-500/20 text-blue-400 border-blue-500/30';
+  const varianceClass = (v: number, ref: number) => {
+    if (ref === 0) return 'text-slate-500';
+    const pct = Math.abs(v) / (ref > 0 ? ref : 1) * 100;
+    if (pct <= 5) return 'text-emerald-400';
+    if (pct <= 15) return 'text-amber-400';
+    return 'text-red-400';
+  };
+  const getAnalysisForDate = (date: string) => analysisResult?.find(a => a.date === date);
+
   return (
     <div className="min-h-screen pb-12">
       <TopBar
@@ -448,6 +580,18 @@ export default function ReconciliationPage() {
           >
             <CreditCard size={16} />
             <span>Hubtel Settlement Gap</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('daily')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg font-bold text-xs sm:text-sm whitespace-nowrap transition-all ${
+              activeTab === 'daily'
+                ? 'bg-[#00E676] text-slate-950 shadow-md scale-[1.02]'
+                : 'text-slate-400 hover:text-white hover:bg-slate-800/50 font-medium'
+            }`}
+          >
+            <Zap size={16} />
+            <span>Daily kWh Log</span>
           </button>
 
           <button
@@ -615,6 +759,285 @@ export default function ReconciliationPage() {
                 </div>
 
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* ==================== TAB 3: DAILY KWH LOG ==================== */}
+        {activeTab === 'daily' && (
+          <div className="space-y-6 animate-in fade-in duration-200">
+
+            {/* Entry Form */}
+            <div className="stat-card p-4 sm:p-6 space-y-5">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 pb-4 border-b border-slate-800">
+                <div>
+                  <h3 className="text-base sm:text-lg font-bold text-white flex items-center gap-2">
+                    <PlusCircle size={18} className="text-[#00E676]" />
+                    Log Daily kWh Reading
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-1">
+                    Enter kWh consumed per source per day. Multiple entries per date are allowed.
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
+                {/* Date */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Date</label>
+                  <input
+                    type="date"
+                    value={kwhDate}
+                    onChange={e => setKwhDate(e.target.value)}
+                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-[#00E676] transition-colors"
+                  />
+                </div>
+
+                {/* Source */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Source</label>
+                  <select
+                    value={kwhSource}
+                    onChange={e => setKwhSource(e.target.value as any)}
+                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-[#00E676] transition-colors"
+                  >
+                    <option value="smart_meter">Smart Meter</option>
+                    <option value="machine">Charging Machine</option>
+                    <option value="notebook">Attendant Notebook</option>
+                  </select>
+                </div>
+
+                {/* kWh value */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-slate-400 uppercase tracking-wide">kWh Consumed</label>
+                  <input
+                    type="number"
+                    step="0.001"
+                    min="0"
+                    placeholder="e.g. 12.500"
+                    value={kwhValue}
+                    onChange={e => setKwhValue(e.target.value)}
+                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2.5 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-[#00E676] transition-colors"
+                  />
+                </div>
+
+                {/* Save button */}
+                <button
+                  onClick={handleAddKwhReading}
+                  disabled={savingKwh}
+                  className="btn bg-[#00E676] text-slate-950 font-extrabold hover:bg-[#00c865] disabled:opacity-40 gap-2 text-sm py-2.5"
+                >
+                  <PlusCircle size={15} />
+                  {savingKwh ? 'Saving...' : 'Add Reading'}
+                </button>
+              </div>
+
+              {/* Optional notes */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Notes (optional)</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Morning shift reading, Meter ID 04..."
+                  value={kwhNotes}
+                  onChange={e => setKwhNotes(e.target.value)}
+                  className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2.5 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-[#00E676] transition-colors"
+                />
+              </div>
+            </div>
+
+            {/* Comparison Table */}
+            <div className="stat-card p-4 sm:p-6 space-y-5">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 pb-4 border-b border-slate-800">
+                <div>
+                  <h3 className="text-base sm:text-lg font-bold text-white flex items-center gap-2">
+                    <BarChart2 size={18} className="text-[#00E676]" />
+                    kWh Comparison Table
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-1">
+                    Aggregated daily readings from each source vs SCMS app recorded kWh.
+                  </p>
+                </div>
+                <button
+                  onClick={handleAnalyze}
+                  disabled={dailyRows.length === 0}
+                  className="btn bg-purple-600 hover:bg-purple-700 text-white font-extrabold disabled:opacity-40 gap-2 text-sm px-5 py-2.5 shadow-lg"
+                >
+                  <FlaskConical size={15} />
+                  Analyze
+                </button>
+              </div>
+
+              {dailyRows.length === 0 ? (
+                <div className="text-center py-16 space-y-3">
+                  <div className="w-14 h-14 rounded-full bg-slate-800/60 border border-slate-700/50 flex items-center justify-center text-slate-500 mx-auto">
+                    <Zap size={28} />
+                  </div>
+                  <p className="text-sm font-medium text-slate-400">No readings yet. Add your first kWh entry above.</p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto rounded-xl border border-slate-800">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="bg-slate-900/80 border-b border-slate-800">
+                        <th className="text-left px-4 py-3 text-xs font-bold text-slate-400 uppercase tracking-wide w-10"></th>
+                        <th className="text-left px-4 py-3 text-xs font-bold text-slate-400 uppercase tracking-wide">Date</th>
+                        <th className="text-right px-4 py-3 text-xs font-bold text-emerald-400 uppercase tracking-wide">
+                          <div className="flex items-center justify-end gap-1.5"><BarChart2 size={12} /> Smart Meter</div>
+                        </th>
+                        <th className="text-right px-4 py-3 text-xs font-bold text-purple-400 uppercase tracking-wide">
+                          <div className="flex items-center justify-end gap-1.5"><Zap size={12} /> Machine</div>
+                        </th>
+                        <th className="text-right px-4 py-3 text-xs font-bold text-blue-400 uppercase tracking-wide">
+                          <div className="flex items-center justify-end gap-1.5"><BookOpen size={12} /> Notebook</div>
+                        </th>
+                        <th className="text-right px-4 py-3 text-xs font-bold text-[#00E676] uppercase tracking-wide">
+                          <div className="flex items-center justify-end gap-1.5"><Smartphone size={12} /> App (SCMS)</div>
+                        </th>
+                        <th className="text-center px-4 py-3 text-xs font-bold text-slate-400 uppercase tracking-wide">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800/60">
+                      {dailyRows.map(row => {
+                        const analysis = getAnalysisForDate(row.date);
+                        const isExpanded = expandedDates.has(row.date);
+                        const toggleExpand = () => {
+                          setExpandedDates(prev => {
+                            const next = new Set(prev);
+                            if (next.has(row.date)) next.delete(row.date);
+                            else next.add(row.date);
+                            return next;
+                          });
+                        };
+                        return (
+                          <>
+                            {/* Summary row */}
+                            <tr key={row.date} className="hover:bg-slate-900/40 transition-colors cursor-pointer" onClick={toggleExpand}>
+                              <td className="px-4 py-3 text-slate-500">
+                                {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                              </td>
+                              <td className="px-4 py-3 font-bold text-white font-mono">
+                                {new Date(row.date + 'T00:00:00').toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+                                <span className="ml-2 text-xs text-slate-500 font-normal">{row.entries.length} entr{row.entries.length === 1 ? 'y' : 'ies'}</span>
+                              </td>
+                              <td className="px-4 py-3 text-right font-mono font-bold text-emerald-300">
+                                {row.smartMeter > 0 ? `${row.smartMeter.toFixed(3)} kWh` : <span className="text-slate-600">—</span>}
+                                {analysis && row.smartMeter > 0 && (
+                                  <div className={`text-xs ${varianceClass(analysis.smartMeterVariance, row.appKwh)}`}>
+                                    {analysis.smartMeterVariance >= 0 ? '+' : ''}{analysis.smartMeterVariance.toFixed(3)}
+                                  </div>
+                                )}
+                              </td>
+                              <td className="px-4 py-3 text-right font-mono font-bold text-purple-300">
+                                {row.machine > 0 ? `${row.machine.toFixed(3)} kWh` : <span className="text-slate-600">—</span>}
+                                {analysis && row.machine > 0 && (
+                                  <div className={`text-xs ${varianceClass(analysis.machineVariance, row.appKwh)}`}>
+                                    {analysis.machineVariance >= 0 ? '+' : ''}{analysis.machineVariance.toFixed(3)}
+                                  </div>
+                                )}
+                              </td>
+                              <td className="px-4 py-3 text-right font-mono font-bold text-blue-300">
+                                {row.notebook > 0 ? `${row.notebook.toFixed(3)} kWh` : <span className="text-slate-600">—</span>}
+                                {analysis && row.notebook > 0 && (
+                                  <div className={`text-xs ${varianceClass(analysis.notebookVariance, row.appKwh)}`}>
+                                    {analysis.notebookVariance >= 0 ? '+' : ''}{analysis.notebookVariance.toFixed(3)}
+                                  </div>
+                                )}
+                              </td>
+                              <td className="px-4 py-3 text-right font-mono font-bold text-[#00E676]">
+                                {row.appKwh > 0 ? `${row.appKwh.toFixed(3)} kWh` : <span className="text-slate-600">0.000</span>}
+                              </td>
+                              <td className="px-4 py-3 text-center">
+                                {!analysis ? (
+                                  <span className="text-xs text-slate-600">—</span>
+                                ) : analysis.status === 'good' ? (
+                                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                                    <CheckCircle size={11} /> Good
+                                  </span>
+                                ) : analysis.status === 'warning' ? (
+                                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-amber-500/15 text-amber-400 border border-amber-500/30">
+                                    <AlertTriangle size={11} /> Warning
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-red-500/15 text-red-400 border border-red-500/30">
+                                    <ShieldAlert size={11} /> Critical
+                                  </span>
+                                )}
+                              </td>
+                            </tr>
+
+                            {/* Expanded individual entries */}
+                            {isExpanded && row.entries.map(entry => (
+                              <tr key={entry.id} className="bg-slate-950/60 border-t border-slate-800/40">
+                                <td className="px-4 py-2.5"></td>
+                                <td className="px-4 py-2.5 pl-8" colSpan={2}>
+                                  <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-semibold border ${sourceBadgeClass(entry.source)}`}>
+                                    {sourceLabel(entry.source)}
+                                  </span>
+                                  {entry.notes && <span className="ml-2 text-xs text-slate-500">{entry.notes}</span>}
+                                </td>
+                                <td className="px-4 py-2.5 text-right font-mono text-slate-300 text-xs" colSpan={3}>
+                                  {entry.kwh.toFixed(3)} kWh
+                                </td>
+                                <td className="px-4 py-2.5 text-center">
+                                  <button
+                                    onClick={e => { e.stopPropagation(); handleDeleteKwhReading(entry.id); }}
+                                    disabled={deletingId === entry.id}
+                                    className="p-1.5 rounded-lg text-slate-500 hover:text-red-400 hover:bg-red-500/10 transition-colors disabled:opacity-40"
+                                  >
+                                    <Trash2 size={13} />
+                                  </button>
+                                </td>
+                              </tr>
+                            ))}
+                          </>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {/* Analysis Summary Cards */}
+              {analysisResult && analysisResult.length > 0 && (
+                <div className="space-y-3 pt-2">
+                  <div className="flex items-center gap-2 text-purple-400 font-bold text-sm">
+                    <FlaskConical size={16} />
+                    <span>Variance Analysis Summary</span>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    {/* Smart Meter total variance */}
+                    <div className="p-4 rounded-xl bg-slate-900/60 border border-emerald-500/20 space-y-1">
+                      <span className="text-xs font-semibold text-emerald-400 flex items-center gap-1"><BarChart2 size={12} /> Smart Meter vs App</span>
+                      <div className="text-xl font-black font-mono text-white">
+                        {analysisResult.reduce((s, a) => s + a.smartMeterVariance, 0).toFixed(3)} kWh
+                      </div>
+                      <div className="text-xs text-slate-400">Total accumulated variance</div>
+                    </div>
+                    <div className="p-4 rounded-xl bg-slate-900/60 border border-purple-500/20 space-y-1">
+                      <span className="text-xs font-semibold text-purple-400 flex items-center gap-1"><Zap size={12} /> Machine vs App</span>
+                      <div className="text-xl font-black font-mono text-white">
+                        {analysisResult.reduce((s, a) => s + a.machineVariance, 0).toFixed(3)} kWh
+                      </div>
+                      <div className="text-xs text-slate-400">Total accumulated variance</div>
+                    </div>
+                    <div className="p-4 rounded-xl bg-slate-900/60 border border-blue-500/20 space-y-1">
+                      <span className="text-xs font-semibold text-blue-400 flex items-center gap-1"><BookOpen size={12} /> Notebook vs App</span>
+                      <div className="text-xl font-black font-mono text-white">
+                        {analysisResult.reduce((s, a) => s + a.notebookVariance, 0).toFixed(3)} kWh
+                      </div>
+                      <div className="text-xs text-slate-400">Total accumulated variance</div>
+                    </div>
+                  </div>
+                  {/* Days breakdown */}
+                  <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800 text-xs space-y-2">
+                    <div className="flex gap-6 text-slate-400 font-semibold">
+                      <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-emerald-400 inline-block"></span> Good (≤5% diff): {analysisResult.filter(a => a.status === 'good').length} days</span>
+                      <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-amber-400 inline-block"></span> Warning (5–15%): {analysisResult.filter(a => a.status === 'warning').length} days</span>
+                      <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-red-400 inline-block"></span> Critical (&gt;15%): {analysisResult.filter(a => a.status === 'critical').length} days</span>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}

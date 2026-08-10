@@ -630,3 +630,29 @@ export function useReconciliations() {
     },
   });
 }
+
+// --- Daily kWh Readings ---
+export function useKwhDailyReadings() {
+  useRealtimeSync('kwh_daily_readings', [['kwh_daily_readings']]);
+
+  return useQuery({
+    queryKey: ['kwh_daily_readings'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('kwh_daily_readings')
+        .select('*')
+        .order('reading_date', { ascending: false })
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      return (data || []).map((r: any) => ({
+        id: r.id,
+        readingDate: r.reading_date as string,
+        source: r.source as 'smart_meter' | 'machine' | 'notebook',
+        kwh: Number(r.kwh),
+        notes: r.notes as string | null,
+        createdAt: r.created_at as string,
+      }));
+    },
+  });
+}
