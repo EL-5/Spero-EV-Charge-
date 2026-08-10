@@ -12,6 +12,7 @@ import {
   useSettings 
 } from '@/hooks/use-database';
 import { initiatePrepaidSession, processPayment, stopSessionWithRefund } from '@/app/actions/sessions';
+import { requestWalletTopUp } from '@/app/actions/wallets';
 import { supabase } from '@/lib/supabase';
 import { 
   User, Zap, Play, Square, 
@@ -126,13 +127,19 @@ export default function DriverPortalPage() {
     const amount = Number(topUpAmount);
     if (isNaN(amount) || amount <= 0) return toast.error('Enter valid amount');
 
+    toast.loading('Submitting top-up request...', { id: 'topup' });
     try {
-      const newBal = Number(currentDriver.walletBalance || 0) + amount;
-      await supabase.from('drivers').update({ wallet_balance: newBal }).eq('id', activeDriverId);
+      const res = await requestWalletTopUp({
+        amount,
+        method: 'momo_manual',
+        reference: 'Driver Portal Quick Top-Up',
+      });
+      if (!res.success) throw new Error(res.error || 'Failed to submit request');
+      
+      toast.success(`Request for GHS ${amount} submitted. Awaiting staff approval.`, { id: 'topup' });
       queryClient.invalidateQueries({ queryKey: ['drivers'] });
-      toast.success(`Wallet topped up by GHS ${amount}`);
     } catch (e: any) {
-      toast.error(e.message);
+      toast.error(e.message || 'An unexpected error occurred.', { id: 'topup' });
     }
   };
 

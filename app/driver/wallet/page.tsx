@@ -6,6 +6,7 @@ import { useDrivers, useWalletTransactions } from '@/hooks/use-database';
 import { Wallet, ArrowDownLeft, ArrowUpRight, Plus, RefreshCw, CreditCard, ShieldCheck } from 'lucide-react';
 import { toast } from 'sonner';
 import { useRouter } from 'next/navigation';
+import { requestWalletTopUp } from '@/app/actions/wallets';
 
 export default function DriverWalletPage() {
   const [activeDriverId, setActiveDriverId] = useState<string>('');
@@ -34,36 +35,28 @@ export default function DriverWalletPage() {
     if (isNaN(amount) || amount <= 0) return toast.error('Enter a valid amount');
 
     setLoading(true);
-    toast.loading('Simulating Mobile Money Prompt...', { id: 'topup' });
+    toast.loading('Submitting Mobile Money Top-Up Request...', { id: 'topup' });
     
-    // Simulate payment flow (in reality, this calls Hubtel/Paystack API)
-    setTimeout(async () => {
-      try {
-        if (!currentDriver) throw new Error('Profile not loaded');
-        const newBal = Number(currentDriver.walletBalance || 0) + amount;
-        
-        // 1. Update wallet balance
-        await supabase.from('drivers').update({ wallet_balance: newBal }).eq('id', activeDriverId);
-        
-        // 2. Insert transaction record
-        await supabase.from('wallet_transactions').insert([{
-          driver_id: activeDriverId,
-          type: 'top_up',
-          amount: amount,
-          balance_before: currentDriver.walletBalance || 0,
-          balance_after: newBal,
-          description: 'Mobile Money Top Up (Simulated)',
-          created_by: activeDriverId
-        }]);
+    try {
+      if (!currentDriver) throw new Error('Profile not loaded');
+      
+      const res = await requestWalletTopUp({
+        amount,
+        method: 'momo_manual',
+        reference: 'Driver Portal Self-Request',
+      });
 
-        toast.success(`Successfully topped up GHS ${amount}`, { id: 'topup' });
-        setTopUpAmount('');
-      } catch (err: any) {
-        toast.error(err.message, { id: 'topup' });
-      } finally {
-        setLoading(false);
+      if (!res.success) {
+        throw new Error(res.error || 'Failed to submit request');
       }
-    }, 2000);
+
+      toast.success(`Request for GHS ${amount} submitted. Awaiting staff approval.`, { id: 'topup' });
+      setTopUpAmount('');
+    } catch (err: any) {
+      toast.error(err.message || 'An unexpected error occurred.', { id: 'topup' });
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
