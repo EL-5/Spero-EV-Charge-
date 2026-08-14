@@ -24,6 +24,10 @@ export async function startSession(formData: {
   attendant_id: string;
   shift_id?: string;
   pricing_id?: string;
+  custom_date?: string;
+  is_completed?: boolean;
+  units_consumed?: number;
+  total_amount?: number;
 }) {
   try {
     await requireAuth(['super_admin', 'manager', 'attendant']);
@@ -62,31 +66,48 @@ export async function startSession(formData: {
 
     const receiptNumber = generateReceiptNumber();
 
-    const { error } = await supabaseAdmin.from('sessions').insert([
-      {
-        receipt_number: receiptNumber,
-        driver_id: formData.driver_id,
-        vehicle_id: formData.vehicle_id,
-        shift_id: formData.shift_id,
-        pricing_id: formData.pricing_id, // Store the tier used
-        driver_name: driverRes.data?.name || 'Unknown',
-        vehicle_plate: vehicleRes.data?.plate_number || 'Unknown',
-        vehicle_details: `${vehicleRes.data?.brand} ${vehicleRes.data?.model}`,
-        mode: formData.mode,
-        unit_type: formData.unit_type,
-        status: 'active',
-        rate_at_time: actualRate,
-        prepaid_amount: formData.prepaid_amount || 0,
-        attendant_id: formData.attendant_id,
-        start_time: new Date().toISOString(),
-      },
-    ]);
+    const sessionTime = formData.custom_date
+      ? new Date(formData.custom_date).toISOString()
+      : new Date().toISOString();
+
+    const insertData: any = {
+      receipt_number: receiptNumber,
+      driver_id: formData.driver_id,
+      vehicle_id: formData.vehicle_id,
+      shift_id: formData.shift_id,
+      pricing_id: formData.pricing_id, // Store the tier used
+      driver_name: driverRes.data?.name || 'Unknown',
+      vehicle_plate: vehicleRes.data?.plate_number || 'Unknown',
+      vehicle_details: `${vehicleRes.data?.brand} ${vehicleRes.data?.model}`,
+      mode: formData.mode,
+      unit_type: formData.unit_type,
+      status: formData.is_completed ? 'pending_payment' : 'active',
+      rate_at_time: actualRate,
+      prepaid_amount: formData.prepaid_amount || 0,
+      attendant_id: formData.attendant_id,
+      start_time: sessionTime,
+      created_at: sessionTime,
+    };
+
+    if (formData.is_completed) {
+      const units = formData.units_consumed || 0;
+      const computedAmount = formData.total_amount || (units * actualRate);
+      insertData.units_consumed = units;
+      insertData.total_amount = computedAmount;
+      insertData.end_time = sessionTime;
+    }
+
+    const { data: newSession, error } = await supabaseAdmin
+      .from('sessions')
+      .insert([insertData])
+      .select('id, receipt_number, total_amount, driver_id, mode, status, unit_type, rate_at_time, units_consumed, created_at')
+      .single();
 
     if (error) throw error;
 
     revalidatePath('/sessions');
     revalidatePath('/dashboard');
-    return { success: true };
+    return { success: true, session: newSession };
   } catch (error: any) {
     console.error('[SESSIONS] startSession error:', error);
     if (error.message?.startsWith('Unauthenticated') || error.message?.startsWith('Forbidden')) {
@@ -111,7 +132,7 @@ export async function processPayment(data: {
     // Fetch session details for the payment record
     const { data: session } = await supabaseAdmin
       .from('sessions')
-      .select('receipt_number, driver_id, driver_name, total_amount, charger_id, connector_number, mode, status, end_time')
+      .select('receipt_number, driver_id, driver_name, total_amount, charger_id, connector_number, mode, status, end_time, start_time, created_at')
       .eq('id', data.session_id)
       .single();
 
@@ -164,10 +185,12 @@ export async function processPayment(data: {
         balance_before: currentBalance,
         balance_after: newBalance,
         description: `Payment for Session ${session.receipt_number}`,
+        created_at: session.created_at || session.start_time || new Date().toISOString(),
       }]);
     }
 
-    // 1. Create payment record
+    // 1. Create payment record (preserve historical timestamp if backdated)
+    const paymentTimestamp = session.created_at || session.start_time || new Date().toISOString();
     const { error: payError } = await supabaseAdmin.from('payments').insert([{
       session_id: data.session_id,
       receipt_number: session.receipt_number,
@@ -177,6 +200,7 @@ export async function processPayment(data: {
       reference: data.reference,
       status: 'completed',
       attendant_id: attendantId,
+      created_at: paymentTimestamp,
     }]);
     if (payError) throw payError;
 

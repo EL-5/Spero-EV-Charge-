@@ -3,7 +3,7 @@ import { useState, useEffect, useRef } from 'react';
 import { toast } from 'sonner';
 import { TopBar } from '@/components/layout/TopBar';
 import { formatCurrency, formatDateTime, getStatusColor, getStatusLabel } from '@/lib/utils';
-import { Search, Plus, Zap, Clock, CheckCircle, XCircle, UserPlus, Car, AlertTriangle, DollarSign, Smartphone, Wallet, Trash2, Upload, Camera, FileImage, ShieldCheck } from 'lucide-react';
+import { Search, Plus, Zap, Clock, CheckCircle, XCircle, UserPlus, Car, AlertTriangle, DollarSign, Smartphone, Wallet, Trash2, Upload, Camera, FileImage, ShieldCheck, Calendar, History } from 'lucide-react';
 import type { Session } from '@/lib/types';
 import { useSessions, useDrivers, useVehicles, useShifts, usePricing } from '@/hooks/use-database';
 import { useAuthStore } from '@/store/auth';
@@ -12,6 +12,15 @@ import { addDriver } from '@/app/actions/drivers';
 import { addVehicle } from '@/app/actions/vehicles';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
+
+function getLocalDatetimeString(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  const hours = String(date.getHours()).padStart(2, '0');
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  return `${year}-${month}-${day}T${hours}:${minutes}`;
+}
 
 // Sub-step inside the Start Session modal
 type ModalStep = 'session' | 'register_new';
@@ -42,6 +51,12 @@ export default function SessionsPage() {
   const [loading, setLoading] = useState(false);
   const [selected, setSelected] = useState<Session | null>(null);
   
+  // Backdated charge state
+  const [isBackdated, setIsBackdated] = useState(false);
+  const [backdatedDate, setBackdatedDate] = useState('');
+  const [isBackdatedCompleted, setIsBackdatedCompleted] = useState(true);
+  const [backdatedUnits, setBackdatedUnits] = useState<number>(0);
+
   // Completion/Payment state
   const [isCompleting, setIsCompleting] = useState(false);
   const [completeForm, setCompleteForm] = useState({ units: 0, amount: 0 });
@@ -87,6 +102,13 @@ export default function SessionsPage() {
   const handleStart = async () => {
     if (!user) return toast.error('Session expired. Please login again.');
     if (!activeShift) return toast.error('You must START A SHIFT on the Dashboard before starting a session.');
+
+    if (isBackdated && !backdatedDate) {
+      return toast.error('Please select a date and time for the backdated session.');
+    }
+    if (isBackdated && isBackdatedCompleted && (!backdatedUnits || backdatedUnits <= 0)) {
+      return toast.error('Please enter the units consumed (kWh) for the completed session.');
+    }
     
     // Find specific selected rate or fallback to unit-type default
     const selectedRate = activeRates?.find(r => r.id === formData.pricing_id) || 
@@ -102,13 +124,31 @@ export default function SessionsPage() {
       rate_at_time: rateToUse,
       attendant_id: user.id,
       shift_id: activeShift.id,
+      custom_date: isBackdated && backdatedDate ? new Date(backdatedDate).toISOString() : undefined,
+      is_completed: isBackdated ? isBackdatedCompleted : false,
+      units_consumed: isBackdated && isBackdatedCompleted ? backdatedUnits : undefined,
+      total_amount: isBackdated && isBackdatedCompleted ? (backdatedUnits * rateToUse) : undefined,
     });
     setLoading(false);
     if (res.success) {
       setShowNew(false);
+      const savedDriverId = formData.driver_id;
       setFormData({ driver_id: '', vehicle_id: '', unit_type: 'kwh', pricing_id: '', prepaid_amount: 0 });
+      setIsBackdated(false);
+      setBackdatedUnits(0);
       await refetchSessions();
-      toast.success('Session started successfully!');
+
+      if (isBackdated && isBackdatedCompleted && res.session) {
+        toast.success('Backdated session recorded successfully!');
+        const targetSession = res.session as any;
+        setSelected(targetSession);
+        setIsPaying(true);
+        setActualAmount(targetSession.total_amount || (backdatedUnits * rateToUse));
+        const driver = drivers?.find(d => d.id === savedDriverId);
+        if (driver) setPaymentPhone(driver.phone);
+      } else {
+        toast.success(isBackdated ? 'Backdated session created!' : 'Session started successfully!');
+      }
     } else {
       toast.error('Error: ' + res.error);
     }
@@ -701,14 +741,123 @@ export default function SessionsPage() {
                       </div>
                     )}
 
+                    {/* Backdated Charge Section */}
+                    <div className="pt-3 border-t border-slate-100">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <Calendar size={16} className={isBackdated ? "text-amber-600" : "text-slate-400"} />
+                          <div>
+                            <div className="text-xs font-bold text-slate-800">Record Past / Backdated Charge</div>
+                            <div className="text-[10px] text-slate-500">Record a charge from a previous date (e.g. yesterday)</div>
+                          </div>
+                        </div>
+                        <label className="relative inline-flex items-center cursor-pointer">
+                          <input 
+                            type="checkbox" 
+                            className="sr-only peer" 
+                            checked={isBackdated} 
+                            onChange={e => {
+                              const checked = e.target.checked;
+                              setIsBackdated(checked);
+                              if (checked && !backdatedDate) {
+                                const yesterday = new Date();
+                                yesterday.setDate(yesterday.getDate() - 1);
+                                setBackdatedDate(getLocalDatetimeString(yesterday));
+                              }
+                            }} 
+                          />
+                          <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-amber-500"></div>
+                        </label>
+                      </div>
+
+                      {isBackdated && (
+                        <div className="mt-3 p-3.5 rounded-xl bg-amber-50/70 border border-amber-200 space-y-3 animate-in fade-in duration-200">
+                          <div>
+                            <label className="form-label text-xs text-amber-900 font-bold mb-1">Session Date & Time *</label>
+                            <input 
+                              type="datetime-local" 
+                              className="form-input text-xs bg-white border-amber-200 focus:ring-amber-400 font-medium"
+                              value={backdatedDate}
+                              onChange={e => setBackdatedDate(e.target.value)}
+                            />
+                            <div className="flex gap-2 mt-1.5">
+                              <button 
+                                type="button" 
+                                onClick={() => {
+                                  const d = new Date();
+                                  d.setDate(d.getDate() - 1);
+                                  setBackdatedDate(getLocalDatetimeString(d));
+                                }}
+                                className="px-2.5 py-1 text-[10px] font-bold rounded-lg bg-amber-100 text-amber-900 hover:bg-amber-200 transition-colors"
+                              >
+                                Yesterday (Same time)
+                              </button>
+                              <button 
+                                type="button" 
+                                onClick={() => {
+                                  const d = new Date();
+                                  d.setDate(d.getDate() - 2);
+                                  setBackdatedDate(getLocalDatetimeString(d));
+                                }}
+                                className="px-2.5 py-1 text-[10px] font-bold rounded-lg bg-amber-100 text-amber-900 hover:bg-amber-200 transition-colors"
+                              >
+                                2 Days Ago
+                              </button>
+                            </div>
+                          </div>
+
+                          <div className="pt-2 border-t border-amber-200/60">
+                            <label className="flex items-center gap-2 cursor-pointer mb-2">
+                              <input 
+                                type="checkbox" 
+                                checked={isBackdatedCompleted}
+                                onChange={e => setIsBackdatedCompleted(e.target.checked)}
+                                className="rounded border-amber-300 text-amber-600 focus:ring-amber-500"
+                              />
+                              <span className="text-xs font-bold text-amber-900">Mark charge as Already Completed</span>
+                            </label>
+
+                            {isBackdatedCompleted && (
+                              <div className="space-y-2 pl-6 pt-1">
+                                <div>
+                                  <label className="form-label text-[11px] text-amber-900 font-bold mb-1">Energy Delivered ({formData.unit_type.toUpperCase()}) *</label>
+                                  <input 
+                                    type="number"
+                                    step="0.1"
+                                    min="0.1"
+                                    className="form-input text-xs bg-white border-amber-200 font-bold"
+                                    placeholder="Enter kWh delivered (e.g. 25)"
+                                    value={backdatedUnits || ''}
+                                    onChange={e => setBackdatedUnits(parseFloat(e.target.value) || 0)}
+                                  />
+                                </div>
+                                {backdatedUnits > 0 && (
+                                  <div className="p-2 rounded-lg bg-white border border-amber-200 flex items-center justify-between text-xs">
+                                    <span className="text-amber-800 font-medium">Calculated Bill:</span>
+                                    <span className="font-black text-amber-900">
+                                      {formatCurrency(backdatedUnits * (
+                                        activeRates?.find(r => r.id === formData.pricing_id)?.rate || 
+                                        activeRates?.find(r => r.unitType === formData.unit_type)?.rate || 5.5
+                                      ))}
+                                    </span>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
                     <div className="flex gap-3 pt-2">
                       <button onClick={closeModal} className="btn btn-secondary flex-1" disabled={loading}>Cancel</button>
                       <button
                         onClick={handleStart}
-                        className="btn btn-primary flex-1 gap-2"
-                        disabled={loading || !formData.driver_id || !formData.vehicle_id}
+                        className={`btn flex-1 gap-2 ${isBackdated ? 'bg-amber-600 hover:bg-amber-700 text-white' : 'btn-primary'}`}
+                        disabled={loading || !formData.driver_id || !formData.vehicle_id || (isBackdated && isBackdatedCompleted && backdatedUnits <= 0)}
                       >
-                        <Zap size={15} /> {loading ? 'Starting...' : 'Start Session'}
+                        {isBackdated ? <History size={15} /> : <Zap size={15} />}
+                        {loading ? 'Saving...' : isBackdated ? 'Record Past Charge' : 'Start Session'}
                       </button>
                     </div>
                   </div>
