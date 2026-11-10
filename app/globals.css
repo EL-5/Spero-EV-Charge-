@@ -331,5 +331,15 @@ tbody tr:hover td { background: var(--muted); }
 .att-chip-bad { background: #ffe3df; color: #9b1c13; }
 .att-chip-mute { background: #e8ecf2; color: #1b3a6b; }
 .att-display { font-family: var(--font-display); letter-spacing: -0.02em; }
-.pb-safe { padding-bottom: max(env(safe-area-inset-bottom), 0px); }
-.pt-safe { padding-top: max(env(safe-area-inset-top), 0px); }
+/* Safe areas: the page draws edge to edge (viewport-fit=cover), so anything that sits
+   at a screen edge must add the device's inset (notch, status bar, home bar) to its
+   normal spacing. These classes ADD the inset; they do not replace the spacing. */
+.pb-safe { padding-bottom: env(safe-area-inset-bottom, 0px); }
+.att-safe-top { padding-top: calc(env(safe-area-inset-top, 0px) + 0.75rem); }
+.att-gutter {
+  --gutter: 1rem;
+  padding-left: max(var(--gutter), env(safe-area-inset-left, 0px));
+  padding-right: max(var(--gutter), env(safe-area-inset-right, 0px));
+}
+@media (min-width: 640px) { .att-gutter { --gutter: 1.5rem; } }
+@media (min-width: 1024px) { .att-gutter { --gutter: 2rem; } }

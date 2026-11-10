@@ -58,7 +58,7 @@ export default function AttendShell({ children }: { children: React.ReactNode })
   return (
     <div className="min-h-dvh bg-ground text-navy lg:flex">
       {/* Side rail: tablets lying down and larger */}
-      <nav aria-label="Main" className="hidden lg:flex lg:w-[104px] lg:flex-shrink-0 lg:flex-col lg:items-center lg:gap-2 lg:bg-navy lg:px-3 lg:py-5">
+      <nav aria-label="Main" className="hidden lg:sticky lg:top-0 lg:flex lg:h-dvh lg:w-[calc(104px+env(safe-area-inset-left,0px))] lg:flex-shrink-0 lg:flex-col lg:items-center lg:gap-2 lg:bg-navy lg:pb-[max(1.25rem,env(safe-area-inset-bottom,0px))] lg:pl-[max(0.75rem,env(safe-area-inset-left,0px))] lg:pr-3 lg:pt-[calc(env(safe-area-inset-top,0px)+1.25rem)]">
         <span className="mb-3 flex h-[58px] w-[58px] items-center justify-center rounded-[18px] bg-white">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/spero-emblem.png" alt="Spero" className="h-11 w-11 object-contain" />
@@ -94,9 +94,9 @@ export default function AttendShell({ children }: { children: React.ReactNode })
         </button>
       </nav>
 
-      <div className="flex min-w-0 flex-1 flex-col pb-28 lg:pb-0">
+      <div className="flex min-w-0 flex-1 flex-col pb-[calc(7rem+env(safe-area-inset-bottom,0px))] lg:pb-0">
         {/* Brand bar: phones and upright tablets */}
-        <header className="pt-safe flex items-center justify-between gap-3 px-4 pt-4 sm:px-6 lg:hidden">
+        <header className="att-safe-top att-gutter flex items-center justify-between gap-3 pb-1 lg:hidden">
           <span className="flex items-center gap-2.5">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src="/spero-emblem.png" alt="Spero" className="h-11 w-11 object-contain" />
@@ -110,13 +110,13 @@ export default function AttendShell({ children }: { children: React.ReactNode })
           </button>
         </header>
 
-        <main className="mx-auto w-full max-w-[1280px] flex-1 p-4 sm:p-6 lg:p-8">{children}</main>
+        <main className="att-gutter mx-auto w-full max-w-[1280px] flex-1 py-4 sm:py-6 lg:py-8">{children}</main>
       </div>
 
       {/* Tab bar: phones and upright tablets */}
       <nav
         aria-label="Main"
-        className="pb-safe fixed inset-x-0 bottom-0 z-40 grid grid-cols-3 items-end border-t border-line bg-white px-6 lg:hidden"
+        className="pb-safe att-gutter fixed inset-x-0 bottom-0 z-40 grid grid-cols-3 items-end border-t border-line bg-white lg:hidden"
       >
         <Link href="/attend" aria-current={items[0].active ? 'page' : undefined} className={`flex h-20 flex-col items-center justify-center gap-1 text-[13px] ${items[0].active ? 'font-semibold text-brand-green-dark' : 'text-ink-soft'}`}>
           <House size={26} aria-hidden />
