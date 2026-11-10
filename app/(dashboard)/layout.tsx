@@ -1,18 +1,27 @@
 'use client';
 import { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { useAuthStore } from '@/store/auth';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, isInitialized } = useAuthStore();
+  const { isAuthenticated, isInitialized, user } = useAuthStore();
   const router = useRouter();
+  const pathname = usePathname();
+
+  // Attendants record sessions in the tablet app (/attend). The management pages
+  // for sessions, payments, receipts and shifts are closed to them; Drivers and
+  // Vehicles stay open so they can still register someone.
+  const attendantBlocked =
+    user?.role === 'attendant' && !/^\/(drivers|vehicles)(\/|$)/.test(pathname);
 
   useEffect(() => {
     if (isInitialized && !isAuthenticated) {
       router.push('/login');
+    } else if (isInitialized && attendantBlocked) {
+      router.replace('/attend');
     }
-  }, [isInitialized, isAuthenticated, router]);
+  }, [isInitialized, isAuthenticated, attendantBlocked, router]);
 
   if (!isInitialized) {
     return (
@@ -25,7 +34,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     );
   }
 
-  if (!isAuthenticated) return null;
+  if (!isAuthenticated || attendantBlocked) return null;
 
   return (
     <div className="flex h-screen overflow-hidden" style={{ background: 'var(--background)' }}>

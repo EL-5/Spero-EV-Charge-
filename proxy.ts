@@ -15,7 +15,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 // Routes that do NOT require authentication
 const PUBLIC_PATHS = ['/login', '/manifest.json', '/driver-login', '/driver-register'];
 // Routes that are completely public (static assets, webhooks, etc.)
-const PUBLIC_PREFIXES = ['/_next/', '/api/webhooks/', '/favicon', '/spero-logo'];
+const PUBLIC_PREFIXES = ['/_next/', '/api/webhooks/', '/favicon', '/spero-logo', '/spero-emblem'];
 
 export default async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;

@@ -30,7 +30,7 @@ export async function startSession(formData: {
   total_amount?: number;
 }) {
   try {
-    await requireAuth(['super_admin', 'manager', 'attendant']);
+    await requireAuth(['super_admin', 'manager']) /* attendants use app/actions/gun-sessions.ts */;
     const [driverRes, vehicleRes] = await Promise.all([
       supabaseAdmin.from('drivers').select('name').eq('id', formData.driver_id).single(),
       supabaseAdmin.from('vehicles').select('plate_number, brand, model').eq('id', formData.vehicle_id).single(),
@@ -126,7 +126,7 @@ export async function processPayment(data: {
   attendant_id: string;
 }) {
   try {
-    const authUser = await requireAuth(['super_admin', 'manager', 'attendant']);
+    const authUser = await requireAuth(['super_admin', 'manager']) /* attendants use app/actions/gun-sessions.ts */;
     const attendantId = data.attendant_id === 'system' ? authUser.id : data.attendant_id;
 
     // Fetch session details for the payment record
@@ -335,7 +335,7 @@ export async function processPayment(data: {
 }
 export async function updateSessionStatus(id: string, status: string) {
   try {
-    await requireAuth(['super_admin', 'manager', 'attendant']);
+    await requireAuth(['super_admin', 'manager']) /* attendants use app/actions/gun-sessions.ts */;
 
     const VALID_STATUSES = ['active', 'pending_payment', 'completed', 'cancelled'];
     if (!VALID_STATUSES.includes(status)) {
@@ -365,7 +365,7 @@ export async function completeSession(id: string, data: {
   total_amount: number;
 }) {
   try {
-    await requireAuth(['super_admin', 'manager', 'attendant']);
+    await requireAuth(['super_admin', 'manager']) /* attendants use app/actions/gun-sessions.ts */;
 
     // 1. Fetch current session details to check payment status
     const { data: session } = await supabaseAdmin
@@ -446,7 +446,7 @@ export async function initiatePrepaidSession(data: {
   guest_plate?: string;
 }) {
   try {
-    const authUser = await requireAuth(['super_admin', 'manager', 'attendant']);
+    const authUser = await requireAuth(['super_admin', 'manager']) /* attendants use app/actions/gun-sessions.ts */;
     const isAttendantMode = !!data.attendant_id;
 
     let driverName = data.guest_name || 'Guest Driver';
@@ -559,7 +559,7 @@ export async function initiatePrepaidSession(data: {
 
 export async function stopSessionWithRefund(sessionId: string, actualUnitsConsumed: number) {
   try {
-    await requireAuth(['super_admin', 'manager', 'attendant']);
+    await requireAuth(['super_admin', 'manager']) /* attendants use app/actions/gun-sessions.ts */;
 
     // 1. Fetch current session details
     const { data: session, error } = await supabaseAdmin

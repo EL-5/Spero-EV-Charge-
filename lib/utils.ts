@@ -39,6 +39,11 @@ export function formatDateTime(dateStr: string): string {
   });
 }
 
+/** 24-hour time, e.g. 09:54 — the same way the machine and the attendants' notes read. */
+export function formatClock(dateStr: string): string {
+  return new Date(dateStr).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false });
+}
+
 export function formatTime(dateStr: string): string {
   return new Date(dateStr).toLocaleTimeString('en-GH', {
     hour: '2-digit',

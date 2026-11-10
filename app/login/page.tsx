@@ -13,7 +13,7 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const { login, isAuthenticated, isInitialized } = useAuthStore();
+  const { login, isAuthenticated, isInitialized, user } = useAuthStore();
   const { data: liveStats } = useDashboardStats();
   const { data: shifts } = useShifts();
   const activeShiftsCount = shifts?.filter((s: any) => s.status === 'active').length || 0;
@@ -28,10 +28,10 @@ export default function LoginPage() {
   
   // Auto-redirect if already authenticated
   useEffect(() => {
-    if (isInitialized && isAuthenticated) {
-      router.replace('/dashboard');
+    if (isInitialized && isAuthenticated && user) {
+      router.replace(user.role === 'attendant' ? '/attend' : '/dashboard');
     }
-  }, [isInitialized, isAuthenticated, router]);
+  }, [isInitialized, isAuthenticated, user, router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -39,7 +39,8 @@ export default function LoginPage() {
     setError('');
     const result = await login(email, password);
     if (result.ok) {
-      router.push('/dashboard');
+      const role = useAuthStore.getState().user?.role;
+      router.push(role === 'attendant' ? '/attend' : '/dashboard');
     } else {
       setError(result.error || 'Invalid credentials. Please try again.');
     }

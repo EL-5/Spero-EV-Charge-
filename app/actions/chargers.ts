@@ -137,7 +137,7 @@ export async function sendOcppCommand(data: {
   payload?: any;
 }) {
   try {
-    await requireAuth(['super_admin', 'manager', 'attendant']);
+    await requireAuth(['super_admin', 'manager']);
 
     // Fetch the target charger's gateway_instance_id to route the command properly
     const { data: charger } = await supabaseAdmin

@@ -1,52 +1,75 @@
 @import "tailwindcss";
 
+/* Spero brand palette — taken from the logo.
+   Navy = structure, green = action / key number, orange = "a person should look". */
 :root {
-  --background: #f8fafc;
-  --foreground: #0f172a;
+  --navy: #1b3a6b;
+  --navy-2: #2b4c83;
+  --navy-3: #3b5a91;
+  --brand-green: #76b918;
+  --brand-green-dark: #3f7a08;
+  --brand-orange: #ec7c03;
+
+  --background: #f2f5fa;
+  --foreground: #1b3a6b;
   --card: #ffffff;
-  --card-foreground: #0f172a;
+  --card-foreground: #1b3a6b;
   --popover: #ffffff;
-  --popover-foreground: #0f172a;
-  --primary: #1d4ed8;
+  --popover-foreground: #1b3a6b;
+  --primary: #1b3a6b;
   --primary-foreground: #ffffff;
-  --secondary: #f1f5f9;
-  --secondary-foreground: #1e293b;
-  --muted: #f8fafc;
-  --muted-foreground: #64748b;
-  --accent: #eff6ff;
-  --accent-foreground: #1d4ed8;
-  --destructive: #ef4444;
+  --secondary: #e8ecf2;
+  --secondary-foreground: #1b3a6b;
+  --muted: #f2f5fa;
+  --muted-foreground: #4a5b78;
+  --accent: #e3f1cc;
+  --accent-foreground: #1b3a6b;
+  --destructive: #9b1c13;
   --destructive-foreground: #ffffff;
-  --border: #e2e8f0;
-  --input: #e2e8f0;
-  --ring: #1d4ed8;
+  --border: #dae1ec;
+  --input: #dae1ec;
+  --ring: #1b3a6b;
   --radius: 0.625rem;
-  --sidebar-bg: #1e293b;
-  --sidebar-fg: #94a3b8;
-  --sidebar-active: #3b82f6;
-  --sidebar-active-bg: rgba(59, 130, 246, 0.15);
+  --sidebar-bg: #1b3a6b;
+  --sidebar-fg: #d3dcec;
+  --sidebar-active: #76b918;
+  --sidebar-active-bg: rgba(118, 185, 24, 0.18);
 }
 
 .dark {
-  --background: #0f172a;
-  --foreground: #f8fafc;
-  --card: #1e293b;
-  --card-foreground: #f8fafc;
-  --popover: #1e293b;
-  --popover-foreground: #f8fafc;
-  --primary: #3b82f6;
-  --primary-foreground: #ffffff;
-  --secondary: #1e293b;
-  --secondary-foreground: #f8fafc;
-  --muted: #1e293b;
-  --muted-foreground: #94a3b8;
-  --accent: #1e3a5f;
-  --accent-foreground: #93c5fd;
-  --destructive: #ef4444;
+  --background: #0f1b33;
+  --foreground: #f2f5fa;
+  --card: #1b2b4d;
+  --card-foreground: #f2f5fa;
+  --popover: #1b2b4d;
+  --popover-foreground: #f2f5fa;
+  --primary: #76b918;
+  --primary-foreground: #1b3a6b;
+  --secondary: #1b2b4d;
+  --secondary-foreground: #f2f5fa;
+  --muted: #1b2b4d;
+  --muted-foreground: #a9bbd9;
+  --accent: #2b4c83;
+  --accent-foreground: #e3f1cc;
+  --destructive: #ef6b61;
   --destructive-foreground: #ffffff;
-  --border: #334155;
-  --input: #334155;
-  --ring: #3b82f6;
+  --border: #34548a;
+  --input: #34548a;
+  --ring: #76b918;
+}
+
+/* Tailwind utilities for the brand colours: bg-navy, text-brand-green, ... */
+@theme inline {
+  --color-navy: #1b3a6b;
+  --color-navy-2: #2b4c83;
+  --color-navy-3: #3b5a91;
+  --color-brand-green: #76b918;
+  --color-brand-green-dark: #3f7a08;
+  --color-brand-orange: #ec7c03;
+  --color-ink-soft: #4a5b78;
+  --color-line: #dae1ec;
+  --color-ground: #f2f5fa;
+  --font-display: var(--font-space-grotesk), 'Space Grotesk', Inter, sans-serif;
 }
 
 /* Theme variables for Tailwind integration */
@@ -62,21 +85,21 @@
 body {
   background-color: var(--background);
   color: var(--foreground);
-  font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif;
+  font-family: var(--font-inter), -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif;
   -webkit-font-smoothing: antialiased;
 }
 
 ::-webkit-scrollbar { width: 5px; height: 5px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+::-webkit-scrollbar-thumb { background: #cbd5e4; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #a9b6cc; }
 
 /* Status badges */
-.status-active    { background: #dcfce7; color: #16a34a; }
-.status-pending   { background: #fef9c3; color: #ca8a04; }
-.status-completed { background: #dbeafe; color: #1d4ed8; }
-.status-cancelled { background: #fee2e2; color: #dc2626; }
-.status-info      { background: #f0f9ff; color: #0369a1; }
+.status-active    { background: #e3f1cc; color: #2f5a05; }
+.status-pending   { background: #fde7cc; color: #7a3b00; }
+.status-completed { background: #e2e9f6; color: #1b3a6b; }
+.status-cancelled { background: #ffe3df; color: #9b1c13; }
+.status-info      { background: #e2e9f6; color: #1b3a6b; }
 
 /* Table */
 table { width: 100%; border-collapse: collapse; }
@@ -141,10 +164,11 @@ tbody tr:hover td { background: var(--muted); }
 .btn:disabled { opacity: 0.55; cursor: not-allowed; }
 
 .btn-primary {
-  background: var(--primary);
-  color: #fff;
+  background: var(--brand-green);
+  color: var(--navy);
+  font-weight: 600;
 }
-.btn-primary:hover:not(:disabled) { background: #1e40af; }
+.btn-primary:hover:not(:disabled) { background: #669e14; }
 
 .btn-secondary {
   background: var(--secondary);
@@ -154,10 +178,10 @@ tbody tr:hover td { background: var(--muted); }
 .btn-secondary:hover:not(:disabled) { background: var(--border); }
 
 .btn-danger {
-  background: #ef4444;
+  background: #9b1c13;
   color: #fff;
 }
-.btn-danger:hover:not(:disabled) { background: #dc2626; }
+.btn-danger:hover:not(:disabled) { background: #7f1710; }
 
 .btn-sm {
   padding: 5px 11px;
@@ -192,7 +216,7 @@ tbody tr:hover td { background: var(--muted); }
 .form-input:focus,
 .form-select:focus {
   border-color: var(--primary);
-  box-shadow: 0 0 0 3px rgba(29,78,216,0.1);
+  box-shadow: 0 0 0 3px rgba(27,58,107,0.15);
 }
 
 .form-input::placeholder { color: var(--muted-foreground); opacity: 1; }
@@ -256,3 +280,56 @@ tbody tr:hover td { background: var(--muted); }
     display: none !important;
   }
 }
+
+/* ─── Attendant app (tablet-first) ───────────────────
+   Large touch targets and numerals that grow with the screen. */
+.att-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 56px;
+  padding: 0 24px;
+  border-radius: 20px;
+  border: 0;
+  font-size: 1.0625rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: filter 0.15s, transform 0.05s;
+  touch-action: manipulation;
+}
+.att-btn:active:not(:disabled) { transform: scale(0.985); }
+.att-btn:disabled { background: #d6dde8 !important; color: #4a5b78 !important; cursor: not-allowed; }
+.att-btn-primary { background: var(--brand-green); color: var(--navy); }
+.att-btn-primary:hover:not(:disabled) { filter: brightness(0.94); }
+.att-btn-dark { background: var(--navy); color: #fff; }
+.att-btn-ghost { background: #fff; color: var(--navy); border: 1px solid var(--border); }
+.att-input {
+  width: 100%;
+  min-height: 56px;
+  padding: 0 18px;
+  border-radius: 18px;
+  border: 2px solid var(--border);
+  background: #fff;
+  color: var(--navy);
+  font-size: 1.0625rem;
+  outline: none;
+}
+.att-input:focus { border-color: var(--navy); }
+.att-card { background: #fff; border: 1px solid var(--border); border-radius: 26px; }
+.att-chip {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 5px 12px;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.att-chip-ok { background: #e3f1cc; color: #2f5a05; }
+.att-chip-warn { background: #fde7cc; color: #7a3b00; }
+.att-chip-bad { background: #ffe3df; color: #9b1c13; }
+.att-chip-mute { background: #e8ecf2; color: #1b3a6b; }
+.att-display { font-family: var(--font-display); letter-spacing: -0.02em; }
+.pb-safe { padding-bottom: max(env(safe-area-inset-bottom), 0px); }
+.pt-safe { padding-top: max(env(safe-area-inset-top), 0px); }

@@ -20,7 +20,7 @@ export function TopBar({ title, subtitle }: TopBarProps) {
   const { data: notifications } = useNotifications(user?.id);
   const notificationRef = useRef<HTMLDivElement>(null);
   
-  const primaryColor = settings?.primary_color || '#1d4ed8';
+  const primaryColor = settings?.primary_color || '#1b3a6b';
 
   const unreadCount = notifications?.filter(n => !n.isRead).length || 0;
 

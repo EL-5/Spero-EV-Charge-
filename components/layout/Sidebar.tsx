@@ -12,15 +12,16 @@ import { useAuthStore } from '@/store/auth';
 import { useSettings } from '@/hooks/use-database';
 
 const navItems = [
+  { href: '/attend', label: 'Attendant app', icon: Smartphone, roles: ['attendant', 'manager', 'super_admin'] },
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ['super_admin', 'manager', 'accountant', 'finance', 'attendant'] },
   { href: '/drivers', label: 'Drivers', icon: Users, roles: ['super_admin', 'manager', 'attendant'] },
   { href: '/vehicles', label: 'Vehicles', icon: Car, roles: ['super_admin', 'manager', 'attendant'] },
-  { href: '/sessions', label: 'Sessions', icon: Zap, roles: ['super_admin', 'manager', 'attendant'] },
-  { href: '/payments', label: 'Payments', icon: CreditCard, roles: ['super_admin', 'manager', 'accountant', 'finance', 'attendant'] },
-  { href: '/receipts', label: 'Receipts', icon: FileText, roles: ['super_admin', 'attendant'] },
+  { href: '/sessions', label: 'Sessions', icon: Zap, roles: ['super_admin', 'manager'] },
+  { href: '/payments', label: 'Payments', icon: CreditCard, roles: ['super_admin', 'manager', 'accountant', 'finance'] },
+  { href: '/receipts', label: 'Receipts', icon: FileText, roles: ['super_admin'] },
   { href: '/wallets', label: 'Wallets', icon: Wallet, roles: ['super_admin', 'accountant', 'finance'] },
   { href: '/debts', label: 'Debts', icon: AlertTriangle, roles: ['super_admin', 'accountant', 'finance'] },
-  { href: '/shifts', label: 'Shifts', icon: Clock, roles: ['super_admin', 'manager', 'attendant'] },
+  { href: '/shifts', label: 'Shifts', icon: Clock, roles: ['super_admin', 'manager'] },
   { href: '/analytics', label: 'Analytics', icon: BarChart3, roles: ['super_admin', 'manager', 'finance', 'accountant'] },
   { href: '/reports', label: 'Reports', icon: FileText, roles: ['super_admin', 'manager', 'accountant', 'finance'] },
   { href: '/reconciliation', label: 'Energy Recon', icon: Activity, roles: ['super_admin', 'manager', 'accountant', 'finance'] },
@@ -38,7 +39,7 @@ export function Sidebar() {
   const logoUrl = settings?.logo_url || '/spero-logo.png';
   const appName = settings?.app_name || 'SCMS';
   const stationName = settings?.company_name || 'Spero EV Charging';
-  const primaryColor = settings?.primary_color || '#3b82f6';
+  const primaryColor = settings?.primary_color || '#76b918';
 
   return (
     <>
