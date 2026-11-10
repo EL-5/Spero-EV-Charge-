@@ -74,6 +74,8 @@ export interface SessionEvidence extends SessionRecord {
   startGap: number | null;
   startPhotoUrl: string | null;
   endPhotoUrl: string | null;
+  /** Photo of the MoMo confirmation, kept for MoMo payments. */
+  paymentProofUrl: string | null;
   reference: string | null;
   reviewDecision: string | null;
   reviewNote: string | null;

@@ -100,6 +100,9 @@ function Evidence({ id, onClose, onChanged }: { id: string; onClose: () => void;
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <Photo url={data.startPhotoUrl} label="Display before charging" />
               <Photo url={data.endPhotoUrl} label="Display after charging" />
+              {data.paymentMethod && data.paymentMethod !== 'wallet' && data.paymentMethod !== 'cash' && (
+                <Photo url={data.paymentProofUrl} label="MoMo payment confirmation" />
+              )}
             </div>
 
             {data.flags.length > 0 && (

@@ -649,12 +649,16 @@ export async function finishGunSession(
 }
 
 /** Step 3: record how the driver paid. The amount is the session's total — it is never taken from the browser. */
-export async function collectGunPayment(input: {
-  sessionId: string;
-  method: PayChoice;
-  network?: MomoNetwork;
-  reference?: string;
-}): Promise<{ success: true; receiptNumber: string; amount: number } | Fail> {
+export async function collectGunPayment(
+  formData: FormData
+): Promise<{ success: true; receiptNumber: string; amount: number } | Fail> {
+  const input = {
+    sessionId: String(formData.get('sessionId') || ''),
+    method: String(formData.get('method') || '') as PayChoice,
+    network: (String(formData.get('network') || '') || undefined) as MomoNetwork | undefined,
+    reference: String(formData.get('reference') || ''),
+  };
+  let proofPath: string | null = null;
   let claimed = false;
   let walletDebited = 0;
   let sessionId = '';
@@ -693,9 +697,25 @@ export async function collectGunPayment(input: {
         .maybeSingle();
       if (prior.data) return fail('This MoMo ID was already used on another payment.');
     }
+    let proofFile: File | null = null;
+    if (input.method === 'momo') {
+      const proof = validatePhoto(formData.get('proof'));
+      if (!proof.ok) return fail('Take a photo of the payment confirmation on the driver’s phone first.');
+      proofFile = proof.file;
+    }
     if (input.method === 'wallet' && !s.driver_id) return fail('Guests do not have a wallet. Choose cash or MoMo.');
 
     const method = dbPaymentMethod(input.method, input.network);
+
+    // Keep the payment screenshot first: no money is recorded without its evidence.
+    if (proofFile) {
+      proofPath = `${s.attendant_id}/${s.id}-payment.${extFor(proofFile)}`;
+      const upErr = await uploadPhoto(proofPath, proofFile);
+      if (upErr) {
+        proofPath = null;
+        return fail('Could not save the payment photo. Check the connection and try again.');
+      }
+    }
 
     // Claim the payment. Only one request can move unpaid → paid, so a double tap
     // or a second tablet cannot charge the driver twice.
@@ -708,7 +728,10 @@ export async function collectGunPayment(input: {
       .select('id')
       .maybeSingle();
     if (claimErr) throw claimErr;
-    if (!claim) return fail('This session is already paid.');
+    if (!claim) {
+      if (proofPath) await removePhoto(proofPath);
+      return fail('This session is already paid.');
+    }
     claimed = true;
 
     // Wallet: debit atomically (refuses if the balance is too low)
@@ -756,6 +779,7 @@ export async function collectGunPayment(input: {
       await undoWalletDebit(walletDebited, s.driver_id, s.id, s.receipt_number, user.id);
       walletDebited = 0;
       await revertClaim(s.id);
+      if (proofPath) await removePhoto(proofPath);
       if (errorCode(payErr) === '23505') return fail('This MoMo ID was already used on another payment.');
       console.error('[GUN] payment insert error:', payErr);
       return fail('Could not record the payment. Nothing was charged. Please try again.');
@@ -777,7 +801,7 @@ export async function collectGunPayment(input: {
       action: 'payment.collect',
       resourceType: 'session',
       resourceId: s.id,
-      metadata: { receiptNumber: s.receipt_number, amount, method, reference },
+      metadata: { receiptNumber: s.receipt_number, amount, method, reference, proofPath },
     });
 
     revalidatePath('/dashboard');
@@ -785,6 +809,7 @@ export async function collectGunPayment(input: {
     return { success: true, receiptNumber: s.receipt_number, amount };
   } catch (err) {
     // Something unexpected after the claim: put the session back so it can be retried.
+    if (proofPath) await removePhoto(proofPath);
     if (claimed && sessionId) {
       if (walletDebited > 0 && driverId) await undoWalletDebit(walletDebited, driverId, sessionId, '', null);
       await revertClaim(sessionId);

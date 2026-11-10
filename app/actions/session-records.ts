@@ -105,6 +105,14 @@ async function signed(path: string | null | undefined): Promise<string | null> {
   return data?.signedUrl ?? null;
 }
 
+/** The payment screenshot is stored beside the meter photos as <session id>-payment.<ext>. */
+async function paymentProofUrl(attendantId: string | null, sessionId: string): Promise<string | null> {
+  if (!attendantId) return null;
+  const { data } = await supabaseAdmin.storage.from(BUCKET).list(attendantId, { search: `${sessionId}-payment` });
+  const file = (data || []).find((f) => f.name.startsWith(`${sessionId}-payment`));
+  return file ? signed(`${attendantId}/${file.name}`) : null;
+}
+
 /** One session with both meter photos. Photo links last 10 minutes. */
 export async function getSessionEvidence(sessionId: string): Promise<{ success: true; data: SessionEvidence } | Fail> {
   try {
@@ -113,12 +121,13 @@ export async function getSessionEvidence(sessionId: string): Promise<{ success: 
     if (!r) return fail('Session not found.');
     const row = r as Row;
 
-    const [att, startUrl, endUrl, pay, pend] = await Promise.all([
+    const [att, startUrl, endUrl, pay, pend, proofUrl] = await Promise.all([
       row.attendant_id ? supabaseAdmin.from('profiles').select('name').eq('id', row.attendant_id).maybeSingle() : Promise.resolve({ data: null }),
       signed(row.start_photo_path),
       signed(row.end_photo_path),
       supabaseAdmin.from('payments').select('reference').eq('session_id', row.id).limit(1).maybeSingle(),
       supabaseAdmin.from('session_void_requests').select('id', { count: 'exact', head: true }).eq('session_id', row.id).eq('status', 'pending'),
+      paymentProofUrl(row.attendant_id, row.id),
     ]);
 
     return {
@@ -131,6 +140,7 @@ export async function getSessionEvidence(sessionId: string): Promise<{ success: 
         startGap: num(row.start_gap),
         startPhotoUrl: startUrl,
         endPhotoUrl: endUrl,
+        paymentProofUrl: proofUrl,
         reference: (pay.data as { reference?: string | null } | null)?.reference ?? null,
         reviewDecision: row.review_decision ?? null,
         reviewNote: row.review_note ?? null,

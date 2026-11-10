@@ -33,6 +33,8 @@ interface Props {
   file: File | null;
   onChange: (file: File | null) => void;
   disabled?: boolean;
+  /** What the photo shows, for the preview text. */
+  subject?: string;
 }
 
 /**
@@ -43,7 +45,7 @@ interface Props {
  * therefore treats photos as evidence for a manager to look at, and the upload
  * time is stamped by the server, not by the file.
  */
-export default function PhotoCapture({ label, file, onChange, disabled }: Props) {
+export default function PhotoCapture({ label, file, onChange, disabled, subject = 'the machine display' }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
 
@@ -80,10 +82,10 @@ export default function PhotoCapture({ label, file, onChange, disabled }: Props)
       {file && preview ? (
         <div className="flex items-center gap-4 rounded-[22px] border border-line bg-white p-3">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={preview} alt="Photo of the machine display" className="h-20 w-20 flex-shrink-0 rounded-2xl object-cover" />
+          <img src={preview} alt={`Photo of ${subject}`} className="h-20 w-20 flex-shrink-0 rounded-2xl object-cover" />
           <div className="min-w-0 flex-1">
             <div className="text-[15px] font-semibold">Photo added</div>
-            <div className="text-xs text-ink-soft">{Math.round(file.size / 1024)} KB · make sure the number is readable</div>
+            <div className="text-xs text-ink-soft">{Math.round(file.size / 1024)} KB · make sure it is readable</div>
           </div>
           <button
             type="button"

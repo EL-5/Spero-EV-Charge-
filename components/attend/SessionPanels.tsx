@@ -253,18 +253,26 @@ export function CollectPanel({ session, onChanged }: { session: GunSessionView; 
   const [method, setMethod] = useState<PayChoice>(ACCEPT_CASH ? 'cash' : 'momo');
   const [network, setNetwork] = useState<MomoNetwork>('mtn');
   const [reference, setReference] = useState('');
+  const [proof, setProof] = useState<File | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
   const ready = session.status === 'pending_payment';
   const amount = session.amount ?? 0;
   const walletOk = session.walletBalance !== null && session.walletBalance >= amount;
   const refOk = method !== 'momo' || reference.replace(/\s+/g, '').length >= 6;
-  const canSubmit = ready && refOk && (method !== 'wallet' || walletOk) && !submitting;
+  const proofOk = method !== 'momo' || !!proof;
+  const canSubmit = ready && refOk && proofOk && (method !== 'wallet' || walletOk) && !submitting;
 
   const submit = async () => {
     if (!canSubmit) return;
     setSubmitting(true);
-    const res = await collectGunPayment({ sessionId: session.id, method, network, reference });
+    const fd = new FormData();
+    fd.set('sessionId', session.id);
+    fd.set('method', method);
+    fd.set('network', network);
+    fd.set('reference', reference);
+    if (method === 'momo' && proof) fd.set('proof', proof);
+    const res = await collectGunPayment(fd);
     setSubmitting(false);
     if (!res.success) {
       toast.error(res.error);
@@ -337,6 +345,8 @@ export function CollectPanel({ session, onChanged }: { session: GunSessionView; 
               placeholder="From the driver’s payment SMS"
             />
             <div className="text-[13px] text-ink-soft">Each MoMo ID can be used once. A manager can match it to the statement.</div>
+            <PhotoCapture label="Photo of the payment confirmation" subject="the payment confirmation" file={proof} onChange={setProof} disabled={submitting} />
+            {!proof && <div className="text-[13px] text-[#9b1c13]">Required: photograph the confirmation message on the driver’s phone.</div>}
           </div>
         )}
 
