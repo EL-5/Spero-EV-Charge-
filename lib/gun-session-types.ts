@@ -47,7 +47,10 @@ export interface DriverMatch {
 }
 
 export interface GunSessionView extends GunSessionSummary {
-  startReading: number;
+  /** Empty until the readings are logged after charging. */
+  startReading: number | null;
+  /** Where this gun last stopped. The start reading should continue from it. */
+  lastEndReading: number | null;
   endReading: number | null;
   rate: number;
   paymentMethod: string | null;

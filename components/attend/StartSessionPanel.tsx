@@ -5,10 +5,9 @@ import Link from 'next/link';
 import { toast } from 'sonner';
 import { useQuery } from '@tanstack/react-query';
 import { searchDrivers, startGunSession } from '@/app/actions/gun-sessions';
-import { GAP_TOLERANCE_KWH, GUNS, parseReading, startReadingProblem, type Gun } from '@/lib/gun-session';
+import { GUNS, type Gun } from '@/lib/gun-session';
 import type { DriverMatch, WorkspaceData } from '@/lib/gun-session-types';
 import { formatCurrency } from '@/lib/utils';
-import PhotoCapture from './PhotoCapture';
 
 interface Props {
   workspace: WorkspaceData;
@@ -27,8 +26,6 @@ export default function StartSessionPanel({ workspace, onStarted }: Props) {
   const [vehicleId, setVehicleId] = useState('');
   const [guestName, setGuestName] = useState('');
   const [guestPlate, setGuestPlate] = useState('');
-  const [reading, setReading] = useState('');
-  const [photo, setPhoto] = useState<File | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
   // Search waits for a short pause in typing before asking the server.
@@ -48,31 +45,22 @@ export default function StartSessionPanel({ workspace, onStarted }: Props) {
     refetchInterval: false,
   });
 
-  const lastEnd = gun ? workspace.guns[gun].lastEndReading : null;
-  const parsed = parseReading(reading);
-  const readingProblem = parsed !== null ? startReadingProblem(parsed, lastEnd) : null;
-  const gap = parsed !== null && lastEnd !== null ? Math.round((parsed - lastEnd) * 1000) / 1000 : null;
-
   const whoOk = guest ? guestPlate.trim().length >= 3 : !!driver && !!vehicleId;
   const needsShift = !workspace.shift && workspace.user.role === 'attendant';
-  const canSubmit = !!gun && parsed !== null && !readingProblem && !!photo && whoOk && !needsShift && !submitting;
+  const canSubmit = !!gun && whoOk && !needsShift && !submitting;
 
   const hint = useMemo(() => {
     if (needsShift) return 'Start your shift first.';
     if (!gun) return 'Both guns are in use. Finish a session to free a gun.';
     if (!whoOk) return guest ? 'Enter the car number plate.' : 'Choose the driver and the car.';
-    if (parsed === null) return 'Type the kWh shown on the machine display.';
-    if (readingProblem) return 'Check the reading.';
-    if (!photo) return 'Take the display photo to continue.';
-    return 'The start time is stamped by the system.';
-  }, [needsShift, gun, whoOk, guest, parsed, readingProblem, photo]);
+    return 'Plug in the gun, then start. You log the kWh after charging.';
+  }, [needsShift, gun, whoOk, guest]);
 
   const submit = async () => {
     if (!canSubmit || !gun) return;
     setSubmitting(true);
     const fd = new FormData();
     fd.set('gun', gun);
-    fd.set('startReading', String(parsed));
     fd.set('isGuest', String(guest));
     if (guest) {
       fd.set('guestName', guestName);
@@ -81,18 +69,13 @@ export default function StartSessionPanel({ workspace, onStarted }: Props) {
       fd.set('driverId', driver!.driverId);
       fd.set('vehicleId', vehicleId);
     }
-    fd.set('photo', photo!);
     const res = await startGunSession(fd);
     setSubmitting(false);
     if (!res.success) {
       toast.error(res.error);
       return;
     }
-    if (res.flags.includes('start_gap')) {
-      toast.warning('Started. This reading does not match the gun’s last end reading, so a manager will review it.');
-    } else {
-      toast.success(`Session started on Gun ${gun}`);
-    }
+    toast.success(`Session started on Gun ${gun}`);
     onStarted(res.sessionId);
   };
 
@@ -275,42 +258,6 @@ export default function StartSessionPanel({ workspace, onStarted }: Props) {
             )}
           </>
         )}
-      </div>
-
-      {/* Reading + photo */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
-        <div className="flex min-w-0 flex-col gap-2">
-          <label htmlFor="start-reading" className="text-sm font-semibold">
-            {gun ? `Gun ${gun} reading` : 'Reading'} <span className="font-normal text-ink-soft">kWh on the machine display</span>
-          </label>
-          <div className="flex items-baseline justify-between rounded-[22px] border-2 border-navy bg-white px-4 py-2">
-            <input
-              id="start-reading"
-              inputMode="decimal"
-              autoComplete="off"
-              placeholder="0.0"
-              value={reading}
-              onChange={(e) => setReading(e.target.value.replace(/[^\d.,]/g, ''))}
-              className="att-display min-w-0 flex-1 bg-transparent text-[34px] font-bold outline-none"
-            />
-            <span className="text-sm font-semibold text-ink-soft">kWh</span>
-          </div>
-          <div className="flex flex-wrap items-center gap-2 text-[13px]">
-            {lastEnd !== null && <span className="text-ink-soft">Gun {gun} last ended at {lastEnd.toFixed(1)} kWh.</span>}
-            {parsed !== null && lastEnd !== null && !readingProblem && Math.abs(gap!) <= GAP_TOLERANCE_KWH && (
-              <span className="att-chip att-chip-ok">Matches last session</span>
-            )}
-            {parsed !== null && lastEnd !== null && !readingProblem && Math.abs(gap!) > GAP_TOLERANCE_KWH && (
-              <span className="att-chip att-chip-warn">{gap!.toFixed(1)} kWh above last end. A manager will review.</span>
-            )}
-          </div>
-          {readingProblem && (
-            <div role="alert" className="rounded-2xl bg-[#ffe3df] p-3 text-sm font-medium text-[#9b1c13]">
-              {readingProblem}
-            </div>
-          )}
-        </div>
-        <PhotoCapture label="Display photo" file={photo} onChange={setPhoto} disabled={submitting} />
       </div>
 
       <div className="flex flex-col gap-2">

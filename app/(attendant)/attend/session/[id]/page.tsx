@@ -34,7 +34,7 @@ export default function SessionPage({ params }: { params: Promise<{ id: string }
           <ChevronLeft size={22} aria-hidden />
         </button>
         <h1 className="att-display flex-1 text-[28px] font-bold">
-          {step === 'finish' ? 'Finish the session' : step === 'collect' ? 'Collect payment' : 'Receipt'}
+          {step === 'finish' ? 'Log the kWh' : step === 'collect' ? 'Collect payment' : 'Receipt'}
         </h1>
         {s && (
           <>

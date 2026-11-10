@@ -7,10 +7,13 @@ import { collectGunPayment, finishGunSession } from '@/app/actions/gun-sessions'
 import {
   ACCEPT_CASH,
   REVIEW_FLAG_LABEL,
+  GAP_TOLERANCE_KWH,
   computeBill,
+  computeStartGap,
   endReadingProblem,
   evaluateFlags,
   parseReading,
+  startReadingProblem,
   type MomoNetwork,
   type PayChoice,
 } from '@/lib/gun-session';
@@ -41,56 +44,93 @@ function Row({ k, v }: { k: string; v: React.ReactNode }) {
 // ── Finish ───────────────────────────────────────────────────────────────────
 
 export function FinishPanel({ session, onChanged }: { session: GunSessionView; onChanged: () => void }) {
-  const [reading, setReading] = useState('');
-  const [photo, setPhoto] = useState<File | null>(null);
+  const [startText, setStartText] = useState('');
+  const [endText, setEndText] = useState('');
+  const [startPhoto, setStartPhoto] = useState<File | null>(null);
+  const [endPhoto, setEndPhoto] = useState<File | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
   const finished = session.status !== 'active';
-  const parsed = parseReading(reading);
-  const problem = parsed !== null ? endReadingProblem(session.startReading, parsed) : null;
-  const preview = parsed !== null && !problem ? computeBill(session.startReading, parsed, session.rate) : null;
-  const previewFlags = preview
-    ? evaluateFlags({ startGap: null, units: preview.units, batteryKwh: session.batteryKwh, startedAt: new Date(session.startTime), endedAt: new Date() })
-    : [];
-  const canSubmit = !!preview && !!photo && !submitting;
+  const start = parseReading(startText);
+  const end = parseReading(endText);
+  const lastEnd = session.lastEndReading;
+
+  const startProblem = start !== null ? startReadingProblem(start, lastEnd) : null;
+  const endProblem = start !== null && end !== null ? endReadingProblem(start, end) : null;
+  const preview = start !== null && end !== null && !startProblem && !endProblem ? computeBill(start, end, session.rate) : null;
+  const gap = start !== null && lastEnd !== null ? Math.round((start - lastEnd) * 1000) / 1000 : null;
+  const previewFlags =
+    preview && start !== null
+      ? evaluateFlags({
+          startGap: computeStartGap(start, lastEnd),
+          units: preview.units,
+          batteryKwh: session.batteryKwh,
+          startedAt: new Date(session.startTime),
+          endedAt: new Date(),
+        })
+      : [];
+  const canSubmit = !!preview && !!startPhoto && !!endPhoto && !submitting;
 
   const submit = async () => {
     if (!canSubmit) return;
     setSubmitting(true);
     const fd = new FormData();
     fd.set('sessionId', session.id);
-    fd.set('endReading', String(parsed));
-    fd.set('photo', photo!);
+    fd.set('startReading', String(start));
+    fd.set('endReading', String(end));
+    fd.set('startPhoto', startPhoto!);
+    fd.set('endPhoto', endPhoto!);
     const res = await finishGunSession(fd);
     setSubmitting(false);
     if (!res.success) {
       toast.error(res.error);
       return;
     }
-    toast.success(`Session finished: ${kwh(res.units)} · ${formatCurrency(res.amount)}`);
+    toast.success(`Readings saved: ${kwh(res.units)} · ${formatCurrency(res.amount)}`);
     onChanged();
   };
 
+  const ReadingBox = (props: { id: string; value: string; onChange: (v: string) => void; label: string; hint: string; big?: boolean }) => (
+    <div className="flex flex-col gap-2">
+      <label htmlFor={props.id} className="text-sm font-semibold">
+        {props.label} <span className="font-normal text-ink-soft">{props.hint}</span>
+      </label>
+      <div className="flex items-baseline justify-between rounded-[22px] border-2 border-navy bg-white px-4 py-2">
+        <input
+          id={props.id}
+          inputMode="decimal"
+          autoComplete="off"
+          placeholder="0.0"
+          value={props.value}
+          onChange={(e) => props.onChange(e.target.value.replace(/[^\d.,]/g, ''))}
+          className="att-display min-w-0 flex-1 bg-transparent text-[34px] font-bold outline-none"
+        />
+        <span className="text-sm font-semibold text-ink-soft">kWh</span>
+      </div>
+    </div>
+  );
+
   return (
-    <section aria-label="Finish the session" className="att-card flex flex-col gap-4 p-5 sm:p-6">
-      <StepTitle n={1}>Finish the session</StepTitle>
+    <section aria-label="Log the kWh" className="att-card flex flex-col gap-4 p-5 sm:p-6">
+      <StepTitle n={1}>Log the kWh</StepTitle>
 
       <div className="flex flex-col gap-2 rounded-[20px] bg-ground p-4">
         <Row k="Driver" v={`${session.driverName}${session.vehiclePlate ? ` · ${session.vehiclePlate}` : ''}`} />
-        <Row
-          k={`Gun ${session.gun} start · ${formatClock(session.startTime)}`}
-          v={
-            <span className="inline-flex items-center gap-1.5">
-              <Lock size={13} aria-hidden /> {kwh(session.startReading)}
-            </span>
-          }
-        />
+        <Row k={`Gun ${session.gun} opened`} v={formatClock(session.startTime)} />
       </div>
 
       {finished ? (
         <>
           <div className="flex flex-col gap-2 rounded-[20px] bg-ground p-4">
-            <Row k={`Gun ${session.gun} end`} v={session.endReading !== null ? kwh(session.endReading) : '—'} />
+            <Row
+              k={`Gun ${session.gun} readings`}
+              v={
+                <span className="inline-flex items-center gap-1.5">
+                  <Lock size={13} aria-hidden /> {session.startReading !== null ? session.startReading.toFixed(1) : '—'} →{' '}
+                  {session.endReading !== null ? session.endReading.toFixed(1) : '—'}
+                </span>
+              }
+            />
           </div>
           <BillCard units={session.units ?? 0} rate={session.rate} amount={session.amount ?? 0} />
           {session.flags.length > 0 && (
@@ -106,30 +146,34 @@ export function FinishPanel({ session, onChanged }: { session: GunSessionView; o
         </>
       ) : (
         <>
-          <div className="flex flex-col gap-2">
-            <label htmlFor="end-reading" className="text-sm font-semibold">
-              End reading <span className="font-normal text-ink-soft">Gun {session.gun}, after charging</span>
-            </label>
-            <div className="flex items-baseline justify-between rounded-[22px] border-2 border-navy bg-white px-4 py-2">
-              <input
-                id="end-reading"
-                inputMode="decimal"
-                autoComplete="off"
-                placeholder="0.0"
-                value={reading}
-                onChange={(e) => setReading(e.target.value.replace(/[^\d.,]/g, ''))}
-                className="att-display min-w-0 flex-1 bg-transparent text-[38px] font-bold outline-none"
-              />
-              <span className="text-sm font-semibold text-ink-soft">kWh</span>
-            </div>
-            {problem && (
-              <div role="alert" className="rounded-2xl bg-[#ffe3df] p-3 text-sm font-medium text-[#9b1c13]">
-                {problem}
-              </div>
-            )}
-          </div>
+          <p className="text-sm text-ink-soft">
+            When charging is done, type what the display showed <b>before</b> and <b>after</b>, and photograph it each time. The system works out the bill.
+          </p>
 
-          <PhotoCapture label="Display photo" file={photo} onChange={setPhoto} disabled={submitting} />
+          {ReadingBox({ id: 'start-reading', value: startText, onChange: setStartText, label: 'Start reading', hint: `Gun ${session.gun}, before charging` })}
+          {lastEnd !== null && (
+            <div className="-mt-2 flex flex-wrap items-center gap-2 text-[13px]">
+              <span className="text-ink-soft">Gun {session.gun} last ended at {lastEnd.toFixed(1)} kWh.</span>
+              {start !== null && !startProblem && gap !== null && Math.abs(gap) <= GAP_TOLERANCE_KWH && <span className="att-chip att-chip-ok">Matches last session</span>}
+              {start !== null && !startProblem && gap !== null && Math.abs(gap) > GAP_TOLERANCE_KWH && (
+                <span className="att-chip att-chip-warn">{gap.toFixed(1)} kWh above last end. A manager will review.</span>
+              )}
+            </div>
+          )}
+          {startProblem && (
+            <div role="alert" className="rounded-2xl bg-[#ffe3df] p-3 text-sm font-medium text-[#9b1c13]">
+              {startProblem}
+            </div>
+          )}
+          <PhotoCapture label="Photo of the start reading" file={startPhoto} onChange={setStartPhoto} disabled={submitting} />
+
+          {ReadingBox({ id: 'end-reading', value: endText, onChange: setEndText, label: 'End reading', hint: `Gun ${session.gun}, after charging` })}
+          {endProblem && (
+            <div role="alert" className="rounded-2xl bg-[#ffe3df] p-3 text-sm font-medium text-[#9b1c13]">
+              {endProblem}
+            </div>
+          )}
+          <PhotoCapture label="Photo of the end reading" file={endPhoto} onChange={setEndPhoto} disabled={submitting} />
 
           {preview && (
             <>
@@ -153,9 +197,13 @@ export function FinishPanel({ session, onChanged }: { session: GunSessionView; o
           )}
 
           <button type="button" onClick={submit} disabled={!canSubmit} className="att-btn att-btn-primary !min-h-[62px] text-lg">
-            {submitting ? 'Saving…' : 'Finish and work out the bill'}
+            {submitting ? 'Saving…' : 'Save readings and work out the bill'}
           </button>
-          {!photo && preview && <div className="-mt-1 text-center text-sm text-ink-soft">Take the display photo to continue.</div>}
+          {preview && (!startPhoto || !endPhoto) && (
+            <div className="-mt-1 text-center text-sm text-ink-soft">
+              Take {!startPhoto && !endPhoto ? 'both display photos' : !startPhoto ? 'the start photo' : 'the end photo'} to continue.
+            </div>
+          )}
         </>
       )}
     </section>
@@ -350,7 +398,7 @@ export function ReceiptCard({ session, onNew }: { session: GunSessionView; onNew
         <Row k="Driver" v={session.driverName} />
         {session.vehiclePlate && <Row k="Vehicle" v={session.vehiclePlate} />}
         <Row k="Gun and time" v={`Gun ${session.gun} · ${formatClock(session.startTime)}${session.endTime ? ` to ${formatClock(session.endTime)}` : ''}`} />
-        <Row k={`Gun ${session.gun} reading`} v={`${session.startReading.toFixed(1)} → ${(session.endReading ?? 0).toFixed(1)} kWh`} />
+        <Row k={`Gun ${session.gun} reading`} v={`${(session.startReading ?? 0).toFixed(1)} → ${(session.endReading ?? 0).toFixed(1)} kWh`} />
         <Row k="Energy" v={`${kwh(session.units ?? 0)} × ${session.rate.toFixed(2)}`} />
         <Row k="Paid with" v={method} />
         <div className="flex items-baseline justify-between border-t-2 border-dashed border-line pt-3">

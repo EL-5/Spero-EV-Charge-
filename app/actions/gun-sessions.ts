@@ -340,7 +340,7 @@ export async function getGunSession(sessionId: string): Promise<{ success: true;
       success: true,
       data: {
         ...toSummary(row as SessionRow),
-        startReading: Number(row.start_reading),
+        startReading: row.start_reading === null || row.start_reading === undefined ? null : Number(row.start_reading),
         endReading: row.end_reading === null || row.end_reading === undefined ? null : Number(row.end_reading),
         rate: Number(row.rate_at_time || 0),
         paymentMethod: row.payment_method ?? null,
@@ -352,6 +352,7 @@ export async function getGunSession(sessionId: string): Promise<{ success: true;
         attendantName: (att.data as { name?: string } | null)?.name || 'Attendant',
         startGap: row.start_gap === null || row.start_gap === undefined ? null : Number(row.start_gap),
         isMine: row.attendant_id === user.id,
+        lastEndReading: row.status === 'active' ? await getLastEndReading(row.gun as Gun) : null,
         voidPending: (pend.count || 0) > 0,
       },
     };
@@ -413,21 +414,19 @@ export async function getGunTotals(period: 'today' | 'week' | 'month' = 'today')
 
 // ── Writes ───────────────────────────────────────────────────────────────────
 
-/** Step 1: the attendant plugs in a gun, types the display reading and photographs it. */
+/**
+ * Step 1: the attendant opens a session on a gun for a driver. No kWh yet: the
+ * readings are logged in step 2, once charging is done. Opening the session
+ * marks the gun busy and stamps the start time.
+ */
 export async function startGunSession(
   formData: FormData
-): Promise<{ success: true; sessionId: string; receiptNumber: string; flags: ReviewFlag[] } | Fail> {
+): Promise<{ success: true; sessionId: string; receiptNumber: string } | Fail> {
   try {
     const user = await requireAuth(STAFF);
 
     const gun = String(formData.get('gun') || '') as Gun;
     if (!GUNS.includes(gun)) return fail('Pick Gun A or Gun B.');
-
-    const startReading = parseReading(formData.get('startReading'));
-    if (startReading === null) return fail('Enter the kWh shown on the display, for example 1204.5.');
-
-    const photo = validatePhoto(formData.get('photo'));
-    if (!photo.ok) return fail(photo.error);
 
     const shift = await getActiveShift(user.id);
     if (!shift && user.role === 'attendant') return fail('Start your shift before you record a session.');
@@ -482,18 +481,7 @@ export async function startGunSession(
     if (!rateRow) return fail('No kWh price is set. Ask a manager to set one in Pricing.');
     const ratePerKwh = Number(rateRow.rate) / Number(rateRow.unit_quantity || 1);
 
-    // Reading must continue from where this gun last stopped
-    const lastEnd = await getLastEndReading(gun);
-    const problem = startReadingProblem(startReading, lastEnd);
-    if (problem) return fail(problem);
-    const startGap = computeStartGap(startReading, lastEnd);
-    const flags = evaluateFlags({ startGap });
-
     const sessionId = randomUUID();
-    const photoPath = `${user.id}/${sessionId}-start.${extFor(photo.file)}`;
-    const upErr = await uploadPhoto(photoPath, photo.file);
-    if (upErr) return fail('Could not save the photo. Check the connection and try again.');
-
     const receiptNumber = generateReceiptNumber('SC');
     const { error: insertError } = await supabaseAdmin.from('sessions').insert([
       {
@@ -515,16 +503,13 @@ export async function startGunSession(
         prepaid_amount: 0,
         start_time: new Date().toISOString(),
         gun,
-        start_reading: startReading,
-        start_photo_path: photoPath,
-        start_gap: startGap,
-        review_flags: flags,
+        // Readings and photos are added in step 2
+        review_flags: [],
         recording_mode: 'manual_gun',
       },
     ]);
 
     if (insertError) {
-      await removePhoto(photoPath);
       if (errorCode(insertError) === '23505') return fail(`Gun ${gun} is already in use. Finish that session first.`);
       console.error('[GUN] startGunSession insert error:', insertError);
       return fail('Could not start the session. Please try again.');
@@ -535,11 +520,11 @@ export async function startGunSession(
       action: 'session.start',
       resourceType: 'session',
       resourceId: sessionId,
-      metadata: { receiptNumber, gun, startReading, startGap, flags, driverId, isGuest },
+      metadata: { receiptNumber, gun, driverId, isGuest },
     });
 
     revalidatePath('/dashboard');
-    return { success: true, sessionId, receiptNumber, flags };
+    return { success: true, sessionId, receiptNumber };
   } catch (err) {
     const m = authMessage(err);
     if (m) return fail(m);
@@ -548,7 +533,11 @@ export async function startGunSession(
   }
 }
 
-/** Step 2: the attendant types the end reading and photographs the display. The server works out kWh and the bill. */
+/**
+ * Step 2: after charging, the attendant logs the start and end readings, each with a
+ * photo of the display. The server checks the start continues from where this gun last
+ * stopped, then works out the kWh and the bill.
+ */
 export async function finishGunSession(
   formData: FormData
 ): Promise<{ success: true; units: number; amount: number; flags: ReviewFlag[] } | Fail> {
@@ -557,14 +546,18 @@ export async function finishGunSession(
     const sessionId = String(formData.get('sessionId') || '');
     if (!sessionId) return fail('Session not found.');
 
+    const startReading = parseReading(formData.get('startReading'));
+    if (startReading === null) return fail('Enter the start reading: the kWh the display showed before charging.');
     const endReading = parseReading(formData.get('endReading'));
-    if (endReading === null) return fail('Enter the kWh shown on the display now, for example 1219.9.');
-    const photo = validatePhoto(formData.get('photo'));
-    if (!photo.ok) return fail(photo.error);
+    if (endReading === null) return fail('Enter the end reading: the kWh the display shows now.');
+    const startPhoto = validatePhoto(formData.get('startPhoto'));
+    if (!startPhoto.ok) return fail(`Start photo: ${startPhoto.error}`);
+    const endPhoto = validatePhoto(formData.get('endPhoto'));
+    if (!endPhoto.ok) return fail(`End photo: ${endPhoto.error}`);
 
     const { data: s, error } = await supabaseAdmin
       .from('sessions')
-      .select('id, status, recording_mode, gun, start_reading, rate_at_time, start_time, review_flags, attendant_id, vehicle_id, receipt_number')
+      .select('id, status, recording_mode, gun, rate_at_time, start_time, review_flags, attendant_id, vehicle_id, receipt_number')
       .eq('id', sessionId)
       .maybeSingle();
     if (error) throw error;
@@ -572,7 +565,11 @@ export async function finishGunSession(
     if (!canActOn(user, s.attendant_id)) return fail('Forbidden: this session belongs to another attendant.');
     if (s.status !== 'active') return fail('This session has already been finished.');
 
-    const startReading = Number(s.start_reading);
+    // The start must continue from where this gun last stopped
+    const lastEnd = await getLastEndReading(s.gun as Gun);
+    const startProblem = startReadingProblem(startReading, lastEnd);
+    if (startProblem) return fail(startProblem);
+    const startGap = computeStartGap(startReading, lastEnd);
     const problem = endReadingProblem(startReading, endReading);
     if (problem) return fail(problem);
 
@@ -586,7 +583,7 @@ export async function finishGunSession(
     const endedAt = new Date();
     const newFlags = evaluateFlags(
       {
-        startGap: null,
+        startGap,
         units,
         batteryKwh,
         startedAt: new Date(s.start_time),
@@ -596,16 +593,26 @@ export async function finishGunSession(
     );
     const flags = Array.from(new Set([...(s.review_flags || []), ...newFlags])) as ReviewFlag[];
 
-    const photoPath = `${s.attendant_id}/${s.id}-end.${extFor(photo.file)}`;
-    const upErr = await uploadPhoto(photoPath, photo.file);
-    if (upErr) return fail('Could not save the photo. Check the connection and try again.');
+    const startPhotoPath = `${s.attendant_id}/${s.id}-start.${extFor(startPhoto.file)}`;
+    const endPhotoPath = `${s.attendant_id}/${s.id}-end.${extFor(endPhoto.file)}`;
+    const [upStart, upEnd] = await Promise.all([
+      uploadPhoto(startPhotoPath, startPhoto.file),
+      uploadPhoto(endPhotoPath, endPhoto.file),
+    ]);
+    if (upStart || upEnd) {
+      await Promise.all([removePhoto(startPhotoPath), removePhoto(endPhotoPath)]);
+      return fail('Could not save the photos. Check the connection and try again.');
+    }
 
     // Only an active session can be finished, and only once.
     const { data: updated, error: updErr } = await supabaseAdmin
       .from('sessions')
       .update({
+        start_reading: startReading,
+        start_photo_path: startPhotoPath,
+        start_gap: startGap,
         end_reading: endReading,
-        end_photo_path: photoPath,
+        end_photo_path: endPhotoPath,
         units_consumed: units,
         total_amount: amount,
         end_time: endedAt.toISOString(),
@@ -618,7 +625,7 @@ export async function finishGunSession(
       .maybeSingle();
 
     if (updErr || !updated) {
-      await removePhoto(photoPath);
+      await Promise.all([removePhoto(startPhotoPath), removePhoto(endPhotoPath)]);
       if (updErr) console.error('[GUN] finishGunSession update error:', updErr);
       return fail(updErr ? 'Could not finish the session. Please try again.' : 'This session has already been finished.');
     }
@@ -628,7 +635,7 @@ export async function finishGunSession(
       action: 'session.finish',
       resourceType: 'session',
       resourceId: s.id,
-      metadata: { receiptNumber: s.receipt_number, gun: s.gun, startReading, endReading, units, amount, flags },
+      metadata: { receiptNumber: s.receipt_number, gun: s.gun, startReading, endReading, startGap, units, amount, flags },
     });
 
     revalidatePath('/dashboard');

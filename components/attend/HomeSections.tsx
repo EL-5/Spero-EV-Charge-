@@ -145,7 +145,7 @@ export function InProgress({ items, ws, now }: { items: GunSessionSummary[]; ws:
           </div>
           <div className="flex w-full items-center justify-between gap-3 sm:w-auto sm:justify-end">
             <span className="att-display text-2xl font-bold tabular-nums">{elapsed(s.startTime, now)}</span>
-            <span className="att-btn att-btn-primary !min-h-[48px] !rounded-2xl !px-5 !text-base">Finish</span>
+            <span className="att-btn att-btn-primary !min-h-[48px] !rounded-2xl !px-5 !text-base">Log kWh</span>
           </div>
         </Link>
       ))}
