@@ -10,6 +10,7 @@ import { logAudit } from '@/lib/audit';
 import {
   ACCEPT_CASH,
   GUNS,
+  MAX_BACKDATE_DAYS,
   computeBill,
   computeStartGap,
   dbPaymentMethod,
@@ -126,6 +127,39 @@ async function getLastEndReading(gun: Gun): Promise<number | null> {
     .limit(1)
     .maybeSingle();
   return data?.end_reading === null || data?.end_reading === undefined ? null : Number(data.end_reading);
+}
+
+type Who =
+  | { ok: true; driverId: string | null; vehicleId: string | null; driverName: string; vehiclePlate: string; vehicleDetails: string }
+  | { ok: false; error: string };
+
+/** Reads and checks "who is charging" from the form: a registered driver and car, or a guest plate. */
+async function resolveWho(formData: FormData): Promise<Who> {
+  const isGuest = String(formData.get('isGuest') || '') === 'true';
+  if (isGuest) {
+    const vehiclePlate = String(formData.get('guestPlate') || '').trim().toUpperCase();
+    const driverName = String(formData.get('guestName') || '').trim() || 'Guest';
+    if (vehiclePlate.length < 3) return { ok: false, error: 'Enter the car number plate for a guest.' };
+    return { ok: true, driverId: null, vehicleId: null, driverName, vehiclePlate, vehicleDetails: 'Guest vehicle' };
+  }
+  const driverId = String(formData.get('driverId') || '') || null;
+  const vehicleId = String(formData.get('vehicleId') || '') || null;
+  if (!driverId || !vehicleId) return { ok: false, error: 'Choose the driver and the car.' };
+  const [d, v] = await Promise.all([
+    supabaseAdmin.from('drivers').select('name, is_active').eq('id', driverId).maybeSingle(),
+    supabaseAdmin.from('vehicles').select('plate_number, brand, model, driver_id').eq('id', vehicleId).maybeSingle(),
+  ]);
+  if (!d.data) return { ok: false, error: 'Driver not found.' };
+  if (d.data.is_active === false) return { ok: false, error: 'This driver account is deactivated.' };
+  if (!v.data || v.data.driver_id !== driverId) return { ok: false, error: 'That car does not belong to this driver.' };
+  return {
+    ok: true,
+    driverId,
+    vehicleId,
+    driverName: d.data.name,
+    vehiclePlate: v.data.plate_number,
+    vehicleDetails: [v.data.brand, v.data.model].filter(Boolean).join(' ') || 'Vehicle',
+  };
 }
 
 function toSummary(row: SessionRow): GunSessionSummary {
@@ -479,32 +513,10 @@ export async function startGunSession(
     if (!shift && user.role === 'attendant') return fail('Start your shift before you record a session.');
 
     // Who is charging
-    const isGuest = String(formData.get('isGuest') || '') === 'true';
-    let driverId: string | null = null;
-    let vehicleId: string | null = null;
-    let driverName = 'Guest';
-    let vehiclePlate = '';
-    let vehicleDetails = 'Guest vehicle';
-
-    if (isGuest) {
-      vehiclePlate = String(formData.get('guestPlate') || '').trim().toUpperCase();
-      driverName = String(formData.get('guestName') || '').trim() || 'Guest';
-      if (vehiclePlate.length < 3) return fail('Enter the car number plate for a guest.');
-    } else {
-      driverId = String(formData.get('driverId') || '') || null;
-      vehicleId = String(formData.get('vehicleId') || '') || null;
-      if (!driverId || !vehicleId) return fail('Choose the driver and the car.');
-      const [d, v] = await Promise.all([
-        supabaseAdmin.from('drivers').select('name, is_active').eq('id', driverId).maybeSingle(),
-        supabaseAdmin.from('vehicles').select('plate_number, brand, model, driver_id').eq('id', vehicleId).maybeSingle(),
-      ]);
-      if (!d.data) return fail('Driver not found.');
-      if (d.data.is_active === false) return fail('This driver account is deactivated.');
-      if (!v.data || v.data.driver_id !== driverId) return fail('That car does not belong to this driver.');
-      driverName = d.data.name;
-      vehiclePlate = v.data.plate_number;
-      vehicleDetails = [v.data.brand, v.data.model].filter(Boolean).join(' ') || 'Vehicle';
-    }
+    const who = await resolveWho(formData);
+    if (!who.ok) return fail(who.error);
+    const { driverId, vehicleId, driverName, vehiclePlate, vehicleDetails } = who;
+    const isGuest = !driverId;
 
     // The gun must be free
     const busy = await supabaseAdmin
@@ -695,6 +707,210 @@ export async function finishGunSession(
   }
 }
 
+/**
+ * A charge that already happened and was not recorded at the time. The attendant sets
+ * the date and times and logs both readings with photos. Because the date is the
+ * attendant's word, every such session is flagged for a manager, and it can only go
+ * into days that are not closed, on a gun that was free, with readings that fit the
+ * sessions on either side of it.
+ */
+export async function logPastGunSession(
+  formData: FormData
+): Promise<{ success: true; sessionId: string; receiptNumber: string; units: number; amount: number } | Fail> {
+  try {
+    const user = await requireAuth(STAFF);
+
+    const gun = String(formData.get('gun') || '') as Gun;
+    if (!GUNS.includes(gun)) return fail('Pick Gun A or Gun B.');
+
+    // Times are entered as Ghana time, which is UTC.
+    const parseWhen = (v: FormDataEntryValue | null) => {
+      const s = String(v || '');
+      if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(s)) return null;
+      const d = new Date(`${s}:00.000Z`);
+      return Number.isNaN(d.getTime()) ? null : d;
+    };
+    const startAt = parseWhen(formData.get('startAt'));
+    const endAt = parseWhen(formData.get('endAt'));
+    if (!startAt || !endAt) return fail('Set the date and time the charging started and ended.');
+    const now = new Date();
+    if (endAt.getTime() > now.getTime() + 60_000) return fail('The end time is in the future.');
+    if (endAt <= startAt) return fail('The charge must end after it started.');
+    if (startAt.getTime() < now.getTime() - MAX_BACKDATE_DAYS * 86_400_000) {
+      return fail(`Charges older than ${MAX_BACKDATE_DAYS} days cannot be added here. Ask a manager.`);
+    }
+    if (endAt.getTime() - startAt.getTime() > 24 * 3_600_000) return fail('A charge cannot last longer than 24 hours.');
+
+    const startReading = parseReading(formData.get('startReading'));
+    const endReading = parseReading(formData.get('endReading'));
+    if (startReading === null || endReading === null) return fail('Enter both readings from the display.');
+    const startPhoto = validatePhoto(formData.get('startPhoto'));
+    if (!startPhoto.ok) return fail(`Start photo: ${startPhoto.error}`);
+    const endPhoto = validatePhoto(formData.get('endPhoto'));
+    if (!endPhoto.ok) return fail(`End photo: ${endPhoto.error}`);
+
+    const shift = await getActiveShift(user.id);
+    if (!shift && user.role === 'attendant') return fail('Start your shift before you record a session.');
+
+    const who = await resolveWho(formData);
+    if (!who.ok) return fail(who.error);
+
+    // Never into a day a manager has already closed
+    const dayOf = (d: Date) => d.toISOString().slice(0, 10);
+    const { data: closedDays } = await supabaseAdmin
+      .from('daily_closes')
+      .select('close_date')
+      .gte('close_date', dayOf(startAt))
+      .lte('close_date', dayOf(endAt))
+      .limit(1);
+    if (closedDays && closedDays.length > 0) {
+      return fail(`${closedDays[0].close_date} has already been closed by a manager. Ask a manager to handle this charge.`);
+    }
+
+    // The gun cannot have been busy with another session at that time
+    const nowIso = now.toISOString();
+    const { data: overlap } = await supabaseAdmin
+      .from('sessions')
+      .select('receipt_number, start_time, end_time')
+      .eq('gun', gun)
+      .neq('status', 'cancelled')
+      .lt('start_time', endAt.toISOString())
+      .or(`end_time.is.null,end_time.gt.${startAt.toISOString()}`)
+      .limit(1)
+      .maybeSingle();
+    if (overlap) {
+      return fail(`Gun ${gun} already has session ${overlap.receipt_number} at that time. Check the date and times.`);
+    }
+
+    // The readings must fit between the sessions on either side
+    const [prev, next] = await Promise.all([
+      supabaseAdmin
+        .from('sessions')
+        .select('end_reading')
+        .eq('gun', gun)
+        .not('end_reading', 'is', null)
+        .lte('end_time', startAt.toISOString())
+        .order('end_time', { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+      supabaseAdmin
+        .from('sessions')
+        .select('receipt_number, start_reading')
+        .eq('gun', gun)
+        .not('start_reading', 'is', null)
+        .gte('start_time', endAt.toISOString())
+        .order('start_time', { ascending: true })
+        .limit(1)
+        .maybeSingle(),
+    ]);
+    const lastEnd = prev.data?.end_reading === null || prev.data?.end_reading === undefined ? null : Number(prev.data.end_reading);
+    const startProblem = startReadingProblem(startReading, lastEnd);
+    if (startProblem) return fail(startProblem);
+    const endProblem = endReadingProblem(startReading, endReading);
+    if (endProblem) return fail(endProblem);
+    if (next.data && endReading > Number(next.data.start_reading) + 0.0005) {
+      return fail(
+        `The next session on Gun ${gun} (${next.data.receipt_number}) started at ${Number(next.data.start_reading).toFixed(1)} kWh, so this charge cannot end at ${endReading.toFixed(1)}. Check the readings.`
+      );
+    }
+    const startGap = computeStartGap(startReading, lastEnd);
+
+    const { data: rateRow } = await supabaseAdmin
+      .from('pricing')
+      .select('id, rate, unit_quantity')
+      .eq('unit_type', 'kwh')
+      .eq('is_active', true)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (!rateRow) return fail('No kWh price is set. Ask a manager to set one in Pricing.');
+    const ratePerKwh = Number(rateRow.rate) / Number(rateRow.unit_quantity || 1);
+    const { units, amount } = computeBill(startReading, endReading, ratePerKwh);
+
+    let batteryKwh: number | null = null;
+    if (who.vehicleId) {
+      const { data: v } = await supabaseAdmin.from('vehicles').select('battery_capacity').eq('id', who.vehicleId).maybeSingle();
+      batteryKwh = v?.battery_capacity ? Number(v.battery_capacity) : null;
+    }
+    const flags = Array.from(
+      new Set<ReviewFlag>([
+        ...evaluateFlags({ startGap, units, batteryKwh, startedAt: startAt, endedAt: endAt }, await loadLimits()),
+        'backdated',
+      ])
+    );
+
+    const sessionId = randomUUID();
+    const startPhotoPath = `${user.id}/${sessionId}-start.${extFor(startPhoto.file)}`;
+    const endPhotoPath = `${user.id}/${sessionId}-end.${extFor(endPhoto.file)}`;
+    const [upStart, upEnd] = await Promise.all([uploadPhoto(startPhotoPath, startPhoto.file), uploadPhoto(endPhotoPath, endPhoto.file)]);
+    if (upStart || upEnd) {
+      await Promise.all([removePhoto(startPhotoPath), removePhoto(endPhotoPath)]);
+      return fail('Could not save the photos. Check the connection and try again.');
+    }
+
+    const receiptNumber = generateReceiptNumber('SC');
+    const { error: insertError } = await supabaseAdmin.from('sessions').insert([
+      {
+        id: sessionId,
+        receipt_number: receiptNumber,
+        driver_id: who.driverId,
+        vehicle_id: who.vehicleId,
+        shift_id: shift?.id ?? null,
+        attendant_id: user.id,
+        driver_name: who.driverName,
+        vehicle_plate: who.vehiclePlate,
+        vehicle_details: who.vehicleDetails,
+        mode: 'postpaid',
+        unit_type: 'kwh',
+        status: 'pending_payment',
+        payment_status: 'unpaid',
+        rate_at_time: ratePerKwh,
+        pricing_id: rateRow.id,
+        prepaid_amount: 0,
+        // created_at follows the charge, so day totals and reports count it on the right day.
+        // The real moment of entry is kept in the audit log.
+        created_at: startAt.toISOString(),
+        start_time: startAt.toISOString(),
+        end_time: endAt.toISOString(),
+        gun,
+        start_reading: startReading,
+        end_reading: endReading,
+        start_photo_path: startPhotoPath,
+        end_photo_path: endPhotoPath,
+        start_gap: startGap,
+        units_consumed: units,
+        total_amount: amount,
+        review_flags: flags,
+        recording_mode: 'manual_gun',
+      },
+    ]);
+    if (insertError) {
+      await Promise.all([removePhoto(startPhotoPath), removePhoto(endPhotoPath)]);
+      console.error('[GUN] logPastGunSession insert error:', insertError);
+      return fail('Could not save the session. Please try again.');
+    }
+
+    await logAudit({
+      actor: user,
+      action: 'session.backdated',
+      resourceType: 'session',
+      resourceId: sessionId,
+      metadata: {
+        receiptNumber, gun, enteredAt: nowIso, startAt: startAt.toISOString(), endAt: endAt.toISOString(),
+        startReading, endReading, startGap, units, amount, flags, driverId: who.driverId,
+      },
+    });
+
+    revalidatePath('/dashboard');
+    return { success: true, sessionId, receiptNumber, units, amount };
+  } catch (err) {
+    const m = authMessage(err);
+    if (m) return fail(m);
+    console.error('[GUN] logPastGunSession error:', err);
+    return fail('Could not save the session. Please try again.');
+  }
+}
+
 /** Step 3: record how the driver paid. The amount is the session's total — it is never taken from the browser. */
 export async function collectGunPayment(
   formData: FormData
@@ -718,7 +934,7 @@ export async function collectGunPayment(
 
     const { data: s, error } = await supabaseAdmin
       .from('sessions')
-      .select('id, status, payment_status, total_amount, driver_id, receipt_number, shift_id, attendant_id, recording_mode')
+      .select('id, status, payment_status, total_amount, driver_id, receipt_number, shift_id, attendant_id, recording_mode, review_flags, end_time')
       .eq('id', sessionId)
       .maybeSingle();
     if (error) throw error;
@@ -730,6 +946,8 @@ export async function collectGunPayment(
     const amount = roundMoney(Number(s.total_amount || 0));
     if (!(amount > 0)) return fail('There is nothing to collect on this session.');
     driverId = s.driver_id;
+    // A charge logged after the fact is paid as of the day it happened
+    const paidAt: string | undefined = ((s.review_flags || []) as string[]).includes('backdated') && s.end_time ? s.end_time : undefined;
 
     let reference: string | null = null;
     if (input.method === 'momo') {
@@ -804,6 +1022,7 @@ export async function collectGunPayment(
           description: `Payment for session ${s.receipt_number}`,
           session_id: s.id,
           created_by: user.id,
+          ...(paidAt ? { created_at: paidAt } : {}),
         },
       ]);
     }
@@ -820,6 +1039,7 @@ export async function collectGunPayment(
         momo_ref_key: reference,
         status: 'completed',
         attendant_id: user.id,
+        ...(paidAt ? { created_at: paidAt } : {}),
       },
     ]);
     if (payErr) {

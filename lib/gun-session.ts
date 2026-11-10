@@ -25,14 +25,19 @@ export type ReviewFlag =
   | 'start_gap' // start reading is higher than the gun's last end reading
   | 'exceeds_battery' // more energy than the car's battery can hold
   | 'impossible_power' // more energy than the machine can deliver in that time
-  | 'long_session'; // ran for several hours
+  | 'long_session' // ran for several hours
+  | 'backdated'; // logged after the fact, with a date chosen by the attendant
 
 export const REVIEW_FLAG_LABEL: Record<ReviewFlag, string> = {
   start_gap: 'Energy went through this gun without being recorded',
   exceeds_battery: 'More energy than the battery can hold',
   impossible_power: 'More energy than the machine can deliver in that time',
   long_session: 'Session ran for a very long time',
+  backdated: 'Logged after the charge, with a date set by the attendant',
 };
+
+/** How far back an attendant may log a past charge. */
+export const MAX_BACKDATE_DAYS = 7;
 
 /** Reading may differ from the last end reading by this much before it is flagged (kWh). */
 export const GAP_TOLERANCE_KWH = 0.5;
