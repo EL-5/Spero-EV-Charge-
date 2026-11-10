@@ -1,6 +1,12 @@
 import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
+  poweredByHeader: false,
+  compress: true,
+  experimental: {
+    // Import only the icons/charts a page uses instead of the whole package
+    optimizePackageImports: ['lucide-react', 'recharts', 'date-fns'],
+  },
   images: {
     unoptimized: true,
   },

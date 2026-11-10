@@ -21,7 +21,6 @@ function useRealtimeSync(table: string, queryKeys: any[][]) {
         'postgres_changes',
         { event: '*', schema: 'public', table },
         (payload) => {
-          console.log(`[REALTIME] Update for ${table}:`, payload);
           const parsedKeys = JSON.parse(keysString);
           parsedKeys.forEach((key: any) => {
             queryClient.invalidateQueries({ queryKey: key });
@@ -50,6 +49,31 @@ export function useDashboardStats(options: { attendantId?: string } = {}) {
       const startOfToday = new Date();
       startOfToday.setHours(0, 0, 0, 0);
       const todayISO = startOfToday.toISOString();
+
+      // Fast path: one database function returns every number (migration 12).
+      // Falls through to the older multi-query path until that migration is applied.
+      const { data: fast, error: fastError } = await supabase.rpc('dashboard_stats', {
+        p_since: todayISO,
+        p_attendant: options.attendantId ?? null,
+      });
+      if (!fastError && fast) {
+        const n = (v: unknown) => Number(v) || 0;
+        const completed = n(fast.completed_count);
+        const unitsAll = n(fast.units_all_time);
+        return {
+          revenueToday: n(fast.revenue_today),
+          totalSessions: n(fast.sessions_today),
+          activeSessions: n(fast.active_sessions),
+          pendingPayments: n(fast.pending_count),
+          totalDrivers: n(fast.drivers),
+          totalVehicles: n(fast.vehicles),
+          unitsSoldToday: n(fast.units_today),
+          totalUnitsAllTime: unitsAll,
+          averageUnitsPerSession: completed > 0 ? unitsAll / completed : 0,
+          totalReceivables: n(fast.drivers_debt) + n(fast.pending_amount),
+          pendingPaymentsAmount: n(fast.pending_amount),
+        } as any;
+      }
 
       let sessionQuery = supabase.from('sessions').select('*', { count: 'exact', head: true }).eq('status', 'completed').gte('created_at', todayISO);
       let activeQuery = supabase.from('sessions').select('*', { count: 'exact', head: true }).eq('status', 'active');

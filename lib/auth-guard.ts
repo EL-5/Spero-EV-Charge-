@@ -29,27 +29,10 @@ export interface AuthenticatedUser {
  * @returns The authenticated user's profile.
  */
 export async function requireAuth(allowedRoles?: string[]): Promise<AuthenticatedUser> {
-  // Get the current Supabase user (authenticates from auth cookie / JWT via SSR client)
   const supabase = await getServerSupabase();
-  const {
-    data: { user },
-    error: userError,
-  } = await supabase.auth.getUser();
+  const userId = await verifiedUserId(supabase);
 
-  if (userError || !user) {
-    throw new Error('Unauthenticated: You must be signed in to perform this action.');
-  }
-
-  // Fetch the user's profile with role info (use admin client to bypass RLS)
-  const { data: profile, error: profileError } = await supabaseAdmin
-    .from('profiles')
-    .select('id, name, email, role, is_active')
-    .eq('id', user.id)
-    .single();
-
-  if (profileError || !profile) {
-    throw new Error('Unauthenticated: User profile not found.');
-  }
+  const profile = await loadProfile(userId);
 
   if (!profile.is_active) {
     throw new Error('Forbidden: Your account has been deactivated. Contact a system administrator.');
@@ -68,6 +51,57 @@ export async function requireAuth(allowedRoles?: string[]): Promise<Authenticate
     email: profile.email,
     isActive: profile.is_active,
   };
+}
+
+/**
+ * Identity of the caller. getClaims() checks the token's signature locally, so it
+ * skips the network round trip getUser() makes on every action. If the project cannot
+ * verify locally, getClaims falls back to the same server check by itself.
+ */
+async function verifiedUserId(supabase: Awaited<ReturnType<typeof getServerSupabase>>): Promise<string> {
+  const { data, error } = await supabase.auth.getClaims();
+  const sub = data?.claims?.sub;
+  if (!error && typeof sub === 'string' && sub) return sub;
+
+  const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser();
+  if (userError || !user) {
+    throw new Error('Unauthenticated: You must be signed in to perform this action.');
+  }
+  return user.id;
+}
+
+interface ProfileRow {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  is_active: boolean;
+}
+
+// Profiles change rarely, but every action reads one. A short cache removes that read
+// from bursts of actions. Kept to 15 s so a deactivation or role change still bites fast.
+const PROFILE_TTL_MS = 15_000;
+const profileCache = new Map<string, { at: number; row: ProfileRow }>();
+
+async function loadProfile(userId: string): Promise<ProfileRow> {
+  const hit = profileCache.get(userId);
+  if (hit && Date.now() - hit.at < PROFILE_TTL_MS) return hit.row;
+
+  const { data: profile, error: profileError } = await supabaseAdmin
+    .from('profiles')
+    .select('id, name, email, role, is_active')
+    .eq('id', userId)
+    .single();
+
+  if (profileError || !profile) {
+    throw new Error('Unauthenticated: User profile not found.');
+  }
+  if (profileCache.size > 500) profileCache.clear();
+  profileCache.set(userId, { at: Date.now(), row: profile as ProfileRow });
+  return profile as ProfileRow;
 }
 
 export interface AuthenticatedDriver {

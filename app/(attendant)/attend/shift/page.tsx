@@ -28,7 +28,7 @@ export default function ShiftPage() {
       if (!res.success) throw new Error(res.error);
       return res.shift;
     },
-    refetchInterval: 10_000,
+    refetchInterval: 30_000,
   });
   const [counts, setCounts] = useState<Record<string, number>>({});
   const [coins, setCoins] = useState('');

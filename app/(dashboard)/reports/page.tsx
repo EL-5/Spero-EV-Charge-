@@ -4,8 +4,6 @@ import { TopBar } from '@/components/layout/TopBar';
 import { formatCurrency, formatDate } from '@/lib/utils';
 import { FileText, Download, Filter, Calendar, TrendingUp, Zap, DollarSign, Loader2 } from 'lucide-react';
 import { useSessions, useDashboardStats, usePayments } from '@/hooks/use-database';
-import html2canvas from 'html2canvas';
-import jsPDF from 'jspdf';
 import { toast } from 'sonner';
 
 const reportTypes = [
@@ -137,7 +135,7 @@ export default function ReportsPage() {
       // Ensure all images/styles are painted
       await new Promise(resolve => setTimeout(resolve, 200));
 
-      const canvas = await html2canvas(element, {
+      const canvas = await (await import('html2canvas')).default(element, {
         scale: 2,
         useCORS: true,
         logging: false,
@@ -149,7 +147,7 @@ export default function ReportsPage() {
       const imgData = canvas.toDataURL('image/jpeg', 0.95);
       const imgProps = { width: canvas.width, height: canvas.height };
       
-      const pdf = new jsPDF({
+      const pdf = new (await import('jspdf')).default({
         orientation: imgProps.width > imgProps.height ? 'l' : 'p',
         unit: 'mm',
         format: 'a4'
@@ -160,7 +158,7 @@ export default function ReportsPage() {
       
       // If report is multiple pages, jsPDF handles it better with addImage but we'll stick to a single long page for professional summary
       // or standard A4 if it fits. For a summary, a single continuous page is often cleaner.
-      const finalPdf = new jsPDF({
+      const finalPdf = new (await import('jspdf')).default({
         orientation: pdfWidth > pdfHeight ? 'l' : 'p',
         unit: 'mm',
         format: [pdfWidth, pdfHeight + 10] // Dynamic height

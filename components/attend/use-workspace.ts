@@ -14,7 +14,8 @@ export function useWorkspace() {
       if (!res.success) throw new Error(res.error);
       return res.data;
     },
-    refetchInterval: 8000,
+    refetchInterval: 15_000,
+    staleTime: 5_000,
     refetchOnWindowFocus: true,
   });
 }
@@ -27,7 +28,8 @@ export function useGunSession(id: string) {
       if (!res.success) throw new Error(res.error);
       return res.data;
     },
-    refetchInterval: 10000,
+    refetchInterval: 20_000,
+    staleTime: 5_000,
   });
 }
 

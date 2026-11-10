@@ -6,8 +6,6 @@ import { formatCurrency, formatDateTime, getStatusColor, getStatusLabel } from '
 import { Search, CreditCard, DollarSign, Smartphone, Wallet, Activity, XCircle, Printer, Share2, Download, ShieldCheck, ShieldAlert, Eye } from 'lucide-react';
 import { useAuthStore } from '@/store/auth';
 import { usePayments, useDrivers, useSettings, usePaymentProofs } from '@/hooks/use-database';
-import html2canvas from 'html2canvas';
-import jsPDF from 'jspdf';
 
 const methodIcons: Record<string, React.ReactNode> = {
   cash: <DollarSign size={14} />,
@@ -71,7 +69,7 @@ export default function PaymentsPage() {
       // Small delay to ensure DOM is ready and images are painted
       await new Promise(resolve => setTimeout(resolve, 150));
 
-      const canvas = await html2canvas(element, {
+      const canvas = await (await import('html2canvas')).default(element, {
         scale: 3,
         useCORS: true,
         allowTaint: true,
@@ -87,7 +85,7 @@ export default function PaymentsPage() {
       const pdfWidth = 80; // Standard 80mm
       const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
 
-      const pdf = new jsPDF({
+      const pdf = new (await import('jspdf')).default({
         orientation: 'portrait',
         unit: 'mm',
         format: [pdfWidth, pdfHeight]

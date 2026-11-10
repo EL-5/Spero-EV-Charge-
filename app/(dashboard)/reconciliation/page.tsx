@@ -1,9 +1,6 @@
 'use client';
 
 import { useState, useRef } from 'react';
-import * as XLSX from 'xlsx';
-import jsPDF from 'jspdf';
-import html2canvas from 'html2canvas';
 import { TopBar } from '@/components/layout/TopBar';
 import { useReconciliations, useSessions, usePayments, useKwhDailyReadings } from '@/hooks/use-database';
 import { saveMultiDocumentReconciliationReport, deleteReconciliation, addReconciliation, addKwhDailyReading, deleteKwhDailyReading } from '@/app/actions/reconciliation';
@@ -84,6 +81,7 @@ export default function ReconciliationPage() {
 
   // ─── Excel / CSV Parser Helper ──────────────────────────────────────────────
   const parseExcelOrCsv = async (file: File, type: 'meter' | 'notebook' | 'hubtel') => {
+    const XLSX = await import('xlsx'); // loaded only when a file is uploaded
     return new Promise<UploadedFileMeta>((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = (e) => {
@@ -298,9 +296,10 @@ export default function ReconciliationPage() {
   };
 
   // ─── Export C-Suite Executive Report to Excel WorkBook ──────────────────────
-  const handleExportExcel = (reportData: any) => {
+  const handleExportExcel = async (reportData: any) => {
     if (!reportData) return;
     try {
+      const XLSX = await import('xlsx'); // loaded only when exporting
       const wb = XLSX.utils.book_new();
 
       const ai = reportData.aiAnalysis || {};
@@ -391,14 +390,14 @@ export default function ReconciliationPage() {
     if (!reportRef.current) return;
     try {
       toast.info('Rendering Executive PDF Audit Document...');
-      const canvas = await html2canvas(reportRef.current, {
+      const canvas = await (await import('html2canvas')).default(reportRef.current, {
         scale: 2,
         backgroundColor: '#090d16',
         useCORS: true,
       });
 
       const imgData = canvas.toDataURL('image/png');
-      const pdf = new jsPDF('p', 'mm', 'a4');
+      const pdf = new (await import('jspdf')).default('p', 'mm', 'a4');
       const imgWidth = 210;
       const pageHeight = 297;
       const imgHeight = (canvas.height * imgWidth) / canvas.width;

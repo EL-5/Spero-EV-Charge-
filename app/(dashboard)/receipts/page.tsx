@@ -7,8 +7,6 @@ import { useSessions, useSettings } from '@/hooks/use-database';
 import { formatCurrency, formatDateTime } from '@/lib/utils';
 import { Search, Printer, Download, Share2, Eye, X, Calendar } from 'lucide-react';
 import type { Session } from '@/lib/types';
-import html2canvas from 'html2canvas';
-import jsPDF from 'jspdf';
 
 export default function ReceiptsPage() {
   const { data: sessions, isLoading } = useSessions({ limit: 100 });
@@ -45,7 +43,7 @@ export default function ReceiptsPage() {
       // Small delay to ensure DOM is ready and images are painted
       await new Promise(resolve => setTimeout(resolve, 150));
 
-      const canvas = await html2canvas(element, {
+      const canvas = await (await import('html2canvas')).default(element, {
         scale: 3, // Higher scale for better text clarity
         useCORS: true,
         allowTaint: true,
@@ -61,7 +59,7 @@ export default function ReceiptsPage() {
       const pdfWidth = 80; // Standard 80mm
       const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
       
-      const pdf = new jsPDF({
+      const pdf = new (await import('jspdf')).default({
         orientation: 'portrait',
         unit: 'mm',
         format: [pdfWidth, pdfHeight]
