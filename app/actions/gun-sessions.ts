@@ -9,6 +9,7 @@ import { generateReceiptNumber } from '@/lib/utils';
 import { logAudit } from '@/lib/audit';
 import {
   ACCEPT_CASH,
+  AGREED_RATE_PER_KWH,
   GUNS,
   MAX_BACKDATE_DAYS,
   computeBill,
@@ -161,6 +162,29 @@ async function resolveWho(formData: FormData): Promise<Who> {
     vehiclePlate: v.data.plate_number,
     vehicleDetails: [v.data.brand, v.data.model].filter(Boolean).join(' ') || 'Vehicle',
   };
+}
+
+/** The price per kWh: the active price in Settings → Pricing, or the agreed 5.50 when none is set. */
+async function currentRate(): Promise<{ id: string | null; perKwh: number }> {
+  const { data } = await supabaseAdmin
+    .from('pricing')
+    .select('id, rate, unit_quantity')
+    .eq('unit_type', 'kwh')
+    .eq('is_active', true)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (!data) return { id: null, perKwh: AGREED_RATE_PER_KWH };
+  const perKwh = Number(data.rate) / Number(data.unit_quantity || 1);
+  return { id: data.id as string, perKwh: Number.isFinite(perKwh) && perKwh > 0 ? perKwh : AGREED_RATE_PER_KWH };
+}
+
+/** A photo that may be left out. A file that is there must still be a valid image. */
+function optionalPhoto(formData: FormData, key: string, label: string): { file: File | null; error?: string } {
+  const v = formData.get(key);
+  if (!(v instanceof File) || v.size === 0) return { file: null };
+  const ok = validatePhoto(v);
+  return ok.ok ? { file: ok.file } : { file: null, error: `${label}: ${ok.error}` };
 }
 
 function toSummary(row: SessionRow): GunSessionSummary {
@@ -610,16 +634,8 @@ export async function startGunSession(
     if (busy.data) return fail(`Gun ${gun} is already in use. Finish that session first.`);
 
     // The rate is read here and frozen on the session
-    const { data: rateRow } = await supabaseAdmin
-      .from('pricing')
-      .select('id, rate, unit_quantity')
-      .eq('unit_type', 'kwh')
-      .eq('is_active', true)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    if (!rateRow) return fail('No kWh price is set. Ask a manager to set one in Pricing.');
-    const ratePerKwh = Number(rateRow.rate) / Number(rateRow.unit_quantity || 1);
+    const rateRow = await currentRate();
+    const ratePerKwh = rateRow.perKwh;
 
     const sessionId = randomUUID();
     const receiptNumber = generateReceiptNumber('SC');
@@ -686,12 +702,15 @@ export async function finishGunSession(
     const sessionId = String(formData.get('sessionId') || '');
     if (!sessionId) return fail('Session not found.');
 
-    const startReading = parseReading(formData.get('startReading'));
-    if (startReading === null) return fail('Enter the start reading: the kWh the display showed before charging.');
+    // Only the end reading is needed. The start continues from where this gun last stopped,
+    // unless the attendant types one.
     const endReading = parseReading(formData.get('endReading'));
     if (endReading === null) return fail('Enter the end reading: the kWh the display shows now.');
-    const startPhoto = validatePhoto(formData.get('startPhoto'));
-    if (!startPhoto.ok) return fail(`Start photo: ${startPhoto.error}`);
+    const startTyped = String(formData.get('startReading') || '').trim();
+    const typedStart = startTyped === '' ? null : parseReading(startTyped);
+    if (startTyped !== '' && typedStart === null) return fail('The start reading is not a valid number.');
+    const startPhoto = optionalPhoto(formData, 'startPhoto', 'Start photo');
+    if (startPhoto.error) return fail(startPhoto.error);
     const endPhoto = validatePhoto(formData.get('endPhoto'));
     if (!endPhoto.ok) return fail(`End photo: ${endPhoto.error}`);
 
@@ -707,6 +726,10 @@ export async function finishGunSession(
 
     // The start must continue from where this gun last stopped
     const lastEnd = await getLastEndReading(s.gun as Gun);
+    const startReading = typedStart ?? lastEnd;
+    if (startReading === null) {
+      return fail(`There is no earlier reading on Gun ${s.gun} to continue from. Type the start reading too.`);
+    }
     const startProblem = startReadingProblem(startReading, lastEnd);
     if (startProblem) return fail(startProblem);
     const startGap = computeStartGap(startReading, lastEnd);
@@ -733,15 +756,16 @@ export async function finishGunSession(
     );
     const flags = Array.from(new Set([...(s.review_flags || []), ...newFlags])) as ReviewFlag[];
 
-    const startPhotoPath = `${s.attendant_id}/${s.id}-start.${extFor(startPhoto.file)}`;
+    const startPhotoPath = startPhoto.file ? `${s.attendant_id}/${s.id}-start.${extFor(startPhoto.file)}` : null;
     const endPhotoPath = `${s.attendant_id}/${s.id}-end.${extFor(endPhoto.file)}`;
+    const dropPhotos = () => Promise.all([startPhotoPath, endPhotoPath].map((p) => (p ? removePhoto(p) : Promise.resolve())));
     const [upStart, upEnd] = await Promise.all([
-      uploadPhoto(startPhotoPath, startPhoto.file),
+      startPhoto.file && startPhotoPath ? uploadPhoto(startPhotoPath, startPhoto.file) : Promise.resolve(null),
       uploadPhoto(endPhotoPath, endPhoto.file),
     ]);
     if (upStart || upEnd) {
-      await Promise.all([removePhoto(startPhotoPath), removePhoto(endPhotoPath)]);
-      return fail('Could not save the photos. Check the connection and try again.');
+      await dropPhotos();
+      return fail('Could not save the photo. Check the connection and try again.');
     }
 
     // Only an active session can be finished, and only once.
@@ -765,7 +789,7 @@ export async function finishGunSession(
       .maybeSingle();
 
     if (updErr || !updated) {
-      await Promise.all([removePhoto(startPhotoPath), removePhoto(endPhotoPath)]);
+      await dropPhotos();
       if (updErr) console.error('[GUN] finishGunSession update error:', updErr);
       return fail(updErr ? 'Could not finish the session. Please try again.' : 'This session has already been finished.');
     }
@@ -830,15 +854,9 @@ export async function logPastGunSession(
     const typedStart = startTyped === '' ? null : parseReading(startTyped);
     if (startTyped !== '' && typedStart === null) return fail('The start reading is not a valid number.');
 
-    const photoFrom = (key: string, label: string): { file: File | null; error?: string } => {
-      const v = formData.get(key);
-      if (!(v instanceof File) || v.size === 0) return { file: null };
-      const ok = validatePhoto(v);
-      return ok.ok ? { file: ok.file } : { file: null, error: `${label}: ${ok.error}` };
-    };
-    const startPhoto = photoFrom('startPhoto', 'Start photo');
+    const startPhoto = optionalPhoto(formData, 'startPhoto', 'Start photo');
     if (startPhoto.error) return fail(startPhoto.error);
-    const endPhoto = photoFrom('endPhoto', 'End photo');
+    const endPhoto = optionalPhoto(formData, 'endPhoto', 'End photo');
     if (endPhoto.error) return fail(endPhoto.error);
 
     const shift = await getActiveShift(user.id);
@@ -911,16 +929,8 @@ export async function logPastGunSession(
     }
     const startGap = computeStartGap(startReading, lastEnd);
 
-    const { data: rateRow } = await supabaseAdmin
-      .from('pricing')
-      .select('id, rate, unit_quantity')
-      .eq('unit_type', 'kwh')
-      .eq('is_active', true)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    if (!rateRow) return fail('No kWh price is set. Ask a manager to set one in Pricing.');
-    const ratePerKwh = Number(rateRow.rate) / Number(rateRow.unit_quantity || 1);
+    const rateRow = await currentRate();
+    const ratePerKwh = rateRow.perKwh;
     const { units, amount } = computeBill(startReading, endReading, ratePerKwh);
 
     let batteryKwh: number | null = null;

@@ -38,6 +38,9 @@ export const REVIEW_FLAG_LABEL: Record<ReviewFlag, string> = {
   missing_photo: 'Saved without a display photo',
 };
 
+/** The agreed price per kWh (GHS). Used only when no price has been set in Settings → Pricing. */
+export const AGREED_RATE_PER_KWH = 5.5;
+
 /** How far back an attendant may log a past charge. */
 export const MAX_BACKDATE_DAYS = 7;
 

@@ -51,14 +51,17 @@ export function FinishPanel({ session, onChanged }: { session: GunSessionView; o
   const [submitting, setSubmitting] = useState(false);
 
   const finished = session.status !== 'active';
-  const start = parseReading(startText);
+  const typedStart = parseReading(startText);
   const end = parseReading(endText);
   const lastEnd = session.lastEndReading;
+  // Only the end reading is required: the start continues from where this gun last stopped.
+  const start = typedStart ?? lastEnd;
+  const startBad = startText.trim() !== '' && typedStart === null;
 
-  const startProblem = start !== null ? startReadingProblem(start, lastEnd) : null;
+  const startProblem = typedStart !== null ? startReadingProblem(typedStart, lastEnd) : null;
   const endProblem = start !== null && end !== null ? endReadingProblem(start, end) : null;
   const preview = start !== null && end !== null && !startProblem && !endProblem ? computeBill(start, end, session.rate) : null;
-  const gap = start !== null && lastEnd !== null ? Math.round((start - lastEnd) * 1000) / 1000 : null;
+  const gap = typedStart !== null && lastEnd !== null ? Math.round((typedStart - lastEnd) * 1000) / 1000 : null;
   const previewFlags =
     preview && start !== null
       ? evaluateFlags({
@@ -69,16 +72,16 @@ export function FinishPanel({ session, onChanged }: { session: GunSessionView; o
           endedAt: new Date(),
         })
       : [];
-  const canSubmit = !!preview && !!startPhoto && !!endPhoto && !submitting;
+  const canSubmit = !!preview && !startBad && !!endPhoto && !submitting;
 
   const submit = async () => {
     if (!canSubmit) return;
     setSubmitting(true);
     const fd = new FormData();
     fd.set('sessionId', session.id);
-    fd.set('startReading', String(start));
+    if (typedStart !== null) fd.set('startReading', String(typedStart));
     fd.set('endReading', String(end));
-    fd.set('startPhoto', startPhoto!);
+    if (startPhoto) fd.set('startPhoto', startPhoto);
     fd.set('endPhoto', endPhoto!);
     const res = await finishGunSession(fd);
     setSubmitting(false);
@@ -147,25 +150,9 @@ export function FinishPanel({ session, onChanged }: { session: GunSessionView; o
       ) : (
         <>
           <p className="text-sm text-ink-soft">
-            When charging is done, type what the display showed <b>before</b> and <b>after</b>, and photograph it each time. The system works out the bill.
+            When charging is done, type what the display shows now and photograph it. The system works out the kWh from where Gun {session.gun} last stopped
+            {lastEnd !== null ? ` (${lastEnd.toFixed(1)} kWh)` : ''} and bills it at GHS {session.rate.toFixed(2)} per kWh.
           </p>
-
-          {ReadingBox({ id: 'start-reading', value: startText, onChange: setStartText, label: 'Start reading', hint: `Gun ${session.gun}, before charging` })}
-          {lastEnd !== null && (
-            <div className="-mt-2 flex flex-wrap items-center gap-2 text-[13px]">
-              <span className="text-ink-soft">Gun {session.gun} last ended at {lastEnd.toFixed(1)} kWh.</span>
-              {start !== null && !startProblem && gap !== null && Math.abs(gap) <= GAP_TOLERANCE_KWH && <span className="att-chip att-chip-ok">Matches last session</span>}
-              {start !== null && !startProblem && gap !== null && Math.abs(gap) > GAP_TOLERANCE_KWH && (
-                <span className="att-chip att-chip-warn">{gap.toFixed(1)} kWh above last end. A manager will review.</span>
-              )}
-            </div>
-          )}
-          {startProblem && (
-            <div role="alert" className="rounded-2xl bg-[#ffe3df] p-3 text-sm font-medium text-[#9b1c13]">
-              {startProblem}
-            </div>
-          )}
-          <PhotoCapture label="Photo of the start reading" file={startPhoto} onChange={setStartPhoto} disabled={submitting} />
 
           {ReadingBox({ id: 'end-reading', value: endText, onChange: setEndText, label: 'End reading', hint: `Gun ${session.gun}, after charging` })}
           {endProblem && (
@@ -174,6 +161,29 @@ export function FinishPanel({ session, onChanged }: { session: GunSessionView; o
             </div>
           )}
           <PhotoCapture label="Photo of the end reading" file={endPhoto} onChange={setEndPhoto} disabled={submitting} />
+
+          {lastEnd === null && typedStart === null && (
+            <div className="rounded-2xl bg-[#fde7cc] p-3 text-sm font-medium text-[#7a3b00]">
+              Gun {session.gun} has no earlier session to continue from. Open “Start reading” below and type what the display showed before charging.
+            </div>
+          )}
+          <details className="rounded-[22px] border border-line p-4" open={lastEnd === null}>
+            <summary className="cursor-pointer text-sm font-semibold">Start reading and its photo (optional)</summary>
+            <div className="mt-3 flex flex-col gap-4">
+              <p className="text-sm text-ink-soft">Leave this empty to continue from the gun’s last end reading. Type it only if the display showed something different before charging.</p>
+              {ReadingBox({ id: 'start-reading', value: startText, onChange: setStartText, label: 'Start reading', hint: `Gun ${session.gun}, before charging` })}
+              {typedStart !== null && !startProblem && gap !== null && Math.abs(gap) <= GAP_TOLERANCE_KWH && <span className="att-chip att-chip-ok self-start">Matches last session</span>}
+              {typedStart !== null && !startProblem && gap !== null && Math.abs(gap) > GAP_TOLERANCE_KWH && (
+                <span className="att-chip att-chip-warn self-start">{gap.toFixed(1)} kWh above last end. A manager will review.</span>
+              )}
+              {startProblem && (
+                <div role="alert" className="rounded-2xl bg-[#ffe3df] p-3 text-sm font-medium text-[#9b1c13]">
+                  {startProblem}
+                </div>
+              )}
+              <PhotoCapture label="Photo of the start reading (optional)" file={startPhoto} onChange={setStartPhoto} disabled={submitting} />
+            </div>
+          </details>
 
           {preview && (
             <>
@@ -199,11 +209,7 @@ export function FinishPanel({ session, onChanged }: { session: GunSessionView; o
           <button type="button" onClick={submit} disabled={!canSubmit} className="att-btn att-btn-primary !min-h-[62px] text-lg">
             {submitting ? 'Saving…' : 'Save readings and work out the bill'}
           </button>
-          {preview && (!startPhoto || !endPhoto) && (
-            <div className="-mt-1 text-center text-sm text-ink-soft">
-              Take {!startPhoto && !endPhoto ? 'both display photos' : !startPhoto ? 'the start photo' : 'the end photo'} to continue.
-            </div>
-          )}
+          {!endPhoto && preview && <div className="-mt-1 text-center text-sm text-ink-soft">Take the end display photo to continue.</div>}
         </>
       )}
     </section>
