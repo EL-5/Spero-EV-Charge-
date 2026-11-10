@@ -45,7 +45,8 @@ export default function PastChargePage() {
 
   const timesOk = !!startAt && !!endAt && endAt > startAt && endAt <= latest && startAt >= earliest;
   const needsShift = !!ws && !ws.shift && ws.user.role === 'attendant';
-  const canSubmit = who.whoOk && timesOk && !!preview && !!startPhoto && !!endPhoto && !needsShift && !submitting;
+  const startBad = startText.trim() !== '' && start === null;
+  const canSubmit = who.whoOk && timesOk && end !== null && !startBad && !endProblem && !needsShift && !submitting;
 
   const hint = needsShift
     ? 'Start your shift first.'
@@ -55,10 +56,10 @@ export default function PastChargePage() {
         ? 'Set when the charge started and ended.'
         : !timesOk
           ? 'The end must be after the start, not in the future, and within the last ' + MAX_BACKDATE_DAYS + ' days.'
-          : !preview
-            ? 'Enter both readings.'
-            : !startPhoto || !endPhoto
-              ? 'Take both display photos.'
+          : end === null
+            ? 'Enter the end reading.'
+            : startBad || endProblem
+              ? 'Check the readings.'
               : 'A manager will review this charge.';
 
   const submit = async () => {
@@ -69,10 +70,10 @@ export default function PastChargePage() {
     who.appendTo(fd);
     fd.set('startAt', startAt);
     fd.set('endAt', endAt);
-    fd.set('startReading', String(start));
+    if (start !== null) fd.set('startReading', String(start));
     fd.set('endReading', String(end));
-    fd.set('startPhoto', startPhoto!);
-    fd.set('endPhoto', endPhoto!);
+    if (startPhoto) fd.set('startPhoto', startPhoto);
+    if (endPhoto) fd.set('endPhoto', endPhoto);
     const res = await logPastGunSession(fd);
     setSubmitting(false);
     if (!res.success) {
@@ -120,7 +121,7 @@ export default function PastChargePage() {
 
       <section className="att-card flex flex-col gap-5 p-5 sm:p-6">
         <p className="text-sm text-ink-soft">
-          Use this for a charge that already happened and was not recorded. Every past charge needs both readings and both photos, and goes to a manager to check.
+          Use this for a charge that already happened and was not recorded. You only need the end reading; photos are optional. Every past charge goes to a manager to check.
           Charges up to {MAX_BACKDATE_DAYS} days back can be added; for older ones, ask a manager.
         </p>
 
@@ -170,20 +171,34 @@ export default function PastChargePage() {
           </div>
         </div>
 
-        {reading('past-start-reading', 'Start reading (before charging)', startText, setStartText)}
-        <PhotoCapture label="Photo of the start reading" file={startPhoto} onChange={setStartPhoto} disabled={submitting} />
         {reading('past-end-reading', 'End reading (after charging)', endText, setEndText)}
         {endProblem && (
           <div role="alert" className="rounded-2xl bg-[#ffe3df] p-3 text-sm font-medium text-[#9b1c13]">
             {endProblem}
           </div>
         )}
-        <PhotoCapture label="Photo of the end reading" file={endPhoto} onChange={setEndPhoto} disabled={submitting} />
+        <PhotoCapture label="Photo of the end reading (optional)" file={endPhoto} onChange={setEndPhoto} disabled={submitting} />
 
-        {preview && (
+        <details className="rounded-[22px] border border-line p-4">
+          <summary className="cursor-pointer text-sm font-semibold">Start reading and its photo (optional)</summary>
+          <div className="mt-3 flex flex-col gap-4">
+            <p className="text-sm text-ink-soft">
+              Leave this empty and the charge starts where that gun last stopped. Type it only if you know the display showed something else, or if the gun has no earlier session.
+            </p>
+            {reading('past-start-reading', 'Start reading (before charging)', startText, setStartText)}
+            <PhotoCapture label="Photo of the start reading (optional)" file={startPhoto} onChange={setStartPhoto} disabled={submitting} />
+          </div>
+        </details>
+
+        {preview ? (
           <div className="rounded-[22px] bg-ground p-4 text-[15px]">
             Energy delivered: <b>{preview.units.toFixed(1)} kWh</b>. The system works out the amount at today’s rate when you save.
           </div>
+        ) : (
+          end !== null && <div className="rounded-[22px] bg-ground p-4 text-[15px]">The system works out the kWh and the amount when you save.</div>
+        )}
+        {(!startPhoto || !endPhoto) && (
+          <div className="text-[13px] text-ink-soft">Without both photos the charge is marked for the manager to check more closely.</div>
         )}
 
         <div className="flex flex-col gap-2">

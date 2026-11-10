@@ -26,7 +26,8 @@ export type ReviewFlag =
   | 'exceeds_battery' // more energy than the car's battery can hold
   | 'impossible_power' // more energy than the machine can deliver in that time
   | 'long_session' // ran for several hours
-  | 'backdated'; // logged after the fact, with a date chosen by the attendant
+  | 'backdated' // logged after the fact, with a date chosen by the attendant
+  | 'missing_photo'; // a past charge saved without one or both display photos
 
 export const REVIEW_FLAG_LABEL: Record<ReviewFlag, string> = {
   start_gap: 'Energy went through this gun without being recorded',
@@ -34,6 +35,7 @@ export const REVIEW_FLAG_LABEL: Record<ReviewFlag, string> = {
   impossible_power: 'More energy than the machine can deliver in that time',
   long_session: 'Session ran for a very long time',
   backdated: 'Logged after the charge, with a date set by the attendant',
+  missing_photo: 'Saved without a display photo',
 };
 
 /** How far back an attendant may log a past charge. */

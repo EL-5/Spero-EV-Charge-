@@ -741,13 +741,24 @@ export async function logPastGunSession(
     }
     if (endAt.getTime() - startAt.getTime() > 24 * 3_600_000) return fail('A charge cannot last longer than 24 hours.');
 
-    const startReading = parseReading(formData.get('startReading'));
+    // Only the end reading is required. The start continues from where the gun last stopped
+    // unless the attendant types one. Photos are welcome but optional here.
     const endReading = parseReading(formData.get('endReading'));
-    if (startReading === null || endReading === null) return fail('Enter both readings from the display.');
-    const startPhoto = validatePhoto(formData.get('startPhoto'));
-    if (!startPhoto.ok) return fail(`Start photo: ${startPhoto.error}`);
-    const endPhoto = validatePhoto(formData.get('endPhoto'));
-    if (!endPhoto.ok) return fail(`End photo: ${endPhoto.error}`);
+    if (endReading === null) return fail('Enter the end reading from the display.');
+    const startTyped = String(formData.get('startReading') || '').trim();
+    const typedStart = startTyped === '' ? null : parseReading(startTyped);
+    if (startTyped !== '' && typedStart === null) return fail('The start reading is not a valid number.');
+
+    const photoFrom = (key: string, label: string): { file: File | null; error?: string } => {
+      const v = formData.get(key);
+      if (!(v instanceof File) || v.size === 0) return { file: null };
+      const ok = validatePhoto(v);
+      return ok.ok ? { file: ok.file } : { file: null, error: `${label}: ${ok.error}` };
+    };
+    const startPhoto = photoFrom('startPhoto', 'Start photo');
+    if (startPhoto.error) return fail(startPhoto.error);
+    const endPhoto = photoFrom('endPhoto', 'End photo');
+    if (endPhoto.error) return fail(endPhoto.error);
 
     const shift = await getActiveShift(user.id);
     if (!shift && user.role === 'attendant') return fail('Start your shift before you record a session.');
@@ -804,6 +815,10 @@ export async function logPastGunSession(
         .maybeSingle(),
     ]);
     const lastEnd = prev.data?.end_reading === null || prev.data?.end_reading === undefined ? null : Number(prev.data.end_reading);
+    const startReading = typedStart ?? lastEnd;
+    if (startReading === null) {
+      return fail(`There is no earlier reading on Gun ${gun} to continue from. Type the start reading too.`);
+    }
     const startProblem = startReadingProblem(startReading, lastEnd);
     if (startProblem) return fail(startProblem);
     const endProblem = endReadingProblem(startReading, endReading);
@@ -835,16 +850,21 @@ export async function logPastGunSession(
     const flags = Array.from(
       new Set<ReviewFlag>([
         ...evaluateFlags({ startGap, units, batteryKwh, startedAt: startAt, endedAt: endAt }, await loadLimits()),
-        'backdated',
+        'backdated' as ReviewFlag,
+        ...((!startPhoto.file || !endPhoto.file ? ['missing_photo'] : []) as ReviewFlag[]),
       ])
     );
 
     const sessionId = randomUUID();
-    const startPhotoPath = `${user.id}/${sessionId}-start.${extFor(startPhoto.file)}`;
-    const endPhotoPath = `${user.id}/${sessionId}-end.${extFor(endPhoto.file)}`;
-    const [upStart, upEnd] = await Promise.all([uploadPhoto(startPhotoPath, startPhoto.file), uploadPhoto(endPhotoPath, endPhoto.file)]);
+    const startPhotoPath = startPhoto.file ? `${user.id}/${sessionId}-start.${extFor(startPhoto.file)}` : null;
+    const endPhotoPath = endPhoto.file ? `${user.id}/${sessionId}-end.${extFor(endPhoto.file)}` : null;
+    const dropPhotos = () => Promise.all([startPhotoPath, endPhotoPath].map((p) => (p ? removePhoto(p) : Promise.resolve())));
+    const [upStart, upEnd] = await Promise.all([
+      startPhoto.file && startPhotoPath ? uploadPhoto(startPhotoPath, startPhoto.file) : Promise.resolve(null),
+      endPhoto.file && endPhotoPath ? uploadPhoto(endPhotoPath, endPhoto.file) : Promise.resolve(null),
+    ]);
     if (upStart || upEnd) {
-      await Promise.all([removePhoto(startPhotoPath), removePhoto(endPhotoPath)]);
+      await dropPhotos();
       return fail('Could not save the photos. Check the connection and try again.');
     }
 
@@ -885,7 +905,7 @@ export async function logPastGunSession(
       },
     ]);
     if (insertError) {
-      await Promise.all([removePhoto(startPhotoPath), removePhoto(endPhotoPath)]);
+      await dropPhotos();
       console.error('[GUN] logPastGunSession insert error:', insertError);
       return fail('Could not save the session. Please try again.');
     }
@@ -898,6 +918,7 @@ export async function logPastGunSession(
       metadata: {
         receiptNumber, gun, enteredAt: nowIso, startAt: startAt.toISOString(), endAt: endAt.toISOString(),
         startReading, endReading, startGap, units, amount, flags, driverId: who.driverId,
+        startTyped: typedStart !== null, hasStartPhoto: !!startPhoto.file, hasEndPhoto: !!endPhoto.file,
       },
     });
 
