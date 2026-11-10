@@ -35,7 +35,7 @@ BEGIN
   FOR UPDATE;
 
   IF NOT FOUND THEN
-    RAISE EXCEPTION 'Driver % not found' USING ERRCODE = 'P0002';
+    RAISE EXCEPTION 'Driver % not found', p_driver_id USING ERRCODE = 'P0002';
   END IF;
 
   v_after := COALESCE(v_before, 0) + p_delta;
@@ -155,7 +155,7 @@ BEGIN
   FOR UPDATE;
 
   IF NOT FOUND THEN
-    RAISE EXCEPTION 'Driver % not found' USING ERRCODE = 'P0002';
+    RAISE EXCEPTION 'Driver % not found', p_driver_id USING ERRCODE = 'P0002';
   END IF;
 
   v_after := GREATEST(0, COALESCE(v_before, 0) + p_delta);
