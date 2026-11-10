@@ -311,6 +311,53 @@ export async function searchDrivers(query: string): Promise<{ success: true; dat
   }
 }
 
+/** Every active registered driver with their cars, for the drop-down on the start screen. */
+export async function listDriversForPicker(): Promise<{ success: true; data: DriverMatch[] } | Fail> {
+  try {
+    await requireAuth(STAFF);
+    const { data: drivers, error } = await supabaseAdmin
+      .from('drivers')
+      .select('id, name, phone, wallet_balance, is_active')
+      .neq('is_active', false)
+      .order('name', { ascending: true })
+      .limit(1000);
+    if (error) throw error;
+    const driverRows = (drivers || []) as unknown as DriverRow[];
+    if (driverRows.length === 0) return { success: true, data: [] };
+
+    const { data: vehicles, error: vErr } = await supabaseAdmin
+      .from('vehicles')
+      .select('id, driver_id, plate_number, brand, model, battery_capacity')
+      .in('driver_id', driverRows.map((d) => d.id));
+    if (vErr) throw vErr;
+    const vehicleRows = (vehicles || []) as unknown as VehicleRow[];
+
+    return {
+      success: true,
+      data: driverRows.map((d) => ({
+        driverId: d.id,
+        name: d.name,
+        phone: d.phone,
+        walletBalance: Number(d.wallet_balance || 0),
+        isActive: true,
+        vehicles: vehicleRows
+          .filter((v) => v.driver_id === d.id)
+          .map((v) => ({
+            id: v.id,
+            plate: v.plate_number,
+            label: [v.brand, v.model].filter(Boolean).join(' ') || 'Vehicle',
+            batteryKwh: v.battery_capacity ? Number(v.battery_capacity) : null,
+          })),
+      })),
+    };
+  } catch (err) {
+    const m = authMessage(err);
+    if (m) return fail(m);
+    console.error('[GUN] listDriversForPicker error:', err);
+    return fail('Could not load the drivers. Try again.');
+  }
+}
+
 /** One session, for the finish / collect / receipt screens. */
 export async function getGunSession(sessionId: string): Promise<{ success: true; data: GunSessionView } | Fail> {
   try {

@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { toast } from 'sonner';
 import { useQuery } from '@tanstack/react-query';
-import { searchDrivers, startGunSession } from '@/app/actions/gun-sessions';
+import { listDriversForPicker, searchDrivers, startGunSession } from '@/app/actions/gun-sessions';
 import { GUNS, type Gun } from '@/lib/gun-session';
 import type { DriverMatch, WorkspaceData } from '@/lib/gun-session-types';
 import { formatCurrency } from '@/lib/utils';
@@ -44,6 +44,23 @@ export default function StartSessionPanel({ workspace, onStarted }: Props) {
     staleTime: 30_000,
     refetchInterval: false,
   });
+
+  // Everyone registered, for the drop-down
+  const { data: allDrivers = [], isLoading: loadingList } = useQuery<DriverMatch[]>({
+    queryKey: ['driver-list'],
+    queryFn: async () => {
+      const res = await listDriversForPicker();
+      return res.success ? res.data : [];
+    },
+    enabled: !guest && !driver,
+    staleTime: 60_000,
+    refetchInterval: false,
+  });
+
+  const pickDriver = (m: DriverMatch) => {
+    setDriver(m);
+    setVehicleId(m.vehicles.length === 1 ? m.vehicles[0].id : '');
+  };
 
   const whoOk = guest ? guestPlate.trim().length >= 3 : !!driver && !!vehicleId;
   const needsShift = !workspace.shift && workspace.user.role === 'attendant';
@@ -220,6 +237,25 @@ export default function StartSessionPanel({ workspace, onStarted }: Props) {
           </div>
         ) : (
           <>
+            <select
+              className="att-input"
+              aria-label="Choose a registered driver"
+              value=""
+              disabled={loadingList}
+              onChange={(e) => {
+                const m = allDrivers.find((d) => d.driverId === e.target.value);
+                if (m) pickDriver(m);
+              }}
+            >
+              <option value="">{loadingList ? 'Loading drivers…' : allDrivers.length ? 'Choose a registered driver…' : 'No registered drivers yet'}</option>
+              {allDrivers.map((d) => (
+                <option key={d.driverId} value={d.driverId}>
+                  {d.name} · {d.phone}
+                  {d.vehicles.length ? ` · ${d.vehicles.map((v) => v.plate).join(', ')}` : ' · no car'}
+                </option>
+              ))}
+            </select>
+            <div className="text-center text-xs text-ink-soft">or search</div>
             <input
               className="att-input"
               type="search"
@@ -239,10 +275,7 @@ export default function StartSessionPanel({ workspace, onStarted }: Props) {
                   <button
                     key={m.driverId}
                     type="button"
-                    onClick={() => {
-                      setDriver(m);
-                      setVehicleId(m.vehicles.length === 1 ? m.vehicles[0].id : '');
-                    }}
+                    onClick={() => pickDriver(m)}
                     className="flex min-h-[56px] w-full items-center justify-between gap-3 border-b border-line px-4 py-2 text-left last:border-b-0 hover:bg-ground"
                   >
                     <span className="min-w-0">
