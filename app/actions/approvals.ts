@@ -321,3 +321,51 @@ export async function reviewReading(input: { sessionId: string; decision: 'accep
     return fail('Could not save the decision. Please try again.');
   }
 }
+
+/** A manager voids a session directly. Same refund rules as an approved request; the reason is audited. */
+export async function voidSessionNow(input: { sessionId: string; reason: string }): Promise<{ success: true; message: string } | Fail> {
+  try {
+    const user = await requireAuth(MANAGERS);
+    const reason = String(input.reason || '').trim();
+    if (reason.length < 5) return fail('Write why this session is being voided.');
+
+    const { data: s } = await supabaseAdmin
+      .from('sessions')
+      .select('id, receipt_number, recording_mode')
+      .eq('id', input.sessionId)
+      .maybeSingle();
+    if (!s || s.recording_mode !== 'manual_gun') return fail('Session not found.');
+
+    const res = await executeVoid({ sessionId: s.id, reason, actorId: user.id });
+    if (!res.ok) return fail(res.error);
+
+    // Any request still waiting for this session is now settled
+    await supabaseAdmin
+      .from('session_void_requests')
+      .update({ status: 'approved', reviewed_by: user.id, reviewed_at: new Date().toISOString(), review_note: 'Voided directly by a manager' })
+      .eq('session_id', s.id)
+      .eq('status', 'pending');
+
+    await logAudit({
+      actor: user,
+      action: 'session.void.direct',
+      resourceType: 'session',
+      resourceId: s.id,
+      metadata: { receiptNumber: s.receipt_number, reason, walletRefunded: res.walletRefunded, refundDue: res.refundDue },
+    });
+    revalidatePath('/approvals');
+    revalidatePath('/sessions');
+    revalidatePath('/dashboard');
+    const message = res.walletRefunded
+      ? `Voided. GHS ${res.walletRefunded.toFixed(2)} went back to the driver's wallet.`
+      : res.refundDue
+        ? `Voided. GHS ${res.refundDue.toFixed(2)} must be paid back to the driver by MoMo.`
+        : 'Voided.';
+    return { success: true, message };
+  } catch (err) {
+    const m = authMessage(err);
+    if (m) return fail(m);
+    console.error('[APPROVALS] voidSessionNow error:', err);
+    return fail('Could not void the session. Please try again.');
+  }
+}

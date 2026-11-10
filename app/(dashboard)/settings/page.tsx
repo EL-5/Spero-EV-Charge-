@@ -10,6 +10,7 @@ import { saveSettings, updatePricingRate, togglePricingRate } from '@/app/action
 import { resetSystem } from '@/app/actions/system';
 import { useAuthStore } from '@/store/auth';
 import { toast } from 'sonner';
+import { LimitsPanel } from '@/components/layout/LimitsPanel';
 
 const tabs = [
   { id: 'general',  label: 'General',      icon: Settings  },
@@ -18,6 +19,7 @@ const tabs = [
   { id: 'wallet',   label: 'Wallet & Debt', icon: Wallet    },
   { id: 'receipts', label: 'Receipts',      icon: FileText  },
   { id: 'branding', label: 'Branding',      icon: Palette   },
+  { id: 'limits',   label: 'Limits',        icon: AlertTriangle },
   { id: 'maintenance', label: 'Maintenance', icon: RefreshCw },
 ];
 
@@ -825,6 +827,8 @@ export default function SettingsPage() {
             )}
 
             {/* ── MAINTENANCE ── */}
+            {activeTab === 'limits' && <LimitsPanel canEdit={user?.role === 'super_admin'} />}
+
             {activeTab === 'maintenance' && user?.role === 'super_admin' && (
               <div className="space-y-6">
                 

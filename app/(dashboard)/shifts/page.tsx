@@ -6,6 +6,7 @@ import { Clock, Play, Square, DollarSign, CreditCard, Smartphone, Wallet } from 
 import { useShifts, useProfiles } from '@/hooks/use-database';
 import { useAuthStore } from '@/store/auth';
 import { startShift, closeShift } from '@/app/actions/shifts';
+import { ACCEPT_CASH } from '@/lib/gun-session';
 
 export default function ShiftsPage() {
   const { user } = useAuthStore();
@@ -73,7 +74,7 @@ export default function ShiftsPage() {
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4">
               {[
-                { label: 'Cash', value: activeShift.cashCollected, icon: DollarSign },
+                ...(ACCEPT_CASH ? [{ label: 'Cash', value: activeShift.cashCollected, icon: DollarSign }] : []),
                 { label: 'Digital (MoMo)', value: activeShift.hubtelCollected, icon: Smartphone },
                 { label: 'Wallet', value: activeShift.walletDeductions, icon: Wallet },
               ].map(item => (
@@ -115,7 +116,7 @@ export default function ShiftsPage() {
                   <th>End</th>
                   <th>Duration</th>
                   <th>Sessions</th>
-                  <th>Cash</th>
+                  {ACCEPT_CASH && <th>Cash</th>}
                   <th>Digital (MoMo)</th>
                   <th>Wallet</th>
                   <th>Total</th>
@@ -133,7 +134,7 @@ export default function ShiftsPage() {
                       </td>
                       <td className="text-[11px] whitespace-nowrap" style={{ color: 'var(--muted-foreground)' }}>{calcDuration(shift.startTime, shift.endTime)}</td>
                       <td className="text-center">{shift.totalSessions || 0}</td>
-                      <td className="whitespace-nowrap">{formatCurrency(shift.cashCollected || 0)}</td>
+                      {ACCEPT_CASH && <td className="whitespace-nowrap">{formatCurrency(shift.cashCollected || 0)}</td>}
                       <td className="whitespace-nowrap font-medium text-teal-600">{formatCurrency(shift.hubtelCollected || 0)}</td>
                       <td className="whitespace-nowrap">{formatCurrency(shift.walletDeductions || 0)}</td>
                       <td className="font-bold whitespace-nowrap text-blue-600">{formatCurrency((shift.cashCollected || 0) + (shift.hubtelCollected || 0) + (shift.walletDeductions || 0))}</td>

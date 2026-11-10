@@ -4,6 +4,7 @@ import { use } from 'react';
 import { useRouter } from 'next/navigation';
 import { ChevronLeft } from 'lucide-react';
 import { CollectPanel, FinishPanel, ReceiptCard } from '@/components/attend/SessionPanels';
+import { VoidRequest } from '@/components/attend/VoidRequest';
 import { useGunSession, useRefreshAttend } from '@/components/attend/use-workspace';
 
 /**
@@ -60,6 +61,8 @@ export default function SessionPage({ params }: { params: Promise<{ id: string }
           </div>
         </div>
       )}
+
+      {s && step !== 'finish' && <VoidRequest session={s} onChanged={changed} />}
     </div>
   );
 }

@@ -1,5 +1,6 @@
 'use server';
 
+import { loadLimits } from '@/lib/limits-server';
 import { randomUUID } from 'node:crypto';
 import { revalidatePath } from 'next/cache';
 import { supabaseAdmin } from '@/lib/supabase-server';
@@ -324,7 +325,7 @@ export async function getGunSession(sessionId: string): Promise<{ success: true;
     if (!row) return fail('Session not found.');
     if (!canActOn(user, row.attendant_id)) return fail('Forbidden: this session belongs to another attendant.');
 
-    const [veh, drv, att] = await Promise.all([
+    const [veh, drv, att, pend] = await Promise.all([
       row.vehicle_id
         ? supabaseAdmin.from('vehicles').select('battery_capacity').eq('id', row.vehicle_id).maybeSingle()
         : Promise.resolve({ data: null }),
@@ -332,6 +333,7 @@ export async function getGunSession(sessionId: string): Promise<{ success: true;
         ? supabaseAdmin.from('drivers').select('wallet_balance').eq('id', row.driver_id).maybeSingle()
         : Promise.resolve({ data: null }),
       supabaseAdmin.from('profiles').select('name').eq('id', row.attendant_id).maybeSingle(),
+      supabaseAdmin.from('session_void_requests').select('id', { count: 'exact', head: true }).eq('session_id', row.id).eq('status', 'pending'),
     ]);
 
     return {
@@ -350,6 +352,7 @@ export async function getGunSession(sessionId: string): Promise<{ success: true;
         attendantName: (att.data as { name?: string } | null)?.name || 'Attendant',
         startGap: row.start_gap === null || row.start_gap === undefined ? null : Number(row.start_gap),
         isMine: row.attendant_id === user.id,
+        voidPending: (pend.count || 0) > 0,
       },
     };
   } catch (err) {
@@ -581,13 +584,16 @@ export async function finishGunSession(
       batteryKwh = v?.battery_capacity ? Number(v.battery_capacity) : null;
     }
     const endedAt = new Date();
-    const newFlags = evaluateFlags({
-      startGap: null,
-      units,
-      batteryKwh,
-      startedAt: new Date(s.start_time),
-      endedAt,
-    });
+    const newFlags = evaluateFlags(
+      {
+        startGap: null,
+        units,
+        batteryKwh,
+        startedAt: new Date(s.start_time),
+        endedAt,
+      },
+      await loadLimits()
+    );
     const flags = Array.from(new Set([...(s.review_flags || []), ...newFlags])) as ReviewFlag[];
 
     const photoPath = `${s.attendant_id}/${s.id}-end.${extFor(photo.file)}`;

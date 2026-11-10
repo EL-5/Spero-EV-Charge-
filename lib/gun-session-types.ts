@@ -56,6 +56,8 @@ export interface GunSessionView extends GunSessionSummary {
   attendantName: string;
   startGap: number | null;
   isMine: boolean;
+  /** A void request for this session is waiting for a manager. */
+  voidPending: boolean;
 }
 
 export interface GunTotals {

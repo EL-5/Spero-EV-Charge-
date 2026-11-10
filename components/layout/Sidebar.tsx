@@ -5,8 +5,11 @@ import { usePathname } from 'next/navigation';
 import {
   LayoutDashboard, Users, Car, Zap, CreditCard, Wallet,
   AlertTriangle, Clock, BarChart3, FileText, UserCog,
-  Settings, ChevronLeft, ChevronRight, LogOut, Smartphone, Activity
+  Settings, ChevronLeft, ChevronRight, LogOut, Smartphone, Activity,
+  ClipboardCheck, CalendarCheck, ScrollText
 } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
+import { getApprovalCount } from '@/app/actions/approvals';
 import { useUIStore } from '@/store/ui';
 import { useAuthStore } from '@/store/auth';
 import { useSettings } from '@/hooks/use-database';
@@ -16,15 +19,18 @@ const navItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ['super_admin', 'manager', 'accountant', 'finance', 'attendant'] },
   { href: '/drivers', label: 'Drivers', icon: Users, roles: ['super_admin', 'manager', 'attendant'] },
   { href: '/vehicles', label: 'Vehicles', icon: Car, roles: ['super_admin', 'manager', 'attendant'] },
+  { href: '/approvals', label: 'Approvals', icon: ClipboardCheck, roles: ['super_admin', 'manager'] },
   { href: '/sessions', label: 'Sessions', icon: Zap, roles: ['super_admin', 'manager'] },
   { href: '/payments', label: 'Payments', icon: CreditCard, roles: ['super_admin', 'manager', 'accountant', 'finance'] },
   { href: '/receipts', label: 'Receipts', icon: FileText, roles: ['super_admin'] },
   { href: '/wallets', label: 'Wallets', icon: Wallet, roles: ['super_admin', 'accountant', 'finance'] },
   { href: '/debts', label: 'Debts', icon: AlertTriangle, roles: ['super_admin', 'accountant', 'finance'] },
   { href: '/shifts', label: 'Shifts', icon: Clock, roles: ['super_admin', 'manager'] },
+  { href: '/daily-close', label: 'Daily close', icon: CalendarCheck, roles: ['super_admin', 'manager'] },
   { href: '/analytics', label: 'Analytics', icon: BarChart3, roles: ['super_admin', 'manager', 'finance', 'accountant'] },
   { href: '/reports', label: 'Reports', icon: FileText, roles: ['super_admin', 'manager', 'accountant', 'finance'] },
   { href: '/reconciliation', label: 'Energy Recon', icon: Activity, roles: ['super_admin', 'manager', 'accountant', 'finance'] },
+  { href: '/audit', label: 'Audit log', icon: ScrollText, roles: ['super_admin', 'manager'] },
   { href: '/users', label: 'Users', icon: UserCog, roles: ['super_admin'] },
 
   { href: '/settings', label: 'Settings', icon: Settings, roles: ['super_admin'] },
@@ -35,6 +41,14 @@ export function Sidebar() {
   const { sidebarOpen, toggleSidebar } = useUIStore();
   const { user, logout } = useAuthStore();
   const { data: settings } = useSettings();
+  const isManager = user?.role === 'manager' || user?.role === 'super_admin';
+  // Number of things waiting for a manager. Checked once a minute, and again after any decision.
+  const { data: waiting = 0 } = useQuery({
+    queryKey: ['approval-count'],
+    queryFn: () => getApprovalCount(),
+    enabled: isManager,
+    refetchInterval: 60_000,
+  });
 
   const logoUrl = settings?.logo_url || '/spero-logo.png';
   const appName = settings?.app_name || 'SCMS';
@@ -120,6 +134,15 @@ export function Sidebar() {
             >
               <Icon size={17} style={{ flexShrink: 0, color: active ? primaryColor : 'inherit' }} />
               {sidebarOpen && <span>{label}</span>}
+              {href === '/approvals' && waiting > 0 && (
+                <span
+                  className="ml-auto rounded-full px-1.5 text-[11px] font-bold leading-5"
+                  style={{ background: '#EC7C03', color: '#fff', minWidth: 20, textAlign: 'center' }}
+                  aria-label={`${waiting} waiting`}
+                >
+                  {waiting > 99 ? '99+' : waiting}
+                </span>
+              )}
             </Link>
           );
         })}
