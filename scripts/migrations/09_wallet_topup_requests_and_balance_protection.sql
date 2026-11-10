@@ -34,16 +34,19 @@ ALTER TABLE wallet_topup_requests ENABLE ROW LEVEL SECURITY;
 -- role (which bypasses RLS), so these policies are defense-in-depth for any
 -- direct client-side query, matching the pattern already used for
 -- payment_proofs.
+DROP POLICY IF EXISTS "drivers_insert_own_topup_requests" ON wallet_topup_requests;
 CREATE POLICY "drivers_insert_own_topup_requests"
   ON wallet_topup_requests FOR INSERT
   TO authenticated
   WITH CHECK (driver_id = auth.uid());
 
+DROP POLICY IF EXISTS "drivers_view_own_topup_requests" ON wallet_topup_requests;
 CREATE POLICY "drivers_view_own_topup_requests"
   ON wallet_topup_requests FOR SELECT
   TO authenticated
   USING (driver_id = auth.uid());
 
+DROP POLICY IF EXISTS "staff_view_all_topup_requests" ON wallet_topup_requests;
 CREATE POLICY "staff_view_all_topup_requests"
   ON wallet_topup_requests FOR SELECT
   TO authenticated
@@ -54,6 +57,7 @@ CREATE POLICY "staff_view_all_topup_requests"
     )
   );
 
+DROP POLICY IF EXISTS "managers_update_topup_requests" ON wallet_topup_requests;
 CREATE POLICY "managers_update_topup_requests"
   ON wallet_topup_requests FOR UPDATE
   TO authenticated

@@ -249,6 +249,11 @@ export async function getAttendantWorkspace(): Promise<{ success: true; data: Wo
     const m = authMessage(err);
     if (m) return fail(m);
     console.error('[GUN] getAttendantWorkspace error:', err);
+    // 42703 = column missing, 42P01 = table missing: the database update has not been run.
+    const code = errorCode(err);
+    if (code === '42703' || code === '42P01' || code === 'PGRST204') {
+      return fail('The database has not been updated for the attendant app yet. Ask the administrator to run the pending database update (scripts/migrations/apply_pending_08_09_10.sql).');
+    }
     return fail('Could not load your workspace. Check the connection and try again.');
   }
 }

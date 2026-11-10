@@ -75,22 +75,35 @@ $$;
 
 -- 6. Write-once audit log. Rows can be added but never changed or removed:
 -- the trigger fires for every role, including the service role.
+--
+-- audit_logs may already exist in an older shape (user_id, table_name,
+-- record_id, old_value, new_value, ip_address). That table is kept as it is and
+-- the columns the app writes are added next to the old ones.
 CREATE TABLE IF NOT EXISTS audit_logs (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  actor_id UUID,
-  actor_name TEXT,
-  actor_role TEXT,
-  action TEXT NOT NULL,
-  resource_type TEXT,
-  resource_id TEXT,
-  metadata JSONB NOT NULL DEFAULT '{}'::jsonb
+  action TEXT NOT NULL
 );
-
--- audit_logs may already exist from an earlier manual setup: add anything missing.
+ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS actor_id UUID;
+ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS actor_name TEXT;
 ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS actor_role TEXT;
+ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS resource_type TEXT;
 ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS resource_id TEXT;
 ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS metadata JSONB NOT NULL DEFAULT '{}'::jsonb;
+
+-- The older columns may be marked mandatory; the app does not fill them in.
+DO $$
+DECLARE c TEXT;
+BEGIN
+  FOREACH c IN ARRAY ARRAY['user_id', 'table_name', 'record_id', 'old_value', 'new_value', 'ip_address'] LOOP
+    IF EXISTS (
+      SELECT 1 FROM information_schema.columns
+      WHERE table_schema = 'public' AND table_name = 'audit_logs' AND column_name = c AND is_nullable = 'NO'
+    ) THEN
+      EXECUTE format('ALTER TABLE audit_logs ALTER COLUMN %I DROP NOT NULL', c);
+    END IF;
+  END LOOP;
+END $$;
 
 CREATE INDEX IF NOT EXISTS idx_audit_logs_created ON audit_logs (created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_resource ON audit_logs (resource_type, resource_id);
