@@ -18,6 +18,7 @@ import {
   evaluateFlags,
   normaliseMomoReference,
   parseReading,
+  roundKwh,
   roundMoney,
   startReadingProblem,
   type Gun,
@@ -389,6 +390,86 @@ export async function listDriversForPicker(): Promise<{ success: true; data: Dri
     if (m) return fail(m);
     console.error('[GUN] listDriversForPicker error:', err);
     return fail('Could not load the drivers. Try again.');
+  }
+}
+
+export interface HistoryFilter {
+  from: string; // YYYY-MM-DD (Ghana time = UTC)
+  to: string;
+  gun?: Gun | 'all';
+  status?: 'all' | 'paid' | 'unpaid' | 'voided';
+  /** start_time of the last row already shown, for the next page */
+  before?: string;
+}
+
+const HISTORY_PAGE = 40;
+
+/** The signed-in person's own sessions, newest first, with totals for the whole range. */
+export async function listMySessions(f: HistoryFilter): Promise<
+  | {
+      success: true;
+      data: GunSessionSummary[];
+      hasMore: boolean;
+      totals: { sessions: number; kwh: number; collected: number; unpaid: number; voided: number };
+    }
+  | Fail
+> {
+  try {
+    const user = await requireAuth(STAFF);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(f.from) || !/^\d{4}-\d{2}-\d{2}$/.test(f.to)) return fail('Choose a valid date range.');
+    const end = new Date(`${f.to}T00:00:00.000Z`);
+    end.setUTCDate(end.getUTCDate() + 1);
+    const fromIso = `${f.from}T00:00:00.000Z`;
+
+    const base = () => {
+      let q = supabaseAdmin
+        .from('sessions')
+        .select(SESSION_COLUMNS)
+        .eq('recording_mode', 'manual_gun')
+        .eq('attendant_id', user.id)
+        .gte('start_time', fromIso)
+        .lt('start_time', end.toISOString());
+      if (f.gun === 'A' || f.gun === 'B') q = q.eq('gun', f.gun);
+      if (f.status === 'paid') q = q.eq('payment_status', 'paid').neq('status', 'cancelled');
+      if (f.status === 'unpaid') q = q.eq('status', 'pending_payment');
+      if (f.status === 'voided') q = q.eq('status', 'cancelled');
+      return q;
+    };
+
+    let page = base().order('start_time', { ascending: false }).limit(HISTORY_PAGE + 1);
+    if (f.before) page = page.lt('start_time', f.before);
+    const [pageRes, sumRes] = await Promise.all([
+      page,
+      base().select('status, payment_status, units_consumed, total_amount').limit(5000),
+    ]);
+    if (pageRes.error) throw pageRes.error;
+    if (sumRes.error) throw sumRes.error;
+
+    const totals = { sessions: 0, kwh: 0, collected: 0, unpaid: 0, voided: 0 };
+    for (const r of (sumRes.data || []) as unknown as { status: string; payment_status: string | null; units_consumed: number | string | null; total_amount: number | string | null }[]) {
+      if (r.status === 'cancelled') {
+        totals.voided += 1;
+        continue;
+      }
+      if (r.status === 'active') continue;
+      totals.sessions += 1;
+      totals.kwh += Number(r.units_consumed || 0);
+      if (r.payment_status === 'paid') totals.collected += Number(r.total_amount || 0);
+      else totals.unpaid += Number(r.total_amount || 0);
+    }
+
+    const rows = ((pageRes.data || []) as unknown as SessionRow[]);
+    return {
+      success: true,
+      hasMore: rows.length > HISTORY_PAGE,
+      data: rows.slice(0, HISTORY_PAGE).map(toSummary),
+      totals: { ...totals, kwh: roundKwh(totals.kwh), collected: roundMoney(totals.collected), unpaid: roundMoney(totals.unpaid) },
+    };
+  } catch (err) {
+    const m = authMessage(err);
+    if (m) return fail(m);
+    console.error('[GUN] listMySessions error:', err);
+    return fail('Could not load your history.');
   }
 }
 

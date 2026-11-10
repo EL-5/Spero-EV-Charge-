@@ -3,7 +3,7 @@
 import { useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { Clock, House, LogOut, Plus } from 'lucide-react';
+import { CalendarClock, Clock, History, House, LogOut, Plus } from 'lucide-react';
 import { useAuthStore } from '@/store/auth';
 
 const ALLOWED_ROLES = ['attendant', 'manager', 'super_admin'];
@@ -52,6 +52,8 @@ export default function AttendShell({ children }: { children: React.ReactNode })
 
   const items = [
     { href: '/attend', label: 'Home', Icon: House, active: pathname === '/attend' || pathname.startsWith('/attend/session') },
+    { href: '/attend/history', label: 'History', Icon: History, active: pathname.startsWith('/attend/history') },
+    { href: '/attend/past', label: 'Past', Icon: CalendarClock, active: pathname.startsWith('/attend/past') },
     { href: '/attend/shift', label: 'Shift', Icon: Clock, active: pathname.startsWith('/attend/shift') },
   ];
 
@@ -116,11 +118,15 @@ export default function AttendShell({ children }: { children: React.ReactNode })
       {/* Tab bar: phones and upright tablets */}
       <nav
         aria-label="Main"
-        className="pb-safe att-gutter fixed inset-x-0 bottom-0 z-40 grid grid-cols-3 items-end border-t border-line bg-white lg:hidden"
+        className="pb-safe att-gutter fixed inset-x-0 bottom-0 z-40 grid grid-cols-5 items-end border-t border-line bg-white lg:hidden"
       >
-        <Link href="/attend" aria-current={items[0].active ? 'page' : undefined} className={`flex h-20 flex-col items-center justify-center gap-1 text-[13px] ${items[0].active ? 'font-semibold text-brand-green-dark' : 'text-ink-soft'}`}>
-          <House size={26} aria-hidden />
+        <Link href={items[0].href} aria-current={items[0].active ? 'page' : undefined} className={`flex h-20 flex-col items-center justify-center gap-1 text-[12px] ${items[0].active ? 'font-semibold text-brand-green-dark' : 'text-ink-soft'}`}>
+          <House size={24} aria-hidden />
           Home
+        </Link>
+        <Link href={items[1].href} aria-current={items[1].active ? 'page' : undefined} className={`flex h-20 flex-col items-center justify-center gap-1 text-[12px] ${items[1].active ? 'font-semibold text-brand-green-dark' : 'text-ink-soft'}`}>
+          <History size={24} aria-hidden />
+          History
         </Link>
         <div className="flex justify-center">
           <Link
@@ -131,8 +137,12 @@ export default function AttendShell({ children }: { children: React.ReactNode })
             <Plus size={30} strokeWidth={2.6} aria-hidden />
           </Link>
         </div>
-        <Link href="/attend/shift" aria-current={items[1].active ? 'page' : undefined} className={`flex h-20 flex-col items-center justify-center gap-1 text-[13px] ${items[1].active ? 'font-semibold text-brand-green-dark' : 'text-ink-soft'}`}>
-          <Clock size={26} aria-hidden />
+        <Link href={items[2].href} aria-current={items[2].active ? 'page' : undefined} className={`flex h-20 flex-col items-center justify-center gap-1 text-[12px] ${items[2].active ? 'font-semibold text-brand-green-dark' : 'text-ink-soft'}`}>
+          <CalendarClock size={24} aria-hidden />
+          Past
+        </Link>
+        <Link href={items[3].href} aria-current={items[3].active ? 'page' : undefined} className={`flex h-20 flex-col items-center justify-center gap-1 text-[12px] ${items[3].active ? 'font-semibold text-brand-green-dark' : 'text-ink-soft'}`}>
+          <Clock size={24} aria-hidden />
           Shift
         </Link>
       </nav>
