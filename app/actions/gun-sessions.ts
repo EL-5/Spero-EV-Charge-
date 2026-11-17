@@ -17,7 +17,6 @@ import {
   dbPaymentMethod,
   endReadingProblem,
   evaluateFlags,
-  normaliseMomoReference,
   parseReading,
   roundKwh,
   roundMoney,
@@ -1061,19 +1060,9 @@ export async function collectGunPayment(
     // A charge logged after the fact is paid as of the day it happened
     const paidAt: string | undefined = ((s.review_flags || []) as string[]).includes('backdated') && s.end_time ? s.end_time : undefined;
 
-    let reference: string | null = null;
-    if (input.method === 'momo') {
-      reference = normaliseMomoReference(String(input.reference || ''));
-      if (reference.length < 6) return fail('Enter the MoMo transaction ID from the driver’s SMS.');
-      // Older payments may hold the same ID in their free-text reference.
-      const prior = await supabaseAdmin
-        .from('payments')
-        .select('id')
-        .in('reference', [reference, String(input.reference || '').trim()])
-        .limit(1)
-        .maybeSingle();
-      if (prior.data) return fail('This MoMo ID was already used on another payment.');
-    }
+    // No transaction ID is typed. As in the old process, the payment gets a system reference
+    // (network and time); the photo of the confirmation is the evidence a manager checks.
+    const reference: string | null = input.method === 'momo' ? `${(input.network || 'momo').toUpperCase()}-${Date.now()}` : null;
     let proofFile: File | null = null;
     if (input.method === 'momo') {
       const proof = validatePhoto(formData.get('proof'));
@@ -1147,8 +1136,6 @@ export async function collectGunPayment(
         amount,
         method,
         reference,
-        // Unique across new payments: a MoMo ID can be used once.
-        momo_ref_key: reference,
         status: 'completed',
         attendant_id: user.id,
         ...(paidAt ? { created_at: paidAt } : {}),
@@ -1159,7 +1146,6 @@ export async function collectGunPayment(
       walletDebited = 0;
       await revertClaim(s.id);
       if (proofPath) await removePhoto(proofPath);
-      if (errorCode(payErr) === '23505') return fail('This MoMo ID was already used on another payment.');
       console.error('[GUN] payment insert error:', payErr);
       return fail('Could not record the payment. Nothing was charged. Please try again.');
     }

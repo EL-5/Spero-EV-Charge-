@@ -83,7 +83,7 @@ function Evidence({ id, onClose, onChanged }: { id: string; onClose: () => void;
                 ['Started', formatDateTime(data.startTime)],
                 ['Ended', data.endTime ? formatDateTime(data.endTime) : '—'],
                 ['Paid by', data.paymentMethod ? data.paymentMethod.toUpperCase() : '—'],
-                ['MoMo ID', data.reference || '—'],
+                ['Payment ref', data.reference || '—'],
               ].map(([k, v]) => (
                 <div key={k}><div className="text-xs" style={{ color: 'var(--muted-foreground)' }}>{k}</div><div className="font-medium break-words">{v}</div></div>
               ))}
