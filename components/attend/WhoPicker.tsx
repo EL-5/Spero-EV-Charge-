@@ -2,6 +2,9 @@
 
 import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { toast } from 'sonner';
+import { addDriver } from '@/app/actions/drivers';
+import { addVehicle } from '@/app/actions/vehicles';
 import { listDriversForPicker, searchDrivers } from '@/app/actions/gun-sessions';
 import type { DriverMatch } from '@/lib/gun-session-types';
 import { formatCurrency } from '@/lib/utils';
@@ -77,9 +80,43 @@ export function WhoPicker({ who }: { who: Who }) {
     guest, setGuest, query, setQuery, driver, setDriver, vehicleId, setVehicleId, guestName, setGuestName,
     guestPlate, setGuestPlate, matches, searching, allDrivers, loadingList, pickDriver,
   } = who;
+  const [registering, setRegistering] = useState(false);
+  const [reg, setReg] = useState({ name: '', phone: '', brand: '', model: '', plate: '' });
+  const [saving, setSaving] = useState(false);
+  const regOk = reg.name.trim() && reg.phone.trim() && reg.plate.trim();
+
+  // Same as the original: add the driver, then their car, then carry on with them selected.
+  const register = async () => {
+    if (!regOk || saving) return;
+    setSaving(true);
+    try {
+      const d = await addDriver({ name: reg.name.trim(), phone: reg.phone.trim(), type: 'individual' });
+      if (!d.success || !d.id) throw new Error(d.error || 'Could not register the driver.');
+      const v = await addVehicle({ brand: reg.brand.trim(), model: reg.model.trim(), plate_number: reg.plate.trim().toUpperCase(), driver_id: d.id });
+      if (!v.success) throw new Error(v.error || 'Could not register the car.');
+      const list = await listDriversForPicker();
+      const created = list.success ? list.data.find((m) => m.driverId === d.id) : undefined;
+      if (created) pickDriver(created);
+      setReg({ name: '', phone: '', brand: '', model: '', plate: '' });
+      setRegistering(false);
+      toast.success('Driver and car registered.');
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not register the customer.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
       <div className="flex flex-col gap-2">
-        <div className="text-sm font-semibold">Who is charging?</div>
+        <div className="flex items-center justify-between gap-3">
+          <div className="text-sm font-semibold">Who is charging?</div>
+          {!guest && !driver && !registering && (
+            <button type="button" onClick={() => setRegistering(true)} className="min-h-[44px] text-sm font-semibold underline">
+              Register new customer
+            </button>
+          )}
+        </div>
         <div className="grid grid-cols-2 rounded-[18px] bg-[#e8ecf2] p-1">
           {[
             { id: false, label: 'Registered' },
@@ -102,7 +139,24 @@ export function WhoPicker({ who }: { who: Who }) {
           ))}
         </div>
 
-        {guest ? (
+        {registering && !guest && !driver ? (
+          <div className="flex flex-col gap-3 rounded-[20px] border border-line bg-ground p-4">
+            <div className="text-sm font-semibold">Register a new customer</div>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <input className="att-input" placeholder="Full name *" value={reg.name} onChange={(e) => setReg({ ...reg, name: e.target.value })} aria-label="Full name" />
+              <input className="att-input" inputMode="tel" placeholder="Phone *" value={reg.phone} onChange={(e) => setReg({ ...reg, phone: e.target.value })} aria-label="Phone" />
+              <input className="att-input" placeholder="Car brand (e.g. Tesla)" value={reg.brand} onChange={(e) => setReg({ ...reg, brand: e.target.value })} aria-label="Car brand" />
+              <input className="att-input" placeholder="Model (e.g. Model 3)" value={reg.model} onChange={(e) => setReg({ ...reg, model: e.target.value })} aria-label="Car model" />
+            </div>
+            <input className="att-input" placeholder="Plate number *" autoCapitalize="characters" value={reg.plate} onChange={(e) => setReg({ ...reg, plate: e.target.value.toUpperCase() })} aria-label="Plate number" />
+            <div className="flex gap-3">
+              <button type="button" className="att-btn att-btn-ghost flex-1" onClick={() => setRegistering(false)} disabled={saving}>Cancel</button>
+              <button type="button" className="att-btn att-btn-primary flex-1" onClick={register} disabled={!regOk || saving}>
+                {saving ? 'Saving…' : 'Register both'}
+              </button>
+            </div>
+          </div>
+        ) : guest ? (
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <input
               className="att-input"

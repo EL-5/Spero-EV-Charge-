@@ -21,6 +21,8 @@ export default function SessionPage({ params }: { params: Promise<{ id: string }
   const changed = () => refresh(id);
 
   const step = !s ? 'finish' : s.status === 'active' ? 'finish' : s.status === 'pending_payment' ? 'collect' : 'done';
+  // A prepaid session can be paid before the charge, so the payment panel is open next to it
+  const showCollectBesideFinish = !!s && s.status === 'active' && s.mode === 'prepaid' && s.paymentStatus === 'unpaid';
 
   return (
     <div className="mx-auto flex max-w-[1100px] flex-col gap-5">
@@ -34,7 +36,7 @@ export default function SessionPage({ params }: { params: Promise<{ id: string }
           <ChevronLeft size={22} aria-hidden />
         </button>
         <h1 className="att-display flex-1 text-[28px] font-bold">
-          {step === 'finish' ? 'Log the kWh' : step === 'collect' ? 'Collect payment' : 'Receipt'}
+          {step === 'finish' ? 'Finalize session' : step === 'collect' ? 'Collect payment' : 'Receipt'}
         </h1>
         {s && (
           <>
@@ -50,11 +52,11 @@ export default function SessionPage({ params }: { params: Promise<{ id: string }
       {s && (
         <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-2">
           <div className={step === 'finish' ? 'min-w-0' : 'no-print hidden min-w-0 lg:block'}>
-            <FinishPanel session={s} onChanged={changed} />
+            <FinishPanel session={s} onChanged={changed} onPending={() => router.push('/attend')} onCancelled={() => router.push('/attend')} />
           </div>
-          <div className={step === 'finish' ? 'hidden min-w-0 lg:block' : 'min-w-0'}>
+          <div className={step === 'finish' && !showCollectBesideFinish ? 'hidden min-w-0 lg:block' : 'min-w-0'}>
             {step === 'done' ? (
-              <ReceiptCard session={s} onNew={() => router.push('/attend/new')} />
+              <ReceiptCard session={s} onNew={() => router.push('/attend/new')} onChanged={changed} />
             ) : (
               <CollectPanel session={s} onChanged={changed} />
             )}

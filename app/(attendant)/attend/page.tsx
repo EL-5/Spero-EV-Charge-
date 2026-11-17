@@ -3,7 +3,7 @@
 import { useRouter } from 'next/navigation';
 import StartSessionPanel from '@/components/attend/StartSessionPanel';
 import { useRefreshAttend, useWorkspace } from '@/components/attend/use-workspace';
-import { DoneToday, Hero, InProgress, StartShiftBanner, greeting, shiftLength, useNow } from '@/components/attend/HomeSections';
+import { DoneToday, Hero, InProgress, PendingPayments, StartShiftBanner, greeting, shiftLength, useNow } from '@/components/attend/HomeSections';
 
 export default function AttendHome() {
   const { data: ws, isLoading, error } = useWorkspace();
@@ -51,6 +51,7 @@ export default function AttendHome() {
         <div className="flex min-w-0 flex-col gap-6">
           <Hero ws={ws} />
           <InProgress items={ws.inProgress} ws={ws} now={now} />
+          <PendingPayments items={ws.pending} />
 
           {/* Phones and upright tablets: the form is its own screen */}
           <div className="lg:hidden">
@@ -66,8 +67,9 @@ export default function AttendHome() {
         <div className="hidden lg:block">
           <StartSessionPanel
             workspace={ws}
-            onStarted={async () => {
+            onStarted={async (id, mode) => {
               await refresh();
+              if (mode === 'prepaid') router.push(`/attend/session/${id}`);
             }}
           />
         </div>

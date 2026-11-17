@@ -18,6 +18,18 @@ export const GUNS: Gun[] = ['A', 'B'];
 export const ACCEPT_CASH = false;
 
 export type PayChoice = 'cash' | 'momo' | 'wallet';
+
+/** How a driver can pay, as in the original process. Cash is switched off by ACCEPT_CASH. */
+export const PAY_METHODS = ['wallet', 'mtn', 'telecel', 'airteltigo'] as const;
+export type PayMethod = (typeof PAY_METHODS)[number];
+export const PAY_METHOD_LABEL: Record<PayMethod | 'cash', string> = {
+  wallet: 'Wallet',
+  mtn: 'MTN MoMo',
+  telecel: 'Telecel Cash',
+  airteltigo: 'Tigo Cash',
+  cash: 'Cash',
+};
+export const isMomo = (m: string) => m === 'mtn' || m === 'telecel' || m === 'airteltigo';
 export type MomoNetwork = 'mtn' | 'telecel' | 'airteltigo';
 
 /** Flags attached to a session so a manager reviews it. */
@@ -72,6 +84,26 @@ export function roundMoney(n: number): number {
 }
 
 /** Energy and bill from two readings. The rate was fixed when the session started. */
+/** Units typed by the attendant (kWh used): a positive number with up to 3 decimals. */
+export function parseUnits(input: unknown): number | null {
+  if (input === null || input === undefined) return null;
+  const cleaned = String(input).replace(/[,\s]/g, '');
+  if (cleaned === '' || !/^\d+(\.\d{1,3})?$/.test(cleaned)) return null;
+  const n = Number(cleaned);
+  if (!Number.isFinite(n) || n <= 0 || n > 2000) return null;
+  return n;
+}
+
+/** Units used and the amount due: units × the rate frozen on the session. */
+export function billFromUnits(units: number, ratePerUnit: number) {
+  return { units: roundKwh(units), amount: roundMoney(units * ratePerUnit) };
+}
+
+/** What a prepaid amount buys at the session's rate. */
+export function prepaidUnits(amount: number, ratePerUnit: number): number {
+  return ratePerUnit > 0 ? roundKwh(amount / ratePerUnit) : 0;
+}
+
 export function computeBill(startReading: number, endReading: number, ratePerKwh: number) {
   const units = roundKwh(endReading - startReading);
   const amount = roundMoney(units * ratePerKwh);

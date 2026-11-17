@@ -23,7 +23,7 @@ export interface ReadingItem {
   driverName: string;
   vehiclePlate: string;
   attendantName: string;
-  startReading: number;
+  startReading: number | null;
   endReading: number | null;
   units: number | null;
   amount: number | null;

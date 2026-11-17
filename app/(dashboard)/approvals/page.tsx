@@ -134,8 +134,8 @@ export default function ApprovalsPage() {
                       <span className="text-xs ml-auto" style={{ color: 'var(--muted-foreground)' }}>{r.attendantName}{r.endedAt ? ` · ${formatDateTime(r.endedAt)}` : ''}</span>
                     </div>
                     <div className="mt-2 text-sm tabular-nums">
-                      {r.startReading.toFixed(1)} → {r.endReading !== null ? r.endReading.toFixed(1) : '…'}
-                      {r.units !== null && <> = <b>{r.units.toFixed(1)} kWh</b></>}
+                      {r.startReading !== null && r.endReading !== null && <>{r.startReading.toFixed(1)} → {r.endReading.toFixed(1)} = </>}
+                      {r.units !== null && <b>{r.units.toFixed(1)} kWh</b>}
                       {r.amount !== null && <> · {formatCurrency(r.amount)}</>}
                       {r.startGap !== null && Math.abs(r.startGap) > 0 && <> · gap before start {r.startGap.toFixed(1)} kWh</>}
                     </div>

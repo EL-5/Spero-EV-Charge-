@@ -79,7 +79,7 @@ export async function getApprovalQueue(): Promise<{ success: true; data: Approva
 
     const readingRows = (readingRes.data || []) as {
       id: string; receipt_number: string; gun: Gun; driver_name: string | null; vehicle_plate: string | null; attendant_id: string;
-      start_reading: number | string; end_reading: number | string | null; units_consumed: number | string | null;
+      start_reading: number | string | null; end_reading: number | string | null; units_consumed: number | string | null;
       total_amount: number | string | null; review_flags: string[]; start_gap: number | string | null; end_time: string | null;
     }[];
 
@@ -111,7 +111,7 @@ export async function getApprovalQueue(): Promise<{ success: true; data: Approva
       driverName: r.driver_name || 'Guest',
       vehiclePlate: r.vehicle_plate || '',
       attendantName: names[r.attendant_id] || 'Attendant',
-      startReading: Number(r.start_reading),
+      startReading: r.start_reading === null || r.start_reading === undefined ? null : Number(r.start_reading),
       endReading: r.end_reading === null ? null : Number(r.end_reading),
       units: r.units_consumed === null ? null : Number(r.units_consumed),
       amount: r.total_amount === null ? null : Number(r.total_amount),

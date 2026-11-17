@@ -18,9 +18,17 @@ export interface GunSessionSummary {
 export interface GunStatus {
   gun: Gun;
   inUse: boolean;
-  /** Where this gun last stopped. The next start reading should match it. */
-  lastEndReading: number | null;
   session: GunSessionSummary | null;
+}
+
+/** A price an attendant can choose when starting a session (Settings → Pricing). */
+export interface PricingTier {
+  id: string;
+  unitType: 'kwh' | 'time';
+  rate: number;
+  unitQuantity: number;
+  /** Price for one unit, e.g. GHS 5.50 per kWh */
+  perUnit: number;
 }
 
 export interface WorkspaceData {
@@ -34,7 +42,10 @@ export interface WorkspaceData {
     perGun: Record<Gun, { kwh: number; sessions: number }>;
   };
   inProgress: GunSessionSummary[];
+  /** Finished charges still waiting for payment (all days, this attendant). */
+  pending: GunSessionSummary[];
   done: GunSessionSummary[];
+  rates: PricingTier[];
 }
 
 export interface DriverMatch {
@@ -47,20 +58,24 @@ export interface DriverMatch {
 }
 
 export interface GunSessionView extends GunSessionSummary {
-  /** Empty until the readings are logged after charging. */
-  startReading: number | null;
-  /** Where this gun last stopped. The start reading should continue from it. */
-  lastEndReading: number | null;
-  endReading: number | null;
+  mode: 'postpaid' | 'prepaid';
+  /** 'kwh' normally; 'time' for time-based prices */
+  unitType: string;
+  prepaidAmount: number;
   rate: number;
   paymentMethod: string | null;
+  /** What the driver actually handed over (can be more than the amount due) */
+  amountPaid: number | null;
+  /** Registered drivers can leave extra money as wallet credit; guests cannot. */
+  isGuest: boolean;
   walletBalance: number | null;
   batteryKwh: number | null;
   attendantName: string;
-  startGap: number | null;
   isMine: boolean;
   /** A void request for this session is waiting for a manager. */
   voidPending: boolean;
+  /** A photo of the MoMo confirmation has been saved. */
+  hasPaymentProof: boolean;
 }
 
 export interface GunTotals {

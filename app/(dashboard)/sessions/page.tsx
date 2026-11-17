@@ -90,16 +90,16 @@ function Evidence({ id, onClose, onChanged }: { id: string; onClose: () => void;
             </div>
 
             <div className="rounded-xl p-4 text-sm tabular-nums" style={{ background: 'var(--muted)' }}>
-              <b>{data.startReading?.toFixed(1)}</b> → <b>{data.endReading !== null ? data.endReading?.toFixed(1) : '…'}</b>
-              {data.units !== null && <> = <b>{data.units.toFixed(1)} kWh</b></>}
+              {data.startReading !== null && data.endReading !== null && <><b>{data.startReading.toFixed(1)}</b> → <b>{data.endReading.toFixed(1)}</b> = </>}
+              {data.units !== null && <b>{data.units.toFixed(1)} kWh</b>}
               {data.rate !== null && <> at {formatCurrency(data.rate)}/kWh</>}
               {data.amount !== null && <> = <b>{formatCurrency(data.amount)}</b></>}
               {data.startGap !== null && Math.abs(data.startGap) > 0 && <div className="mt-1" style={{ color: '#7a3b00' }}>Machine moved {data.startGap.toFixed(1)} kWh since the last recorded end on this gun.</div>}
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <Photo url={data.startPhotoUrl} label="Display before charging" />
-              <Photo url={data.endPhotoUrl} label="Display after charging" />
+              {data.startPhotoUrl && <Photo url={data.startPhotoUrl} label="Display before charging" />}
+              <Photo url={data.endPhotoUrl} label="Photo of the machine display" />
               {data.paymentMethod && data.paymentMethod !== 'wallet' && data.paymentMethod !== 'cash' && (
                 <Photo url={data.paymentProofUrl} label="MoMo payment confirmation" />
               )}

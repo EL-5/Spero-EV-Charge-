@@ -145,7 +145,7 @@ export function InProgress({ items, ws, now }: { items: GunSessionSummary[]; ws:
           </div>
           <div className="flex w-full items-center justify-between gap-3 sm:w-auto sm:justify-end">
             <span className="att-display text-2xl font-bold tabular-nums">{elapsed(s.startTime, now)}</span>
-            <span className="att-btn att-btn-primary !min-h-[48px] !rounded-2xl !px-5 !text-base">Log kWh</span>
+            <span className="att-btn att-btn-primary !min-h-[48px] !rounded-2xl !px-5 !text-base">Finalize</span>
           </div>
         </Link>
       ))}
@@ -164,6 +164,38 @@ export function InProgress({ items, ws, now }: { items: GunSessionSummary[]; ws:
           </div>
         </div>
       )}
+    </section>
+  );
+}
+
+/** Finished charges that still need payment (the original "pending payment" list). */
+export function PendingPayments({ items }: { items: GunSessionSummary[] }) {
+  if (items.length === 0) return null;
+  return (
+    <section className="flex flex-col gap-3">
+      <div className="flex items-center justify-between">
+        <h2 className="att-display text-xl font-bold">Pending payment</h2>
+        <span className="att-chip att-chip-warn">{items.length} waiting</span>
+      </div>
+      <div className="att-card overflow-hidden">
+        {items.map((s) => (
+          <Link
+            key={s.id}
+            href={`/attend/session/${s.id}`}
+            className="flex min-h-[64px] items-center gap-3 border-b border-line px-4 py-3 text-[15px] last:border-b-0 hover:bg-ground"
+          >
+            <span className="att-display flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-navy text-base font-bold text-brand-green">{s.gun}</span>
+            <span className="min-w-0 flex-1">
+              <span className="block truncate font-semibold">{s.driverName}</span>
+              <span className="block truncate text-xs text-ink-soft">
+                {s.vehiclePlate || 'guest'} · {formatClock(s.endTime || s.startTime)} · {s.receiptNumber}
+              </span>
+            </span>
+            <span className="text-right font-semibold tabular-nums">{s.amount !== null ? `GHS ${s.amount.toFixed(2)}` : '—'}</span>
+            <span className="att-btn att-btn-primary !min-h-[44px] !rounded-2xl !px-4 !text-sm">Pay</span>
+          </Link>
+        ))}
+      </div>
     </section>
   );
 }

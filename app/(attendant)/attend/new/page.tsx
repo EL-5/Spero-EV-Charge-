@@ -29,9 +29,10 @@ export default function NewSessionPage() {
       {ws && (
         <StartSessionPanel
           workspace={ws}
-          onStarted={async () => {
+          onStarted={async (id, mode) => {
             await refresh();
-            router.push('/attend');
+            // A prepaid session opens on its payment screen; a postpaid one goes back to the home screen
+            router.push(mode === 'prepaid' ? `/attend/session/${id}` : '/attend');
           }}
         />
       )}
