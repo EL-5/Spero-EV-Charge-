@@ -76,7 +76,7 @@ export default function PastChargePage() {
       return;
     }
     toast.success('Backdated session recorded. Now collect the payment.');
-    await refresh(res.sessionId);
+    void refresh(res.sessionId);
     router.push(`/attend/session/${res.sessionId}`);
   };
 

@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { supabaseAdmin } from '@/lib/supabase-server';
 import { requireAuth } from '@/lib/auth-guard';
 import { logAudit } from '@/lib/audit';
-import { loadLimits } from '@/lib/limits-server';
+import { clearLimitsCache, loadLimits } from '@/lib/limits-server';
 import type { StationLimits } from '@/lib/gun-session';
 
 type Fail = { success: false; error: string };
@@ -48,6 +48,7 @@ export async function saveLimits(input: StationLimits): Promise<{ success: true 
       console.error('[LIMITS] save error:', error);
       return fail('Could not save. Run the latest database update (migration 11) and try again.');
     }
+    clearLimitsCache();
     await logAudit({
       actor: user,
       action: 'limits.update',

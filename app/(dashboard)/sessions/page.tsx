@@ -120,7 +120,7 @@ function Evidence({ id, onClose, onChanged }: { id: string; onClose: () => void;
             )}
             {data.voidPending && <div className="text-sm font-medium">A void request is waiting in Approvals.</div>}
 
-            {canAct && data.status !== 'cancelled' && data.status !== 'active' && (
+            {canAct && data.status !== 'cancelled' && (
               <div className="border-t pt-4" style={{ borderColor: 'var(--border)' }}>
                 {mode === 'none' ? (
                   <div className="flex flex-wrap gap-2">
@@ -196,7 +196,7 @@ function SessionsInner() {
             </select></div>
           <div><label className="form-label">Show</label>
             <select className="form-select" value={view} onChange={(e) => setView(e.target.value as typeof view)}>
-              <option value="all">Everything</option><option value="unreviewed">Flagged, not reviewed</option><option value="flagged">All flagged</option>
+              <option value="all">Everything</option><option value="active">Charging now (any day)</option><option value="unreviewed">Flagged, not reviewed</option><option value="flagged">All flagged</option>
               <option value="unpaid">Waiting for payment</option><option value="voided">Voided</option>
             </select></div>
           <Link href="/sessions/legacy" className="text-xs underline sm:text-right" style={{ color: 'var(--muted-foreground)' }}>Older charger sessions</Link>

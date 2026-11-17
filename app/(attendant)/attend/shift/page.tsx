@@ -60,8 +60,8 @@ export default function ShiftPage() {
               setBusy(false);
               if (!res.success) return toast.error(res.error);
               toast.success('Shift started');
-              await qc.invalidateQueries({ queryKey: ['my-shift'] });
-              await refresh();
+              void qc.invalidateQueries({ queryKey: ['my-shift'] });
+              void refresh();
               router.push('/attend');
             }}
           >
@@ -78,8 +78,8 @@ export default function ShiftPage() {
     setBusy(false);
     if (!res.success) return toast.error(res.error);
     toast.success('Shift closed. Thank you.');
-    await qc.invalidateQueries({ queryKey: ['my-shift'] });
-    await refresh();
+    void qc.invalidateQueries({ queryKey: ['my-shift'] });
+    void refresh();
     router.push('/attend');
   };
 

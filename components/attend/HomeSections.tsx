@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { toast } from 'sonner';
 import { startShift } from '@/app/actions/shifts';
+import { cancelGunSession } from '@/app/actions/gun-sessions';
+import { useRefreshAttend } from './use-workspace';
 import type { GunSessionSummary, WorkspaceData } from '@/lib/gun-session-types';
 import { GUNS } from '@/lib/gun-session';
 import { formatClock } from '@/lib/utils';
@@ -122,6 +124,15 @@ export function Hero({ ws }: { ws: WorkspaceData }) {
 export function InProgress({ items, ws, now }: { items: GunSessionSummary[]; ws: WorkspaceData; now: number }) {
   const freeGuns = GUNS.filter((g) => !ws.guns[g].inUse);
   const othersUse = GUNS.filter((g) => ws.guns[g].inUse && !items.some((i) => i.gun === g));
+  const refresh = useRefreshAttend();
+  const canClear = ws.user.role === 'manager' || ws.user.role === 'super_admin';
+  const clear = async (id: string) => {
+    if (!window.confirm('Cancel this session so the gun is free again? This cannot be undone.')) return;
+    const res = await cancelGunSession(id);
+    if (!res.success) return toast.error(res.error);
+    toast.success('Session cancelled. The gun is free.');
+    void refresh();
+  };
   return (
     <section className="flex flex-col gap-3">
       <div className="flex items-center justify-between">
@@ -149,11 +160,25 @@ export function InProgress({ items, ws, now }: { items: GunSessionSummary[]; ws:
           </div>
         </Link>
       ))}
-      {othersUse.map((g) => (
-        <div key={g} className="rounded-[26px] border border-line bg-[#e8ecf2] p-4 text-sm text-ink-soft">
-          Gun {g} is in use on another attendant’s shift.
-        </div>
-      ))}
+      {othersUse.map((g) => {
+        const u = ws.guns[g].usedBy;
+        const sid = ws.guns[g].session?.id;
+        return (
+          <div key={g} className="flex flex-col gap-2 rounded-[26px] border border-line bg-[#e8ecf2] p-4 text-sm text-ink-soft">
+            <div>
+              Gun {g} is in use{u ? ` by ${u.name}, since ${new Date(u.since).toLocaleString('en-GH', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'UTC' })}` : ''}.
+              {u?.stale && <b className="text-[#7a3b00]"> This session was left open and may be forgotten.</b>}
+            </div>
+            {canClear && sid ? (
+              <button type="button" onClick={() => clear(sid)} className="att-btn att-btn-ghost !min-h-[44px] self-start !px-4 !text-sm">
+                Cancel this session
+              </button>
+            ) : (
+              u?.stale && <div>Ask a manager to cancel it.</div>
+            )}
+          </div>
+        );
+      })}
       {freeGuns.length > 0 && (
         <div className="flex items-center gap-4 rounded-[26px] border-2 border-dashed border-[#a9bbd9] p-4 text-ink-soft">
           <div className="att-display flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-2xl bg-[#e8ecf2] text-xl font-bold text-navy">

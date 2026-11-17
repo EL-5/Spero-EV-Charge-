@@ -1,3 +1,4 @@
+import { after } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-server';
 import type { AuthenticatedUser } from '@/lib/auth-guard';
 
@@ -15,18 +16,27 @@ export async function logAudit(args: {
   resourceId?: string;
   metadata?: Record<string, unknown>;
 }): Promise<void> {
+  const write = async () => {
+    try {
+      const { error } = await supabaseAdmin.from('audit_logs').insert({
+        actor_id: args.actor.id,
+        actor_name: args.actor.name,
+        actor_role: args.actor.role,
+        action: args.action,
+        resource_type: args.resourceType,
+        resource_id: args.resourceId ?? null,
+        metadata: args.metadata ?? {},
+      });
+      if (error) console.error('[AUDIT] write failed:', args.action, error.message);
+    } catch (err) {
+      console.error('[AUDIT] write threw:', args.action, err);
+    }
+  };
+  // The write runs after the response has gone out, so the screen does not wait for it.
+  // Outside a request (a script, a test) there is no "after", so it is simply awaited.
   try {
-    const { error } = await supabaseAdmin.from('audit_logs').insert({
-      actor_id: args.actor.id,
-      actor_name: args.actor.name,
-      actor_role: args.actor.role,
-      action: args.action,
-      resource_type: args.resourceType,
-      resource_id: args.resourceId ?? null,
-      metadata: args.metadata ?? {},
-    });
-    if (error) console.error('[AUDIT] write failed:', args.action, error.message);
-  } catch (err) {
-    console.error('[AUDIT] write threw:', args.action, err);
+    after(write);
+  } catch {
+    await write();
   }
 }

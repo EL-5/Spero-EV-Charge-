@@ -53,6 +53,7 @@ type Fail = { success: false; error: string };
 
 interface SessionRow {
   id: string;
+  attendant_id: string;
   receipt_number: string;
   gun: Gun;
   status: GunSessionSummary['status'];
@@ -81,7 +82,7 @@ interface VehicleRow {
   battery_capacity: number | string | null;
 }
 const SESSION_COLUMNS =
-  'id, receipt_number, gun, status, payment_status, driver_name, vehicle_plate, start_time, end_time, units_consumed, total_amount, review_flags';
+  'id, attendant_id, receipt_number, gun, status, payment_status, driver_name, vehicle_plate, start_time, end_time, units_consumed, total_amount, review_flags';
 const errorCode = (e: unknown) => (e as { code?: string } | null)?.code;
 const fail = (error: string): Fail => ({ success: false, error });
 
@@ -213,6 +214,7 @@ function optionalPhoto(formData: FormData, key: string, label: string): { file: 
 function toSummary(row: SessionRow): GunSessionSummary {
   return {
     id: row.id,
+    attendantId: row.attendant_id,
     receiptNumber: row.receipt_number,
     gun: row.gun,
     status: row.status,
@@ -305,9 +307,30 @@ export async function getAttendantWorkspace(): Promise<{ success: true; data: Wo
     const mine = ((mineRes.data || []) as unknown as SessionRow[]).map(toSummary);
     const pending = ((pendingRes.data || []) as unknown as SessionRow[]).map(toSummary);
 
+    // Every session of mine that is still charging, whichever day it was started
+    const mineActive = active.filter((a) => a.attendantId === user.id);
+    const otherIds = Array.from(new Set(active.filter((a) => a.attendantId !== user.id).map((a) => a.attendantId)));
+    const names: Record<string, string> = {};
+    if (otherIds.length > 0) {
+      const { data: profs } = await supabaseAdmin.from('profiles').select('id, name').in('id', otherIds);
+      for (const p of (profs || []) as { id: string; name: string }[]) names[p.id] = p.name;
+    }
+    const STALE_MS = 12 * 3_600_000;
     const gunStatus = (gun: Gun): GunStatus => {
       const s = active.find((a) => a.gun === gun) || null;
-      return { gun, inUse: !!s, session: s };
+      return {
+        gun,
+        inUse: !!s,
+        session: s,
+        usedBy: s
+          ? {
+              name: s.attendantId === user.id ? 'you' : names[s.attendantId] || 'another attendant',
+              since: s.startTime,
+              stale: Date.now() - new Date(s.startTime).getTime() > STALE_MS,
+              mine: s.attendantId === user.id,
+            }
+          : null,
+      };
     };
 
     const counted = mine.filter((s) => s.status !== 'cancelled');
@@ -333,7 +356,7 @@ export async function getAttendantWorkspace(): Promise<{ success: true; data: Wo
             B: { kwh: round1(perGun.B.kwh), sessions: perGun.B.sessions },
           },
         },
-        inProgress: mine.filter((s) => s.status === 'active'),
+        inProgress: mineActive,
         pending,
         done: mine.filter((s) => s.status !== 'active' && s.status !== 'pending_payment').slice(0, 12),
         rates,
@@ -554,8 +577,11 @@ export async function getGunSession(sessionId: string): Promise<{ success: true;
         : Promise.resolve({ data: null }),
       supabaseAdmin.from('profiles').select('name').eq('id', row.attendant_id).maybeSingle(),
       supabaseAdmin.from('session_void_requests').select('id', { count: 'exact', head: true }).eq('session_id', row.id).eq('status', 'pending'),
-      supabaseAdmin.from('payments').select('amount').eq('session_id', row.id).limit(1).maybeSingle(),
-      findPaymentProof(row.attendant_id, row.id),
+      row.payment_status === 'paid'
+        ? supabaseAdmin.from('payments').select('amount').eq('session_id', row.id).limit(1).maybeSingle()
+        : Promise.resolve({ data: null }),
+      // The storage lookup is slow, and only a paid MoMo session can have a confirmation photo
+      row.payment_status === 'paid' && isMomo(String(row.payment_method || '')) ? findPaymentProof(row.attendant_id, row.id) : Promise.resolve(null),
     ]);
 
     return {
@@ -660,18 +686,17 @@ export async function startGunSession(
       if (!(prepaidAmount >= 1) || prepaidAmount > 100_000) return fail('Enter the prepaid amount in GHS.');
     }
 
-    const shift = await getActiveShift(user.id);
+    // Independent lookups run together: one round trip of waiting instead of four
+    const [shift, who, busy, rate] = await Promise.all([
+      getActiveShift(user.id),
+      resolveWho(formData),
+      supabaseAdmin.from('sessions').select('id').eq('gun', gun).eq('status', 'active').limit(1).maybeSingle(),
+      // The price is read here and frozen on the session
+      resolveRate(String(formData.get('pricingId') || '') || null),
+    ]);
     if (!shift && user.role === 'attendant') return fail('Start your shift before you record a session.');
-
-    const who = await resolveWho(formData);
     if (!who.ok) return fail(who.error);
-
-    // The gun must be free
-    const busy = await supabaseAdmin.from('sessions').select('id').eq('gun', gun).eq('status', 'active').limit(1).maybeSingle();
     if (busy.data) return fail(`Gun ${gun} is already in use. Finalize that session first.`);
-
-    // The price is read here and frozen on the session
-    const rate = await resolveRate(String(formData.get('pricingId') || '') || null);
     if (!rate.ok) return fail(rate.error);
 
     const sessionId = randomUUID();
@@ -854,18 +879,18 @@ export async function logPastGunSession(
     const photo = optionalPhoto(formData, 'photo', 'Photo');
     if (photo.error) return fail(photo.error);
 
-    const shift = await getActiveShift(user.id);
-    if (!shift && user.role === 'attendant') return fail('Start your shift before you record a session.');
-
-    const who = await resolveWho(formData);
-    if (!who.ok) return fail(who.error);
-
-    // Never into a day a manager has already closed
     const day = when.toISOString().slice(0, 10);
-    const { data: closed } = await supabaseAdmin.from('daily_closes').select('close_date').eq('close_date', day).limit(1);
+    const [shift, who, closedRes, rate] = await Promise.all([
+      getActiveShift(user.id),
+      resolveWho(formData),
+      // Never into a day a manager has already closed
+      supabaseAdmin.from('daily_closes').select('close_date').eq('close_date', day).limit(1),
+      resolveRate(String(formData.get('pricingId') || '') || null),
+    ]);
+    if (!shift && user.role === 'attendant') return fail('Start your shift before you record a session.');
+    if (!who.ok) return fail(who.error);
+    const closed = closedRes.data;
     if (closed && closed.length > 0) return fail(`${day} has already been closed by a manager. Ask a manager to handle this charge.`);
-
-    const rate = await resolveRate(String(formData.get('pricingId') || '') || null);
     if (!rate.ok) return fail(rate.error);
     const { units, amount } = billFromUnits(typed, rate.perUnit);
 
@@ -959,6 +984,7 @@ export async function collectGunPayment(
   let claimed = false;
   let previousStatus: 'active' | 'pending_payment' = 'pending_payment';
   let walletDebited = 0;
+  let walletLedger: Record<string, unknown> | null = null;
   let driverId: string | null = null;
   try {
     const user = await requireAuth(STAFF);
@@ -1028,34 +1054,35 @@ export async function collectGunPayment(
         return fail('Could not take the payment from the wallet. Please try again.');
       }
       walletDebited = due;
-      const { balance_before, balance_after } = adj as { balance_before: number; balance_after: number };
-      await supabaseAdmin.from('wallet_transactions').insert([
-        {
-          driver_id: s.driver_id,
-          type: 'debit',
-          amount: due,
-          balance_before,
-          balance_after,
-          description: `Payment for session ${s.receipt_number}`,
-          session_id: s.id,
-          created_by: user.id,
-          ...(paidAt ? { created_at: paidAt } : {}),
-        },
-      ]);
+      walletLedger = {
+        driver_id: s.driver_id,
+        type: 'debit',
+        amount: due,
+        balance_before: (adj as { balance_before: number }).balance_before,
+        balance_after: (adj as { balance_after: number }).balance_after,
+        description: `Payment for session ${s.receipt_number}`,
+        session_id: s.id,
+        created_by: user.id,
+        ...(paidAt ? { created_at: paidAt } : {}),
+      };
     }
 
-    const { error: payErr } = await supabaseAdmin.from('payments').insert([
-      {
-        session_id: s.id,
-        receipt_number: s.receipt_number,
-        driver_id: s.driver_id,
-        amount: handedOver, // the actual amount received, as in the original process
-        method,
-        reference,
-        status: 'completed',
-        attendant_id: user.id,
-        ...(paidAt ? { created_at: paidAt } : {}),
-      },
+    // The ledger row and the payment are written together
+    const [, { error: payErr }] = await Promise.all([
+      walletLedger ? supabaseAdmin.from('wallet_transactions').insert([walletLedger]) : Promise.resolve(null),
+      supabaseAdmin.from('payments').insert([
+        {
+          session_id: s.id,
+          receipt_number: s.receipt_number,
+          driver_id: s.driver_id,
+          amount: handedOver, // the actual amount received, as in the original process
+          method,
+          reference,
+          status: 'completed',
+          attendant_id: user.id,
+          ...(paidAt ? { created_at: paidAt } : {}),
+        },
+      ]),
     ]);
     if (payErr) {
       await undoWalletDebit(walletDebited, s.driver_id, s.id, s.receipt_number, user.id);
@@ -1065,32 +1092,33 @@ export async function collectGunPayment(
       return fail('Could not record the payment. Nothing was charged. Please try again.');
     }
 
-    // Anything above the amount due becomes the driver's credit
-    if (credited > 0 && s.driver_id) {
+    // Extra money becomes credit, and the shift totals are updated, at the same time
+    const creditJob = async () => {
+      if (!(credited > 0 && s.driver_id)) return;
       const { data: adj, error: creditErr } = await supabaseAdmin
         .rpc('adjust_wallet_balance', { p_driver_id: s.driver_id, p_delta: credited })
         .single();
       if (creditErr || !adj) {
         console.error('[GUN] overpayment credit failed (payment is saved):', creditErr);
-      } else {
-        const { balance_before, balance_after } = adj as { balance_before: number; balance_after: number };
-        await supabaseAdmin.from('wallet_transactions').insert([
-          {
-            driver_id: s.driver_id,
-            type: 'credit',
-            amount: credited,
-            balance_before,
-            balance_after,
-            description: `Overpayment for session ${s.receipt_number}`,
-            session_id: s.id,
-            created_by: user.id,
-            ...(paidAt ? { created_at: paidAt } : {}),
-          },
-        ]);
+        return;
       }
-    }
-
-    if (s.shift_id) {
+      const { balance_before, balance_after } = adj as { balance_before: number; balance_after: number };
+      await supabaseAdmin.from('wallet_transactions').insert([
+        {
+          driver_id: s.driver_id,
+          type: 'credit',
+          amount: credited,
+          balance_before,
+          balance_after,
+          description: `Overpayment for session ${s.receipt_number}`,
+          session_id: s.id,
+          created_by: user.id,
+          ...(paidAt ? { created_at: paidAt } : {}),
+        },
+      ]);
+    };
+    const shiftJob = async () => {
+      if (!s.shift_id) return;
       const { error: shiftErr } = await supabaseAdmin.rpc('bump_shift_totals', {
         p_shift_id: s.shift_id,
         p_cash: method === 'cash' ? handedOver : 0,
@@ -1099,7 +1127,8 @@ export async function collectGunPayment(
         p_sessions: 1,
       });
       if (shiftErr) console.error('[GUN] shift totals update failed (payment is saved):', shiftErr.message);
-    }
+    };
+    await Promise.all([creditJob(), shiftJob()]);
 
     await logAudit({
       actor: user,

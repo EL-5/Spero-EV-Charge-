@@ -58,10 +58,11 @@ export default async function proxy(request: NextRequest) {
       }
     );
 
-    // getUser() validates the JWT with Supabase — cannot be forged client-side
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    // getClaims() checks the token's signature locally, so it cannot be forged client-side and
+    // it does not make a network round trip to Supabase on every page and every button press
+    // (getUser() did). It refreshes an expired session the same way.
+    const { data: claimsData } = await supabase.auth.getClaims();
+    const user = claimsData?.claims?.sub ? claimsData.claims : null;
 
     if (!user) {
       // Redirect unauthenticated drivers to driver-login, and others to login

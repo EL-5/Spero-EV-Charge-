@@ -2,6 +2,7 @@ import type { Gun, ReviewFlag } from '@/lib/gun-session';
 
 export interface GunSessionSummary {
   id: string;
+  attendantId: string;
   receiptNumber: string;
   gun: Gun;
   status: 'active' | 'pending_payment' | 'completed' | 'cancelled';
@@ -19,6 +20,8 @@ export interface GunStatus {
   gun: Gun;
   inUse: boolean;
   session: GunSessionSummary | null;
+  /** Set when the session on this gun belongs to someone else, or is old enough to be forgotten. */
+  usedBy: { name: string; since: string; stale: boolean; mine: boolean } | null;
 }
 
 /** A price an attendant can choose when starting a session (Settings → Pricing). */

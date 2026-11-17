@@ -5,7 +5,23 @@ import { DEFAULT_LIMITS, type StationLimits } from '@/lib/gun-session';
  * The limits the manager has set, or the built-in defaults when the table is
  * missing or empty. Never throws: a flagging rule must not stop a session.
  */
+// The limits change rarely and every finished session reads them, so keep them for a short while.
+const TTL_MS = 30_000;
+let cached: { at: number; value: StationLimits } | null = null;
+
+/** Call after the limits are saved so the next read sees the new numbers. */
+export function clearLimitsCache() {
+  cached = null;
+}
+
 export async function loadLimits(): Promise<StationLimits> {
+  if (cached && Date.now() - cached.at < TTL_MS) return cached.value;
+  const value = await readLimits();
+  cached = { at: Date.now(), value };
+  return value;
+}
+
+async function readLimits(): Promise<StationLimits> {
   try {
     const { data, error } = await supabaseAdmin
       .from('station_limits')

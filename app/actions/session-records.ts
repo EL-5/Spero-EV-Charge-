@@ -52,7 +52,7 @@ export interface RecordFilter {
   from: string; // YYYY-MM-DD (UTC, the station runs on UTC+0)
   to: string;
   gun?: Gun | 'all';
-  view?: 'all' | 'flagged' | 'unreviewed' | 'voided' | 'unpaid';
+  view?: 'all' | 'flagged' | 'unreviewed' | 'voided' | 'unpaid' | 'active';
 }
 
 export async function listSessionRecords(f: RecordFilter): Promise<{ success: true; data: SessionRecord[]; capped: boolean } | Fail> {
@@ -68,10 +68,12 @@ export async function listSessionRecords(f: RecordFilter): Promise<{ success: tr
         'id, receipt_number, gun, status, payment_status, payment_method, driver_name, vehicle_plate, attendant_id, start_time, end_time, units_consumed, total_amount, review_flags, reviewed_at, recording_mode'
       )
       .eq('recording_mode', 'manual_gun')
-      .gte('start_time', `${f.from}T00:00:00.000Z`)
-      .lt('start_time', end.toISOString())
       .order('start_time', { ascending: false })
       .limit(301);
+
+    // "Charging now" ignores the dates: a session left open from an earlier day still holds its gun
+    if (f.view !== 'active') q = q.gte('start_time', `${f.from}T00:00:00.000Z`).lt('start_time', end.toISOString());
+    if (f.view === 'active') q = q.eq('status', 'active');
 
     if (f.gun === 'A' || f.gun === 'B') q = q.eq('gun', f.gun);
     if (f.view === 'flagged') q = q.not('review_flags', 'eq', '{}');
