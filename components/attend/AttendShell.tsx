@@ -3,7 +3,7 @@
 import { useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { CalendarClock, Clock, History, House, LogOut, Plus } from 'lucide-react';
+import { CalendarClock, Clock, History, House, LogOut, Plus, Users } from 'lucide-react';
 import { useAuthStore } from '@/store/auth';
 
 const ALLOWED_ROLES = ['attendant', 'manager', 'super_admin'];
@@ -53,6 +53,7 @@ export default function AttendShell({ children }: { children: React.ReactNode })
   const items = [
     { href: '/attend', label: 'Home', Icon: House, active: pathname === '/attend' || pathname.startsWith('/attend/session') },
     { href: '/attend/history', label: 'History', Icon: History, active: pathname.startsWith('/attend/history') },
+    { href: '/attend/drivers', label: 'Drivers', Icon: Users, active: pathname.startsWith('/attend/drivers') },
     { href: '/attend/past', label: 'Past', Icon: CalendarClock, active: pathname.startsWith('/attend/past') },
     { href: '/attend/shift', label: 'Shift', Icon: Clock, active: pathname.startsWith('/attend/shift') },
   ];
@@ -138,10 +139,10 @@ export default function AttendShell({ children }: { children: React.ReactNode })
           </Link>
         </div>
         <Link href={items[2].href} aria-current={items[2].active ? 'page' : undefined} className={`flex h-20 flex-col items-center justify-center gap-1 text-[12px] ${items[2].active ? 'font-semibold text-brand-green-dark' : 'text-ink-soft'}`}>
-          <CalendarClock size={24} aria-hidden />
-          Past
+          <Users size={24} aria-hidden />
+          Drivers
         </Link>
-        <Link href={items[3].href} aria-current={items[3].active ? 'page' : undefined} className={`flex h-20 flex-col items-center justify-center gap-1 text-[12px] ${items[3].active ? 'font-semibold text-brand-green-dark' : 'text-ink-soft'}`}>
+        <Link href={items[4].href} aria-current={items[4].active ? 'page' : undefined} className={`flex h-20 flex-col items-center justify-center gap-1 text-[12px] ${items[4].active ? 'font-semibold text-brand-green-dark' : 'text-ink-soft'}`}>
           <Clock size={24} aria-hidden />
           Shift
         </Link>

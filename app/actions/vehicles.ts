@@ -3,6 +3,7 @@
 import { supabaseAdmin } from '@/lib/supabase-server';
 import { revalidatePath } from 'next/cache';
 import { requireAuth } from '@/lib/auth-guard';
+import { logAudit } from '@/lib/audit';
 
 export async function addVehicle(formData: {
   brand: string;
@@ -41,7 +42,9 @@ export async function updateVehicle(id: string, formData: {
   driver_id?: string;
 }) {
   try {
-    await requireAuth(['super_admin', 'manager', 'attendant']);
+    const actor = await requireAuth(['super_admin', 'manager', 'attendant']);
+
+    const { data: before } = await supabaseAdmin.from('vehicles').select('brand, model, plate_number, driver_id').eq('id', id).maybeSingle();
 
     const { error } = await supabaseAdmin
       .from('vehicles')
@@ -54,6 +57,16 @@ export async function updateVehicle(id: string, formData: {
       .eq('id', id);
 
     if (error) throw error;
+
+    if (before && (before.brand !== formData.brand || before.model !== formData.model || before.plate_number !== formData.plate_number)) {
+      await logAudit({
+        actor,
+        action: 'vehicle.update',
+        resourceType: 'vehicle',
+        resourceId: id,
+        metadata: { driverId: before.driver_id, from: { brand: before.brand, model: before.model, plate: before.plate_number }, to: { brand: formData.brand, model: formData.model, plate: formData.plate_number } },
+      });
+    }
 
     revalidatePath('/vehicles');
     return { success: true };

@@ -72,6 +72,8 @@ interface DriverRow {
   phone: string;
   wallet_balance: number | string | null;
   is_active: boolean | null;
+  email?: string | null;
+  type?: string | null;
 }
 interface VehicleRow {
   id: string;
@@ -397,7 +399,7 @@ export async function searchDrivers(query: string): Promise<{ success: true; dat
     if (ids.length === 0) return { success: true, data: [] };
 
     const [drivers, vehicles] = await Promise.all([
-      supabaseAdmin.from('drivers').select('id, name, phone, wallet_balance, is_active').in('id', ids),
+      supabaseAdmin.from('drivers').select('id, name, phone, wallet_balance, is_active, email, type').in('id', ids),
       supabaseAdmin.from('vehicles').select('id, driver_id, plate_number, brand, model, battery_capacity').in('driver_id', ids),
     ]);
 
@@ -409,11 +411,15 @@ export async function searchDrivers(query: string): Promise<{ success: true; dat
       phone: d.phone,
       walletBalance: Number(d.wallet_balance || 0),
       isActive: d.is_active !== false,
+      email: d.email || '',
+      type: (d.type === 'corporate' ? 'corporate' : 'individual') as 'individual' | 'corporate',
       vehicles: vehicleRows
         .filter((v) => v.driver_id === d.id)
         .map((v) => ({
           id: v.id,
           plate: v.plate_number,
+          brand: v.brand || '',
+          model: v.model || '',
           label: [v.brand, v.model].filter(Boolean).join(' ') || 'Vehicle',
           batteryKwh: v.battery_capacity ? Number(v.battery_capacity) : null,
         })),
@@ -433,7 +439,7 @@ export async function listDriversForPicker(): Promise<{ success: true; data: Dri
     await requireAuth(STAFF);
     const { data: drivers, error } = await supabaseAdmin
       .from('drivers')
-      .select('id, name, phone, wallet_balance, is_active')
+      .select('id, name, phone, wallet_balance, is_active, email, type')
       .neq('is_active', false)
       .order('name', { ascending: true })
       .limit(1000);
@@ -456,11 +462,15 @@ export async function listDriversForPicker(): Promise<{ success: true; data: Dri
         phone: d.phone,
         walletBalance: Number(d.wallet_balance || 0),
         isActive: true,
+        email: d.email || '',
+        type: (d.type === 'corporate' ? 'corporate' : 'individual') as 'individual' | 'corporate',
         vehicles: vehicleRows
           .filter((v) => v.driver_id === d.id)
           .map((v) => ({
             id: v.id,
             plate: v.plate_number,
+            brand: v.brand || '',
+            model: v.model || '',
             label: [v.brand, v.model].filter(Boolean).join(' ') || 'Vehicle',
             batteryKwh: v.battery_capacity ? Number(v.battery_capacity) : null,
           })),
@@ -573,7 +583,7 @@ export async function getGunSession(sessionId: string): Promise<{ success: true;
         ? supabaseAdmin.from('vehicles').select('battery_capacity').eq('id', row.vehicle_id).maybeSingle()
         : Promise.resolve({ data: null }),
       row.driver_id
-        ? supabaseAdmin.from('drivers').select('wallet_balance').eq('id', row.driver_id).maybeSingle()
+        ? supabaseAdmin.from('drivers').select('wallet_balance, phone').eq('id', row.driver_id).maybeSingle()
         : Promise.resolve({ data: null }),
       supabaseAdmin.from('profiles').select('name').eq('id', row.attendant_id).maybeSingle(),
       supabaseAdmin.from('session_void_requests').select('id', { count: 'exact', head: true }).eq('session_id', row.id).eq('status', 'pending'),
@@ -595,6 +605,7 @@ export async function getGunSession(sessionId: string): Promise<{ success: true;
         paymentMethod: row.payment_method ?? null,
         amountPaid: pay.data ? Number((pay.data as { amount: number | string }).amount) : null,
         isGuest: !row.driver_id,
+        driverPhone: drv.data ? ((drv.data as { phone?: string | null }).phone ?? null) : null,
         walletBalance: drv.data ? Number((drv.data as { wallet_balance?: number | string | null }).wallet_balance || 0) : null,
         batteryKwh:
           veh.data && (veh.data as { battery_capacity?: number | string | null }).battery_capacity

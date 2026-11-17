@@ -4,6 +4,7 @@ import { supabaseAdmin } from '@/lib/supabase-server';
 import { revalidatePath } from 'next/cache';
 import { requireAuth } from '@/lib/auth-guard';
 import type { DriverType } from '@/lib/types';
+import { logAudit } from '@/lib/audit';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // FIX MED-01: requireAuth guards added to all mutating actions.
@@ -68,7 +69,10 @@ export async function updateDriver(
 ) {
   try {
     // Attendants and above can update driver info
-    await requireAuth(['super_admin', 'manager', 'attendant']);
+    const actor = await requireAuth(['super_admin', 'manager', 'attendant']);
+
+    // What it was before, so the change can be audited (a changed phone number matters)
+    const { data: before } = await supabaseAdmin.from('drivers').select('name, phone, email, type').eq('id', id).maybeSingle();
 
     // 1. Update Driver
     const { error: dError } = await supabaseAdmin
@@ -101,6 +105,16 @@ export async function updateDriver(
         console.error('[DRIVERS] updateDriver vehicle error:', vError);
         return { success: false, error: 'Failed to update vehicle info. Please try again.' };
       }
+    }
+
+    const after: Record<string, unknown> = { name: formData.name, phone: formData.phone, email: formData.email, type: formData.type };
+    const changes: Record<string, { from: unknown; to: unknown }> = {};
+    for (const [k, v] of Object.entries(after)) {
+      const was = (before as Record<string, unknown> | null)?.[k];
+      if (v !== undefined && (was ?? '') !== (v ?? '')) changes[k] = { from: was ?? null, to: v ?? null };
+    }
+    if (Object.keys(changes).length > 0) {
+      await logAudit({ actor, action: 'driver.update', resourceType: 'driver', resourceId: id, metadata: { name: formData.name, changes } });
     }
 
     revalidatePath('/drivers');

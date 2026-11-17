@@ -6,6 +6,7 @@ import { toast } from 'sonner';
 import { addDriver } from '@/app/actions/drivers';
 import { addVehicle } from '@/app/actions/vehicles';
 import { listDriversForPicker, searchDrivers } from '@/app/actions/gun-sessions';
+import { DriverEditor } from './DriverEditor';
 import type { DriverMatch } from '@/lib/gun-session-types';
 import { formatCurrency } from '@/lib/utils';
 
@@ -81,6 +82,7 @@ export function WhoPicker({ who }: { who: Who }) {
     guestPlate, setGuestPlate, matches, searching, allDrivers, loadingList, pickDriver,
   } = who;
   const [registering, setRegistering] = useState(false);
+  const [editing, setEditing] = useState(false);
   const [reg, setReg] = useState({ name: '', phone: '', brand: '', model: '', plate: '' });
   const [saving, setSaving] = useState(false);
   const regOk = reg.name.trim() && reg.phone.trim() && reg.plate.trim();
@@ -174,6 +176,18 @@ export function WhoPicker({ who }: { who: Who }) {
               aria-label="Guest name"
             />
           </div>
+        ) : driver && editing ? (
+          <DriverEditor
+            driver={driver}
+            onCancel={() => setEditing(false)}
+            onSaved={(updated) => {
+              setEditing(false);
+              if (updated) {
+                setDriver(updated);
+                if (!updated.vehicles.some((v) => v.id === vehicleId)) setVehicleId(updated.vehicles.length === 1 ? updated.vehicles[0].id : '');
+              }
+            }}
+          />
         ) : driver ? (
           <div className="flex flex-col gap-3 rounded-[20px] border border-line bg-ground p-4">
             <div className="flex items-center gap-3">
@@ -190,6 +204,9 @@ export function WhoPicker({ who }: { who: Who }) {
                 <div className="text-xs text-ink-soft">{driver.phone}</div>
               </div>
               <span className="att-chip att-chip-ok">Wallet {formatCurrency(driver.walletBalance).replace('GHS ', '')}</span>
+              <button type="button" onClick={() => setEditing(true)} className="min-h-[44px] px-2 text-sm font-semibold underline">
+                Edit
+              </button>
               <button
                 type="button"
                 onClick={() => {

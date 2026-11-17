@@ -57,7 +57,9 @@ export interface DriverMatch {
   phone: string;
   walletBalance: number;
   isActive: boolean;
-  vehicles: { id: string; plate: string; label: string; batteryKwh: number | null }[];
+  email: string;
+  type: 'individual' | 'corporate';
+  vehicles: { id: string; plate: string; brand: string; model: string; label: string; batteryKwh: number | null }[];
 }
 
 export interface GunSessionView extends GunSessionSummary {
@@ -71,6 +73,8 @@ export interface GunSessionView extends GunSessionSummary {
   amountPaid: number | null;
   /** Registered drivers can leave extra money as wallet credit; guests cannot. */
   isGuest: boolean;
+  /** The driver's phone, to pre-fill the MoMo number when paying */
+  driverPhone: string | null;
   walletBalance: number | null;
   batteryKwh: number | null;
   attendantName: string;

@@ -226,7 +226,10 @@ export function FinishPanel({
 export function CollectPanel({ session, onChanged }: { session: GunSessionView; onChanged: () => void }) {
   const [method, setMethod] = useState<PayMethod>('mtn');
   const [paidText, setPaidText] = useState('');
-  const [phone, setPhone] = useState('');
+  // The MoMo number starts as the driver's own number; the attendant can change it
+  const [typedPhone, setTypedPhone] = useState<string | null>(null);
+  const phone = typedPhone ?? session.driverPhone ?? '';
+  const setPhone = setTypedPhone;
   const [submitting, setSubmitting] = useState(false);
 
   // Normally paid after charging. A prepaid session can be paid before it.
